@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "status": "blocked",
+  "repository": null,
+  "head": null,
+  "base": null,
+  "prNumber": null,
+  "lastReviewed": "2026-07-10",
+  "blocker": "canonical-root-source-owner-unassigned"
+}

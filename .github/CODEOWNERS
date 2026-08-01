@@ -1,0 +1,9 @@
+# Owners must have write access to this repository.
+
+* @soramitsu/fearless
+
+/.github/ @soramitsu/fearless @soramitsu/devops-team
+/config/ @soramitsu/fearless @soramitsu/security
+/docs/ @soramitsu/fearless
+/scripts/ @soramitsu/fearless @soramitsu/security
+/services/passkey-backup-challenge-service/ @soramitsu/fearless @soramitsu/security

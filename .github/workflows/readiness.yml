@@ -1,0 +1,67 @@
+name: Release readiness control plane
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: readiness-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/passkey-backup-challenge-service/package-lock.json
+      - name: Validate source and audit contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          node --check scripts/audit-source-publication-readiness.mjs
+          node --check scripts/capture-source-freeze.mjs
+          node --check scripts/quarantine-source-publication-outputs.mjs
+          node --check scripts/extract-android-apk-signer-evidence.mjs
+          node --check scripts/verify-nexus-production-receipts.mjs
+          bash scripts/test-pinned-yarn-runner.sh
+          bash scripts/test-source-publication-readiness-audit.sh
+          bash scripts/test-source-publication-quarantine.sh
+          bash scripts/test-release-pr-readiness-audit.sh
+          bash scripts/test-github-governance-audit.sh
+          bash scripts/test-workflow-action-pins-audit.sh
+
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: services/passkey-backup-challenge-service
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/passkey-backup-challenge-service/package-lock.json
+      - name: Install exact dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify passkey challenge service
+        run: |
+          npm run lint:syntax
+          npm test
+          npm run test:deployment-evidence-audit
+          npm run test:deployment-evidence-template
+          npm audit --omit=dev

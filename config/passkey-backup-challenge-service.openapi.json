@@ -1,0 +1,606 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fearless Passkey Backup Challenge Service",
+    "version": "1.0.0",
+    "description": "WebAuthn verification is bound to fearlesswallet.io and an explicit origin allowlist. Every ceremony and credential-lifecycle POST requires a distinct one-time Bearer grant atomically consumed by an HTTPS wallet-ownership introspector and bound to the exact method, path, raw-body SHA-256, scope, audience, stable cross-platform subject, and verified platform. Authenticated lifecycle routes list public metadata-only credential descriptors and revoke one or all credentials; final revocation retains a bounded owner tombstone to prevent cross-subject takeover while allowing same-owner re-registration. Production Android ceremonies require the exact android:apk-key-hash:<unpadded-base64url SHA-256 release signing-certificate digest> origin; release flags remain disabled until that origin and platform provisioning are evidenced."
+  },
+  "servers": [
+    {
+      "url": "https://backup.fearlesswallet.io"
+    }
+  ],
+  "paths": {
+    "/api/passkey-backup/v1/health": {
+      "get": {
+        "operationId": "getPasskeyBackupHealth",
+        "responses": {
+          "200": {
+            "description": "Challenge service identity and readiness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/registration/challenge": {
+      "post": {
+        "operationId": "createPasskeyRegistrationChallenge",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registration challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationChallengeResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/registration/complete": {
+      "post": {
+        "operationId": "completePasskeyRegistration",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registration completion result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResult"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/assertion/challenge": {
+      "post": {
+        "operationId": "createPasskeyAssertionChallenge",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssertionChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assertion challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssertionChallengeResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/assertion/complete": {
+      "post": {
+        "operationId": "completePasskeyAssertion",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssertionCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assertion completion result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResult"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/credentials/list": {
+      "post": {
+        "operationId": "listPasskeyCredentials",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialListRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Non-secret credential descriptors owned by the authorized wallet subject, including an empty owner tombstone.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialListResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/credentials/revoke": {
+      "post": {
+        "operationId": "revokePasskeyCredential",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent credential revocation result. Unknown credentials do not create owner records.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    },
+    "/api/passkey-backup/v1/credentials/revoke-all": {
+      "post": {
+        "operationId": "revokeAllPasskeyCredentials",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialListRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent storage-owner credential revocation result; the owner tombstone remains after the last credential.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeAllResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthorizationFailed" },
+          "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/InternalFailure" },
+          "503": { "$ref": "#/components/responses/AuthorizationUnavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A bounded one-time grant atomically consumed by the configured wallet-ownership introspector. A different grant is required for each POST request."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request target, JSON body, ceremony fields, or WebAuthn response was invalid.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "AuthorizationFailed": {
+        "description": "The one-time request grant was missing, denied, replayed, expired, or did not match the request binding.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "AuthorizationForbidden": {
+        "description": "The grant was valid but its stable wallet-owner subject or ceremony platform did not own this resource.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotFound": {
+        "description": "The ceremony or registered credential was unknown or expired.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "Conflict": {
+        "description": "Credential uniqueness, capacity, backup-eligibility, or signature-counter state conflicted.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "PayloadTooLarge": {
+        "description": "The request body exceeded 64 KiB.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "UnsupportedMediaType": {
+        "description": "Content-Type was not application/json.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "RateLimited": {
+        "description": "The per-client or global request bucket was exhausted.",
+        "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 1 } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "InternalFailure": {
+        "description": "The durable store or an internal invariant failed closed.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "AuthorizationUnavailable": {
+        "description": "The authorization consume service was unavailable or returned an invalid response.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ok", "service", "error", "rpId", "schemaVersion"],
+        "properties": {
+          "ok": { "const": false },
+          "service": { "const": "fearless-passkey-backup" },
+          "error": { "type": "string" },
+          "rpId": { "const": "fearlesswallet.io" },
+          "schemaVersion": { "const": 1 }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ok", "service", "rpId", "schemaVersion"],
+        "properties": {
+          "ok": { "const": true },
+          "service": { "const": "fearless-passkey-backup" },
+          "rpId": { "const": "fearlesswallet.io" },
+          "schemaVersion": { "const": 1 }
+        }
+      },
+      "RegistrationChallengeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["walletId", "accountName", "displayName", "rpId", "schemaVersion"],
+        "properties": {
+          "walletId": { "$ref": "#/components/schemas/WalletId" },
+          "accountName": { "$ref": "#/components/schemas/AccountName" },
+          "displayName": { "$ref": "#/components/schemas/DisplayName" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "RegistrationChallengeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["registrationId", "challenge", "userId", "userName", "displayName", "storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "registrationId": { "$ref": "#/components/schemas/CeremonyId" },
+          "challenge": { "$ref": "#/components/schemas/Base64UrlChallenge" },
+          "userId": { "$ref": "#/components/schemas/Base64UrlUserId" },
+          "userName": { "$ref": "#/components/schemas/AccountName" },
+          "displayName": { "$ref": "#/components/schemas/DisplayName" },
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "RegistrationCompleteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["registrationId", "rpId", "credential"],
+        "properties": {
+          "registrationId": { "$ref": "#/components/schemas/CeremonyId" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "credential": { "$ref": "#/components/schemas/RegistrationCredentialResponse" }
+        }
+      },
+      "AssertionChallengeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "AssertionChallengeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assertionId", "challenge", "storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "assertionId": { "$ref": "#/components/schemas/CeremonyId" },
+          "challenge": { "$ref": "#/components/schemas/Base64UrlChallenge" },
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "AssertionCompleteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assertionId", "rpId", "credential"],
+        "properties": {
+          "assertionId": { "$ref": "#/components/schemas/CeremonyId" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "credential": { "$ref": "#/components/schemas/AssertionCredentialResponse" }
+        }
+      },
+      "ChallengeResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialListRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialRevokeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "credentialId", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "credentialId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "aaguid", "registrationPlatform", "deviceType", "backedUp"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "aaguid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "registrationPlatform": { "enum": ["android", "ios"] },
+          "deviceType": { "enum": ["singleDevice", "multiDevice"] },
+          "backedUp": { "type": "boolean" },
+          "transports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 7,
+            "items": { "enum": ["ble", "cable", "hybrid", "internal", "nfc", "smart-card", "usb"] }
+          }
+        }
+      },
+      "CredentialListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "credentials", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "credentials": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "$ref": "#/components/schemas/CredentialDescriptor" }
+          },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialRevokeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "credentialId", "remainingCredentials", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "credentialId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "remainingCredentials": { "type": "integer", "minimum": 0, "maximum": 32 },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialRevokeAllResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "remainingCredentials", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "remainingCredentials": { "const": 0 },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "RelyingPartyId": {
+        "type": "string",
+        "const": "fearlesswallet.io"
+      },
+      "SchemaVersion": {
+        "type": "integer",
+        "const": 1
+      },
+      "WalletId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+      },
+      "StorageKey": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+      },
+      "CeremonyId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+      },
+      "AccountName": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 320,
+        "pattern": "^[^\\s@]+@[^\\s@]+$"
+      },
+      "DisplayName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "Base64UrlChallenge": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{22,1366}$"
+      },
+      "Base64UrlUserId": {
+        "type": "string",
+        "minLength": 43,
+        "maxLength": 43,
+        "pattern": "^[A-Za-z0-9_-]{43}$"
+      },
+      "Base64UrlBlob": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32768,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "Base64UrlCredentialId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "RegistrationCredentialResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rawId", "type", "clientExtensionResults", "response"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "rawId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "type": { "const": "public-key" },
+          "authenticatorAttachment": { "enum": ["platform", "cross-platform"] },
+          "clientExtensionResults": { "type": "object" },
+          "response": { "$ref": "#/components/schemas/RegistrationAuthenticatorResponse" }
+        }
+      },
+      "RegistrationAuthenticatorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientDataJSON", "attestationObject"],
+        "properties": {
+          "clientDataJSON": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "attestationObject": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "authenticatorData": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "publicKey": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "publicKeyAlgorithm": { "enum": [-7, -257] },
+          "transports": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 7,
+            "items": { "enum": ["ble", "cable", "hybrid", "internal", "nfc", "smart-card", "usb"] }
+          }
+        }
+      },
+      "AssertionCredentialResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rawId", "type", "clientExtensionResults", "response"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "rawId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "type": { "const": "public-key" },
+          "authenticatorAttachment": { "enum": ["platform", "cross-platform"] },
+          "clientExtensionResults": { "type": "object" },
+          "response": { "$ref": "#/components/schemas/AssertionAuthenticatorResponse" }
+        }
+      },
+      "AssertionAuthenticatorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clientDataJSON", "authenticatorData", "signature", "userHandle"],
+        "properties": {
+          "clientDataJSON": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "authenticatorData": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "signature": { "$ref": "#/components/schemas/Base64UrlBlob" },
+          "userHandle": { "$ref": "#/components/schemas/Base64UrlUserId" }
+        }
+      }
+    }
+  }
+}

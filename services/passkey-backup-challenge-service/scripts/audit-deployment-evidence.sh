@@ -1,0 +1,583 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SERVICE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+EVIDENCE_FILE="$SCRIPT_DIR/production-deployment-evidence.json"
+REQUIRE_READY=0
+
+usage() {
+  cat <<'USAGE'
+Usage: bash scripts/audit-deployment-evidence.sh [--require-ready] [--evidence <file>]
+
+Validates production deployment evidence for backup.fearlesswallet.io.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --require-ready)
+      REQUIRE_READY=1
+      shift
+      ;;
+    --evidence)
+      EVIDENCE_FILE="${2:-}"
+      if [[ -z "$EVIDENCE_FILE" ]]; then
+        echo "[passkey-deployment-evidence][error] --evidence requires a file path" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[passkey-deployment-evidence][error] unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! -f "$EVIDENCE_FILE" ]]; then
+  echo "[passkey-deployment-evidence][error] production deployment evidence missing: $EVIDENCE_FILE" >&2
+  exit 1
+fi
+
+PASSKEY_DEPLOYMENT_EVIDENCE_FILE="$EVIDENCE_FILE" \
+PASSKEY_DEPLOYMENT_ROOT="$SERVICE_ROOT" \
+PASSKEY_DEPLOYMENT_REQUIRE_READY="$REQUIRE_READY" \
+node <<'NODE'
+const childProcess = require('child_process');
+const crypto = require('crypto');
+const fs = require('fs');
+
+const evidencePath = process.env.PASSKEY_DEPLOYMENT_EVIDENCE_FILE;
+const deploymentRoot = process.env.PASSKEY_DEPLOYMENT_ROOT;
+const requireReady = process.env.PASSKEY_DEPLOYMENT_REQUIRE_READY === '1';
+const expectedCommitOverride = process.env.PASSKEY_DEPLOYMENT_EXPECTED_COMMIT;
+const EXPECTED_BASE_URL = 'https://backup.fearlesswallet.io';
+const EXPECTED_HEALTH_URL = `${EXPECTED_BASE_URL}/api/passkey-backup/v1/health`;
+const EXPECTED_SERVICE = 'fearless-passkey-backup';
+const EXPECTED_RP_ID = 'fearlesswallet.io';
+const EXPECTED_IMAGE = 'passkey-backup-challenge-service';
+const EXPECTED_BUILD = 'docker build -t passkey-backup-challenge-service:release .';
+const EXPECTED_LIVE_HEALTH =
+  'PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10 bash ../../scripts/audit-passkey-backup-prerequisites.sh';
+const EXPECTED_SMOKE =
+  'PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production';
+const EXPECTED_VOLUME = '/data/passkey-backup';
+const EXPECTED_FILE = '/data/passkey-backup/credentials.json';
+const EXPECTED_HTTPS_ORIGINS = ['https://fearlesswallet.io', 'https://backup.fearlesswallet.io'];
+const ANDROID_ORIGIN_PREFIX = 'android:apk-key-hash:';
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_READY_EVIDENCE_AGE_MS = 24 * 60 * 60 * 1000;
+// Read once, at second precision, so every record in one audit is evaluated
+// against the same clock and ISO-8601 second boundary.
+const auditStartedAtMs = Math.floor(Date.now() / 1000) * 1000;
+const REQUIRED_COMMANDS = [
+  'npm run lint:syntax',
+  'npm test',
+  'npm run test:deployment-evidence-template',
+  'npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json',
+  'npm run test:deployment-evidence-audit',
+  'npm run audit:deployment-evidence',
+  EXPECTED_BUILD,
+  EXPECTED_LIVE_HEALTH,
+  EXPECTED_SMOKE,
+  'npm run audit:deployment-evidence -- --require-ready',
+];
+const REQUIRED_BLOCKERS = [
+  'production-deployment-evidence-missing',
+  'live-health-failing',
+  'platform-provisioning-incomplete',
+  'request-access-introspection-unprovisioned',
+  'trusted-proxy-evidence-missing',
+];
+const REQUIRED_FIELDS = [
+  'imageDigest',
+  'deploymentId',
+  'deployedCommit',
+  'deployedAt',
+  'operator',
+  'smokePassedAt',
+  'smokeCommand',
+  'healthUrl',
+  'healthResponse',
+  'liveHealthAttestation',
+  'credentialStoreVolume',
+  'credentialStoreFile',
+  'webauthnAllowedOrigins',
+  'requestAccessPolicy',
+  'trustedProxyPolicy',
+  'platformProvisioning',
+  'platformProvisioningAttestation',
+];
+const REQUIRED_PLATFORM = [
+  'androidGoogleDriveConsent',
+  'androidReleaseFlagDisabled',
+  'iosAssociatedDomain',
+  'iosCloudKitProductionSchema',
+  'iosReleaseFlagDisabled',
+];
+const ALLOWED_TOP_LEVEL_FIELDS = [
+  'schemaVersion',
+  'scope',
+  'service',
+  'rpId',
+  'baseUrl',
+  'healthUrl',
+  'imageName',
+  'port',
+  'credentialStoreVolume',
+  'credentialStoreFile',
+  'status',
+  'releaseEnabled',
+  'blockers',
+  'dockerBuildCommand',
+  'smokeCommand',
+  'requiredCommands',
+  'requiredEvidenceFields',
+  'deploymentEvidence',
+];
+const ALLOWED_HEALTH_FIELDS = ['ok', 'service', 'rpId', 'schemaVersion'];
+const REQUIRED_ATTESTATION_FIELDS = [
+  'deploymentId',
+  'deployedCommit',
+  'imageDigest',
+  'observedAt',
+  'payloadSha256',
+];
+const REQUIRED_ACCESS_POLICY = [
+  'introspectionUrl',
+  'audience',
+  'mode',
+  'allPostRoutesProtected',
+  'stableCrossPlatformWalletSubject',
+  'authorizedSmokePassed',
+  'noRawSubjectPersisted',
+  'credentialLifecycleSmokePassed',
+  'ownerTombstonePersistencePassed',
+  'crossSubjectTakeoverDenied',
+  'sameOwnerReregistrationPassed',
+  'cloudDeleteRevokesServerFirst',
+  'listExcludesVerificationMaterial',
+];
+const REQUIRED_PROXY_POLICY = [
+  'hops',
+  'forwardedHeader',
+  'directPeerAllowlistConfigured',
+  'incomingHeaderSanitized',
+  'directPublicAccessBlocked',
+  'adversarialProxyTestsPassed',
+];
+const SECRET_KEY_PATTERN =
+  /(?:secret|password|token|private[_-]?key|authorization|cookie|credentialStoreSnapshot|credentialsByStorageKey|clientDataJSON)/iu;
+const SECRET_VALUE_PATTERN =
+  /(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})/u;
+
+function fail(message) {
+  console.error(`[passkey-deployment-evidence][error] ${message}`);
+  process.exitCode = 1;
+}
+
+function isRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function assert(condition, message) {
+  if (!condition) fail(message);
+}
+
+function parseJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    fail(`production deployment evidence must be valid JSON: ${error.message}`);
+    return null;
+  }
+}
+
+function hasAllStrings(actual, expected) {
+  return Array.isArray(actual) && expected.every((entry) => actual.includes(entry));
+}
+
+function validTimestamp(value) {
+  return timestampMillis(value) !== null;
+}
+
+function isRepeatedHexPlaceholder(value) {
+  const hex = String(value ?? '').replace(/^sha256:/u, '');
+  return /^[0-9a-f]+$/u.test(hex) && new Set(hex).size === 1;
+}
+
+function isTemplatePlaceholder(value) {
+  const raw = String(value ?? '').trim();
+  const normalized = raw.toUpperCase();
+  return (
+    normalized.length === 0 ||
+    normalized.startsWith('TODO_') ||
+    normalized.startsWith('REPLACE_WITH_') ||
+    normalized.includes('PLACEHOLDER') ||
+    /^(todo|tbd|placeholder|example|sample|dummy|unknown|n\/a)(?:$|[._\-\s:])/u.test(raw.toLowerCase())
+  );
+}
+
+function timestampMillis(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(value)) {
+    return null;
+  }
+  const millis = Date.parse(value);
+  if (!Number.isFinite(millis)) return null;
+  return new Date(millis).toISOString() === value.replace(/Z$/u, '.000Z') ? millis : null;
+}
+
+function isFutureTimestamp(value) {
+  const millis = timestampMillis(value);
+  return Number.isFinite(millis) && millis > auditStartedAtMs + MAX_CLOCK_SKEW_MS;
+}
+
+function sha256Json(value) {
+  return `sha256:${crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex')}`;
+}
+
+function isGitCommit(value) {
+  return /^[0-9a-f]{40}$/u.test(String(value ?? ''));
+}
+
+function expectedDeploymentCommitResult() {
+  if (expectedCommitOverride !== undefined && expectedCommitOverride !== '') {
+    if (!isGitCommit(expectedCommitOverride)) {
+      return {
+        error: 'PASSKEY_DEPLOYMENT_EXPECTED_COMMIT must be a 40-character lowercase git commit',
+      };
+    }
+    return { commit: expectedCommitOverride };
+  }
+
+  try {
+    const commit = childProcess.execFileSync('git', ['-C', deploymentRoot, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    if (isGitCommit(commit)) {
+      return { commit };
+    }
+    return {
+      error: `PASSKEY_DEPLOYMENT_EXPECTED_COMMIT must be set because repository HEAD was not a 40-character lowercase git commit: ${commit}`,
+    };
+  } catch (error) {
+    const detail = String(error.stderr || error.message || error).trim();
+    return {
+      error: `PASSKEY_DEPLOYMENT_EXPECTED_COMMIT must be set because repository HEAD could not be determined${detail ? `: ${detail}` : ''}`,
+    };
+  }
+}
+
+function assertNoSecretLikeKeys(value, path = 'deployment evidence') {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertNoSecretLikeKeys(entry, `${path}[${index}]`));
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, nested] of Object.entries(value)) {
+    const nestedPath = `${path}.${key}`;
+    assert(!SECRET_KEY_PATTERN.test(key), `${nestedPath} must not be included in public deployment evidence`);
+    assertNoSecretLikeKeys(nested, nestedPath);
+  }
+}
+
+function assertNoSecretLikeValues(value, path = 'deployment evidence') {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertNoSecretLikeValues(entry, `${path}[${index}]`));
+    return;
+  }
+  if (isRecord(value)) {
+    for (const [key, nested] of Object.entries(value)) {
+      assertNoSecretLikeValues(nested, `${path}.${key}`);
+    }
+    return;
+  }
+  if (typeof value === 'string') {
+    assert(!SECRET_VALUE_PATTERN.test(value), `${path} must not contain secret-like token`);
+  }
+}
+
+function assertAllowedKeys(value, allowedKeys, path) {
+  if (!isRecord(value)) return;
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    assert(allowed.has(key), `${path}.${key} is not supported in public deployment evidence`);
+  }
+}
+
+function assertPublicOperator(value, path) {
+  assert(typeof value === 'string' && value.trim().length > 0, 'operator must be a non-empty string');
+  if (typeof value !== 'string') return;
+  assert(!/[\u0000-\u001f\u007f]/u.test(value), 'operator must be a single-line public value');
+  assert(!SECRET_VALUE_PATTERN.test(value), 'operator must not contain secret-like token');
+  assert(!isTemplatePlaceholder(value), 'operator must not be a placeholder operator');
+}
+
+function isCanonicalAndroidOrigin(value) {
+  if (typeof value !== 'string' || !value.startsWith(ANDROID_ORIGIN_PREFIX)) return false;
+  const digest = value.slice(ANDROID_ORIGIN_PREFIX.length);
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(digest)) return false;
+  try {
+    const decoded = Buffer.from(digest, 'base64url');
+    return decoded.length === 32 && decoded.toString('base64url') === digest;
+  } catch {
+    return false;
+  }
+}
+
+function validateAllowedOrigins(value, prefix) {
+  assert(Array.isArray(value), `${prefix}.webauthnAllowedOrigins must be an array`);
+  if (!Array.isArray(value)) return;
+  assert(value.length === 3, `${prefix}.webauthnAllowedOrigins must contain two HTTPS origins and one Android release origin`);
+  const unique = new Set(value);
+  assert(unique.size === value.length, `${prefix}.webauthnAllowedOrigins must not contain duplicates`);
+  for (const origin of EXPECTED_HTTPS_ORIGINS) {
+    assert(unique.has(origin), `${prefix}.webauthnAllowedOrigins must include ${origin}`);
+  }
+  const androidOrigins = value.filter((origin) =>
+    typeof origin === 'string' && origin.startsWith(ANDROID_ORIGIN_PREFIX));
+  assert(androidOrigins.length === 1, `${prefix}.webauthnAllowedOrigins must contain exactly one Android release origin`);
+  if (androidOrigins.length === 1) {
+    assert(
+      isCanonicalAndroidOrigin(androidOrigins[0]),
+      `${prefix}.webauthnAllowedOrigins Android origin must contain an unpadded base64url SHA-256 release certificate digest`,
+    );
+  }
+}
+
+function validateRequestAccessPolicy(value, prefix) {
+  assert(isRecord(value), `${prefix}.requestAccessPolicy must be an object`);
+  if (!isRecord(value)) return;
+  assertAllowedKeys(value, REQUIRED_ACCESS_POLICY, `${prefix}.requestAccessPolicy`);
+  let url;
+  try { url = new URL(value.introspectionUrl); } catch { url = null; }
+  assert(
+    url && url.protocol === 'https:' && !url.username && !url.password && !url.search &&
+      !url.hash && url.pathname !== '/' && url.href === value.introspectionUrl,
+    `${prefix}.requestAccessPolicy.introspectionUrl must be a canonical HTTPS endpoint`,
+  );
+  assert(value.audience === 'fearless-passkey-backup', `${prefix}.requestAccessPolicy.audience must be fearless-passkey-backup`);
+  assert(value.mode === 'atomic-one-time-consume', `${prefix}.requestAccessPolicy.mode must be atomic-one-time-consume`);
+  for (const field of REQUIRED_ACCESS_POLICY.slice(3)) {
+    assert(value[field] === true, `${prefix}.requestAccessPolicy.${field} must be true`);
+  }
+}
+
+function validateTrustedProxyPolicy(value, prefix) {
+  assert(isRecord(value), `${prefix}.trustedProxyPolicy must be an object`);
+  if (!isRecord(value)) return;
+  assertAllowedKeys(value, REQUIRED_PROXY_POLICY, `${prefix}.trustedProxyPolicy`);
+  assert(value.hops === 1, `${prefix}.trustedProxyPolicy.hops must be 1`);
+  assert(value.forwardedHeader === 'X-Forwarded-For', `${prefix}.trustedProxyPolicy.forwardedHeader must be X-Forwarded-For`);
+  for (const field of REQUIRED_PROXY_POLICY.slice(2)) {
+    assert(value[field] === true, `${prefix}.trustedProxyPolicy.${field} must be true`);
+  }
+}
+
+function validateBoundAttestation(attestation, record, payload, field, prefix) {
+  const path = `${prefix}.${field}`;
+  assert(isRecord(attestation), `${path} must be an object`);
+  if (!isRecord(attestation)) return;
+  assertAllowedKeys(attestation, REQUIRED_ATTESTATION_FIELDS, path);
+  assert(attestation.deploymentId === record.deploymentId, `${path}.deploymentId must match ${prefix}.deploymentId`);
+  assert(attestation.deployedCommit === record.deployedCommit, `${path}.deployedCommit must match ${prefix}.deployedCommit`);
+  assert(attestation.imageDigest === record.imageDigest, `${path}.imageDigest must match ${prefix}.imageDigest`);
+  assert(validTimestamp(attestation.observedAt), `${path}.observedAt must be an ISO-8601 UTC second timestamp`);
+  if (validTimestamp(attestation.observedAt)) {
+    assert(!isFutureTimestamp(attestation.observedAt), `${path}.observedAt must not be in the future`);
+    assert(attestation.observedAt === record.smokePassedAt, `${path}.observedAt must equal ${prefix}.smokePassedAt`);
+  }
+  assert(
+    attestation.payloadSha256 === sha256Json(payload),
+    `${path}.payloadSha256 must match the canonical attested payload`,
+  );
+}
+
+function validateRecord(record, index, expectedDeploymentCommit, enforceReadyFreshness) {
+  const prefix = `deploymentEvidence[${index}]`;
+  assert(isRecord(record), `${prefix} must be an object`);
+  if (!isRecord(record)) return;
+  assertAllowedKeys(record, REQUIRED_FIELDS, prefix);
+
+  assert(/^sha256:[0-9a-f]{64}$/u.test(String(record.imageDigest ?? '')), `${prefix}.imageDigest must be a sha256 image digest`);
+  assert(!isRepeatedHexPlaceholder(record.imageDigest), `${prefix}.imageDigest must not be a placeholder image digest`);
+  assert(/^[A-Za-z0-9._:-]{3,128}$/u.test(String(record.deploymentId ?? '')), `${prefix}.deploymentId must be a stable deployment id`);
+  assert(!isTemplatePlaceholder(record.deploymentId), `${prefix}.deploymentId must not be a placeholder deployment id`);
+  assert(isGitCommit(record.deployedCommit), `${prefix}.deployedCommit must be a 40-character lowercase git commit`);
+  assert(!isRepeatedHexPlaceholder(record.deployedCommit), `${prefix}.deployedCommit must not be a placeholder git commit`);
+  if (expectedDeploymentCommit) {
+    assert(
+      record.deployedCommit === expectedDeploymentCommit,
+      `${prefix}.deployedCommit must match expected deployment commit ${expectedDeploymentCommit}`,
+    );
+  }
+  assert(validTimestamp(record.deployedAt), `${prefix}.deployedAt must be an ISO-8601 UTC second timestamp`);
+  assert(validTimestamp(record.smokePassedAt), `${prefix}.smokePassedAt must be an ISO-8601 UTC second timestamp`);
+  if (validTimestamp(record.deployedAt)) {
+    assert(!isFutureTimestamp(record.deployedAt), `${prefix}.deployedAt must not be in the future`);
+  }
+  if (validTimestamp(record.smokePassedAt)) {
+    assert(!isFutureTimestamp(record.smokePassedAt), `${prefix}.smokePassedAt must not be in the future`);
+    if (enforceReadyFreshness) {
+      assert(
+        auditStartedAtMs - timestampMillis(record.smokePassedAt) <= MAX_READY_EVIDENCE_AGE_MS,
+        `${prefix}.smokePassedAt must be no more than 24 hours old for ready evidence`,
+      );
+    }
+  }
+  if (validTimestamp(record.deployedAt) && validTimestamp(record.smokePassedAt)) {
+    assert(
+      timestampMillis(record.smokePassedAt) >= timestampMillis(record.deployedAt),
+      `${prefix}.smokePassedAt must be at or after deployedAt`,
+    );
+  }
+  assertPublicOperator(record.operator, `${prefix}.operator`);
+  assert(record.smokeCommand === EXPECTED_SMOKE, `${prefix}.smokeCommand must be the production route smoke command`);
+  assert(record.healthUrl === EXPECTED_HEALTH_URL, `${prefix}.healthUrl must be ${EXPECTED_HEALTH_URL}`);
+  assert(record.credentialStoreVolume === EXPECTED_VOLUME, `${prefix}.credentialStoreVolume must be ${EXPECTED_VOLUME}`);
+  assert(record.credentialStoreFile === EXPECTED_FILE, `${prefix}.credentialStoreFile must be ${EXPECTED_FILE}`);
+  validateAllowedOrigins(record.webauthnAllowedOrigins, prefix);
+  validateRequestAccessPolicy(record.requestAccessPolicy, prefix);
+  validateTrustedProxyPolicy(record.trustedProxyPolicy, prefix);
+
+  const health = record.healthResponse;
+  assert(isRecord(health), `${prefix}.healthResponse must be an object`);
+  if (isRecord(health)) {
+    assertAllowedKeys(health, ALLOWED_HEALTH_FIELDS, `${prefix}.healthResponse`);
+    assert(health.ok === true, `${prefix}.healthResponse.ok must be true`);
+    assert(health.service === EXPECTED_SERVICE, `${prefix}.healthResponse.service must be ${EXPECTED_SERVICE}`);
+    assert(health.rpId === EXPECTED_RP_ID, `${prefix}.healthResponse.rpId must be ${EXPECTED_RP_ID}`);
+    assert(health.schemaVersion === 1, `${prefix}.healthResponse.schemaVersion must be 1`);
+  }
+  const canonicalHealthPayload = {
+    ok: health?.ok,
+    service: health?.service,
+    rpId: health?.rpId,
+    schemaVersion: health?.schemaVersion,
+  };
+  validateBoundAttestation(
+    record.liveHealthAttestation,
+    record,
+    canonicalHealthPayload,
+    'liveHealthAttestation',
+    prefix,
+  );
+
+  const platform = record.platformProvisioning;
+  assert(isRecord(platform), `${prefix}.platformProvisioning must be an object`);
+  if (isRecord(platform)) {
+    assertAllowedKeys(platform, REQUIRED_PLATFORM, `${prefix}.platformProvisioning`);
+    for (const field of REQUIRED_PLATFORM) {
+      assert(platform[field] === true, `${prefix}.platformProvisioning.${field} must be true`);
+    }
+  }
+  const canonicalPlatformPayload = Object.fromEntries(
+    REQUIRED_PLATFORM.map((field) => [field, platform?.[field]]),
+  );
+  validateBoundAttestation(
+    record.platformProvisioningAttestation,
+    record,
+    canonicalPlatformPayload,
+    'platformProvisioningAttestation',
+    prefix,
+  );
+}
+
+const data = parseJson(evidencePath);
+if (!data) process.exit(1);
+assertNoSecretLikeKeys(data);
+assertNoSecretLikeValues(data);
+assertAllowedKeys(data, ALLOWED_TOP_LEVEL_FIELDS, 'deployment evidence');
+const readyEvidenceRequired = data.status === 'ready' || data.releaseEnabled === true;
+let expectedDeploymentCommit = null;
+if (readyEvidenceRequired) {
+  const result = expectedDeploymentCommitResult();
+  if (result.error) {
+    fail(result.error);
+  } else {
+    expectedDeploymentCommit = result.commit;
+  }
+}
+
+assert(data.schemaVersion === 1, 'schemaVersion must be 1');
+assert(data.scope === 'passkey-backup-challenge-service-production-deployment-readiness', 'scope must be passkey backup deployment readiness');
+assert(data.service === EXPECTED_SERVICE, `service must be ${EXPECTED_SERVICE}`);
+assert(data.rpId === EXPECTED_RP_ID, `rpId must be ${EXPECTED_RP_ID}`);
+assert(data.baseUrl === EXPECTED_BASE_URL, `baseUrl must be ${EXPECTED_BASE_URL}`);
+assert(data.healthUrl === EXPECTED_HEALTH_URL, `healthUrl must be ${EXPECTED_HEALTH_URL}`);
+assert(data.imageName === EXPECTED_IMAGE, `imageName must be ${EXPECTED_IMAGE}`);
+assert(data.port === 8789, 'port must be 8789');
+assert(data.credentialStoreVolume === EXPECTED_VOLUME, `credentialStoreVolume must be ${EXPECTED_VOLUME}`);
+assert(data.credentialStoreFile === EXPECTED_FILE, `credentialStoreFile must be ${EXPECTED_FILE}`);
+assert(data.dockerBuildCommand === EXPECTED_BUILD, 'dockerBuildCommand must build the production image');
+assert(data.smokeCommand === EXPECTED_SMOKE, 'smokeCommand must be the production route smoke command');
+assert(
+  hasAllStrings(data.requiredCommands, REQUIRED_COMMANDS),
+  'requiredCommands must include lint, tests, Docker build, deployment evidence audits, template generation, ready audit, live health command, and route smoke command',
+);
+if (Array.isArray(data.requiredCommands)) {
+  const commandSet = new Set(data.requiredCommands);
+  assert(commandSet.size === data.requiredCommands.length, 'duplicate deployment evidence required command');
+  for (const command of data.requiredCommands) {
+    assert(REQUIRED_COMMANDS.includes(command), `unsupported deployment evidence required command: ${command}`);
+  }
+}
+assert(hasAllStrings(data.requiredEvidenceFields, REQUIRED_FIELDS), 'requiredEvidenceFields must include all release proof fields');
+if (Array.isArray(data.requiredEvidenceFields)) {
+  const fieldSet = new Set(data.requiredEvidenceFields);
+  assert(fieldSet.size === data.requiredEvidenceFields.length, 'duplicate deployment evidence required field');
+  for (const field of data.requiredEvidenceFields) {
+    assert(REQUIRED_FIELDS.includes(field), `unsupported deployment evidence field in manifest: ${field}`);
+  }
+}
+
+if (data.status === 'blocked') {
+  assert(data.releaseEnabled === false, 'releaseEnabled must remain false while deployment evidence is blocked');
+  assert(hasAllStrings(data.blockers, REQUIRED_BLOCKERS), 'blocked deployment evidence must list missing deployment, live health, and platform provisioning blockers');
+  if (Array.isArray(data.blockers)) {
+    const blockerSet = new Set(data.blockers);
+    assert(blockerSet.size === data.blockers.length, 'duplicate deployment evidence blocker');
+    for (const blocker of data.blockers) {
+      assert(REQUIRED_BLOCKERS.includes(blocker), `unsupported deployment evidence blocker: ${blocker}`);
+    }
+  }
+  assert(
+    Array.isArray(data.deploymentEvidence) && data.deploymentEvidence.length === 0,
+    'blocked deployment evidence must keep deploymentEvidence empty; partial or stale records cannot coexist with blockers',
+  );
+  if (requireReady) {
+    fail('--require-ready requires status ready and releaseEnabled true');
+  }
+} else if (data.status === 'ready') {
+  assert(data.releaseEnabled === true, 'ready deployment evidence must set releaseEnabled true');
+  assert(Array.isArray(data.blockers) && data.blockers.length === 0, 'ready deployment evidence must not list blockers');
+  assert(Array.isArray(data.deploymentEvidence) && data.deploymentEvidence.length > 0, 'ready deployment evidence requires at least one successful live production smoke record');
+} else {
+  fail('status must be blocked or ready');
+}
+
+if (Array.isArray(data.deploymentEvidence)) {
+  const deploymentIds = new Set();
+  data.deploymentEvidence.forEach((record, index) => {
+    validateRecord(record, index, expectedDeploymentCommit, readyEvidenceRequired);
+    if (!isRecord(record)) return;
+
+    const deploymentId = String(record.deploymentId ?? '').trim();
+    if (!deploymentId) return;
+    assert(!deploymentIds.has(deploymentId), `duplicate deployment evidence id: ${deploymentId}`);
+    deploymentIds.add(deploymentId);
+  });
+} else {
+  fail('deploymentEvidence must be an array');
+}
+
+if (process.exitCode) process.exit(process.exitCode);
+console.log('[passkey-deployment-evidence] deployment evidence audit passed.');
+NODE

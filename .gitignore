@@ -3,6 +3,7 @@
 /*
 
 !/.gitignore
+!/.github/
 !/README.md
 !/FEARLESS_PROJECT_PLAN.md
 !/config/
@@ -25,4 +26,3 @@
 /fearless-*/
 /.zero*
 /=
-

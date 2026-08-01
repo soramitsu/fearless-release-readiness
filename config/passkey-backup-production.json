@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "relyingPartyId": "fearlesswallet.io",
+  "challengeServiceBaseUrl": "https://backup.fearlesswallet.io",
+  "healthPath": "/api/passkey-backup/v1/health",
+  "releaseEnabled": false,
+  "challengeServicePaths": {
+    "registrationChallenge": "/api/passkey-backup/v1/registration/challenge",
+    "registrationComplete": "/api/passkey-backup/v1/registration/complete",
+    "assertionChallenge": "/api/passkey-backup/v1/assertion/challenge",
+    "assertionComplete": "/api/passkey-backup/v1/assertion/complete",
+    "credentialsList": "/api/passkey-backup/v1/credentials/list",
+    "credentialsRevoke": "/api/passkey-backup/v1/credentials/revoke",
+    "credentialsRevokeAll": "/api/passkey-backup/v1/credentials/revoke-all"
+  },
+  "webauthnAllowedOrigins": [
+    "https://fearlesswallet.io",
+    "https://backup.fearlesswallet.io",
+    "android:apk-key-hash:zBfL1DBDIsWOJ4kDReYAmygXt36iPYX_2-MzjFfzYsM"
+  ],
+  "requestAuthorization": {
+    "mode": "atomic-one-time-consume",
+    "audience": "fearless-passkey-backup",
+    "credentialType": "opaque-one-time-bearer-grant",
+    "bodyDigest": "sha256-base64url-unpadded-of-exact-request-body-bytes",
+    "introspectionUrlEnvironmentVariable": "PASSKEY_AUTHORIZATION_INTROSPECTION_URL",
+    "failClosed": true,
+    "stableCrossPlatformSubject": "fearless-wallet-owner",
+    "prohibitedSubjectSources": [
+      "raw-google-account",
+      "raw-apple-account",
+      "device-identifier"
+    ],
+    "platformClaimValues": [
+      "android",
+      "ios"
+    ],
+    "protectedPaths": [
+      "/api/passkey-backup/v1/registration/challenge",
+      "/api/passkey-backup/v1/registration/complete",
+      "/api/passkey-backup/v1/assertion/challenge",
+      "/api/passkey-backup/v1/assertion/complete",
+      "/api/passkey-backup/v1/credentials/list",
+      "/api/passkey-backup/v1/credentials/revoke",
+      "/api/passkey-backup/v1/credentials/revoke-all"
+    ]
+  },
+  "credentialLifecycle": {
+    "maxCredentialsPerStorageKey": 32,
+    "listExposesPublicKeyOrUserHandle": false,
+    "singleRevokeIdempotent": true,
+    "revokeAllIdempotent": true,
+    "finalRevocationRetainsOwnerTombstone": true,
+    "crossSubjectTakeoverDenied": true,
+    "sameOwnerReregistrationAllowed": true,
+    "ownerErasureEndpointEnabled": false,
+    "cloudDeletionOrdering": "revoke-server-credentials-before-cloud-record"
+  },
+  "encryptedBackupMetadata": [
+    "storageKey",
+    "walletId",
+    "accountName",
+    "createdAtMillis",
+    "schemaVersion"
+  ],
+  "android": {
+    "releaseEnabled": false,
+    "webauthnOrigin": "android:apk-key-hash:zBfL1DBDIsWOJ4kDReYAmygXt36iPYX_2-MzjFfzYsM",
+    "backupStorage": "google-drive-appdata",
+    "googleDriveScope": "https://www.googleapis.com/auth/drive.appdata",
+    "oauthScope": "oauth2:https://www.googleapis.com/auth/drive.appdata",
+    "releaseUxChecklist": [
+      "google-account-selection",
+      "google-drive-consent",
+      "restore-before-create",
+      "disabled-until-live-health"
+    ]
+  },
+  "ios": {
+    "releaseEnabled": false,
+    "backupStorage": "cloudkit-private-database",
+    "associatedDomain": "webcredentials:fearlesswallet.io",
+    "cloudKitRecordType": "FearlessPasskeyBackup",
+    "cloudKitContainers": [
+      "iCloud.jp.co.soramitsu.fearlesswallet",
+      "iCloud.jp.co.soramitsu.fearlesswallet.dev"
+    ],
+    "releaseUxChecklist": [
+      "icloud-account-availability",
+      "associated-domain-provisioning",
+      "cloudkit-production-schema",
+      "restore-before-create",
+      "disabled-until-live-health"
+    ]
+  }
+}
