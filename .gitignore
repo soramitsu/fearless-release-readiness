@@ -1,0 +1,28 @@
+# This repository is an allowlisted public release-readiness control plane.
+# Everything at the workspace root is excluded unless explicitly reopened.
+/*
+
+!/.gitignore
+!/README.md
+!/FEARLESS_PROJECT_PLAN.md
+!/config/
+!/docs/
+!/scripts/
+!/services/
+
+# Only the public passkey challenge service belongs to this repository.
+/services/*
+!/services/passkey-backup-challenge-service/
+/services/passkey-backup-challenge-service/build/
+/services/passkey-backup-challenge-service/node_modules/
+
+# Local reports, artifacts, nested checkouts, credentials, and device evidence
+# must remain outside this repository even if a parent rule changes later.
+/build/
+/release/
+/release-evidence/
+/release-worktrees/
+/fearless-*/
+/.zero*
+/=
+
