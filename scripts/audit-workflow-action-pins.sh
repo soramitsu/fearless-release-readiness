@@ -33,7 +33,7 @@ for repo in "${repos[@]}"; do
       echo "[workflow-action-pins][error] workflow must be a regular non-symlink file: $workflow" >&2
       exit 1
     fi
-    size="$(stat -f '%z' "$workflow" 2>/dev/null || stat -c '%s' "$workflow")"
+    size="$(stat -c '%s' "$workflow" 2>/dev/null || stat -f '%z' "$workflow")"
     if [[ ! "$size" =~ ^[0-9]+$ || "$size" -gt "$MAX_WORKFLOW_BYTES" ]]; then
       echo "[workflow-action-pins][error] workflow exceeds 1 MiB: $workflow" >&2
       exit 1

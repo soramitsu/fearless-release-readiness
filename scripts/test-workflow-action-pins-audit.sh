@@ -11,16 +11,33 @@ FIXTURE_PARENT="$TMP_DIR"
 repos=(fearless-Android fearless-iOS fearless-wallet-web fearless-site-web)
 siblings=(ton-indexer solswap-indexer polkaswap-indexer)
 
+copy_or_seed_workflows() {
+  local source="$1"
+  local destination="$2"
+  mkdir -p "$destination"
+  if [[ -d "$source" && ! -L "$source" ]]; then
+    cp -R "$source/." "$destination/"
+    return
+  fi
+  printf '%s\n' \
+    'name: fixture' \
+    'jobs:' \
+    '  validate:' \
+    '    runs-on: ubuntu-latest' \
+    '    steps:' \
+    '      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4' \
+    '      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4' \
+    > "$destination/ci.yml"
+}
+
 write_fixture() {
   rm -rf "$FIXTURE_ROOT" "$FIXTURE_PARENT/ton-indexer" "$FIXTURE_PARENT/solswap-indexer" "$FIXTURE_PARENT/polkaswap-indexer"
   mkdir -p "$FIXTURE_ROOT"
   for repo in "${repos[@]}"; do
-    mkdir -p "$FIXTURE_ROOT/$repo/.github/workflows"
-    cp -R "$ROOT_DIR/$repo/.github/workflows/." "$FIXTURE_ROOT/$repo/.github/workflows/"
+    copy_or_seed_workflows "$ROOT_DIR/$repo/.github/workflows" "$FIXTURE_ROOT/$repo/.github/workflows"
   done
   for repo in "${siblings[@]}"; do
-    mkdir -p "$FIXTURE_PARENT/$repo/.github/workflows"
-    cp -R "$ROOT_DIR/../$repo/.github/workflows/." "$FIXTURE_PARENT/$repo/.github/workflows/"
+    copy_or_seed_workflows "$ROOT_DIR/../$repo/.github/workflows" "$FIXTURE_PARENT/$repo/.github/workflows"
   done
 }
 
