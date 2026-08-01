@@ -37,11 +37,38 @@ Use this checklist for every production release of
   WebAuthn controls.
 - Run `bash ../../scripts/audit-passkey-challenge-service.sh` and confirm the
   service release gate passes.
-- Run `docker build -t passkey-backup-challenge-service:release .` and confirm
-  the production image builds from the checked-in Docker contract.
-- Run `docker compose -f docker-compose.production.yml up -d --build` and
-  confirm the checked production Compose contract still starts with the pinned
-  port, durable volume, production origins, and healthcheck.
+- From the exact current protected `main` commit, dispatch
+  `gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>`.
+  Confirm `.github/workflows/passkey-image-publish.yml` rejects PR refs,
+  unprotected refs, source-SHA drift, a source tag bound to a different digest,
+  and registry lookup uncertainty. Confirm a retry can safely resume when the
+  source tag already resolves to a digest whose GitHub attestation is bound to
+  this workflow, protected-main commit, and source ref.
+- On the first successful dispatch, verify GHCR created
+  `soramitsu/fearless-passkey-backup`, linked it to this repository, and applied
+  the reviewed visibility and Actions-access policy. The package does not exist
+  before that deployment-time event; do not record it as a satisfied
+  precondition.
+- Download
+  `passkey-image-publication-<protected-main-commit>-<run-id>-<run-attempt>` from
+  the completed workflow run. Confirm the public JSON and Sigstore bundle bind the exact source
+  commit to `ghcr.io/soramitsu/fearless-passkey-backup@sha256:<digest>` and a
+  repository-owned GitHub provenance attestation. Never substitute a local image
+  or mutable tag.
+- Before the 90-day Actions artifact retention expires, copy the verified
+  publication JSON, Sigstore bundle checksum, immutable digest, publication run
+  URL, and attestation URL into the retention-controlled public release/audit
+  record and protected-main deployment evidence review. Confirm the protected
+  record is readable and contains no credentials, grants, tokens, store data, or
+  secret values.
+- Run `gh attestation verify oci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-image-digest> --repo soramitsu/fearless-release-readiness --signer-workflow soramitsu/fearless-release-readiness/.github/workflows/passkey-image-publish.yml --source-digest <protected-main-commit> --source-ref refs/heads/main --deny-self-hosted-runners`.
+- Export `PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr.io/soramitsu/fearless-passkey-backup`
+  and `PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>`.
+  Run `docker compose -f docker-compose.production.yml config --quiet`, then
+  `docker compose -f docker-compose.production.yml pull`, then
+  `docker compose -f docker-compose.production.yml up -d --no-build`. Confirm
+  the checked production Compose contract starts with the immutable digest,
+  pinned port, durable volume, production origins, and strict healthcheck.
 - Confirm the deployment mounts durable storage at `/data/passkey-backup` and
   uses `PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials.json`.
 - Confirm a production preflight with `PASSKEY_CREDENTIAL_STORE_FILE` omitted
@@ -81,7 +108,7 @@ Use this checklist for every production release of
   independent evidence that the published association and service origin are
   correct.
 - Confirm production startup and
-  `docker compose -f docker-compose.production.yml up -d --build` fail before
+  `docker compose -f docker-compose.production.yml up -d --no-build` fail before
   listening/container creation when `PASSKEY_ANDROID_ALLOWED_ORIGIN` is
   omitted, empty, padded, standard-base64, noncanonical, duplicated, or
   whitespace-contaminated.
@@ -128,8 +155,9 @@ Use this checklist for every production release of
   against the deployed service and confirm the route-level production smoke
   passes.
 - Update `scripts/production-deployment-evidence.json`, set `releaseEnabled: true`,
-  record image digest, deployment ID, deployed commit, live health response, and
-  the exact Android WebAuthn allowed origin plus Android/iOS platform
+  record image repository, image digest, publication run URL, provenance
+  attestation URL, deployment ID, deployed commit, live health response, and the
+  exact Android WebAuthn allowed origin plus Android/iOS platform
   provisioning evidence. Blocked evidence must keep `deploymentEvidence`
   empty. Every ready smoke must be no more than 24 hours old, and each
   `liveHealthAttestation` and `platformProvisioningAttestation` must bind its
@@ -143,6 +171,12 @@ Use this checklist for every production release of
   `npm run audit:deployment-evidence -- --require-ready`.
 - Confirm rollback owner, monitoring owner, alert route, and release
   communication channel.
+- Walk through [`rollback-checklist.md`](rollback-checklist.md). Confirm private,
+  encrypted pre-release and rollback-time snapshot procedures preserve the
+  existing schema-v3 credential store, counters, revocations, and empty owner
+  tombstones; exactly one writer is allowed; `docker compose down -v` and older
+  unreconciled snapshot restores are forbidden; and server revoke-all must
+  persist before cloud-record deletion.
 
 ## After Release
 
@@ -150,7 +184,8 @@ Use this checklist for every production release of
   after DNS propagation.
 - Re-run `PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production`
   after DNS propagation.
-- Verify the deployed service is serving the intended image tag.
+- Verify the deployed service is serving the reviewed immutable image digest,
+  not merely the discovery tag.
 - Re-run
   `PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10 bash ../../scripts/audit-passkey-backup-prerequisites.sh`;
   do not substitute an ad hoc curl command. Confirm it validates `ok=true`,

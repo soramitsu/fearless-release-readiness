@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AUDIT_SCRIPT="$SCRIPT_DIR/audit-passkey-challenge-service.sh"
 
 fail() {
@@ -73,7 +74,7 @@ setup_fixture() {
   write_file "$service_dir/docker-compose.production.yml" \
     'services:' \
     '  passkey-backup-challenge-service:' \
-    '    image: passkey-backup-challenge-service:release' \
+    '    image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"' \
     '    restart: unless-stopped' \
     '    read_only: true' \
     '    cap_drop:' \
@@ -116,6 +117,8 @@ setup_fixture() {
     'fearless-passkey-backup' \
     'docs/production-deployment.md' \
     'docs/release-checklist.md' \
+    'docs/rollback-checklist.md' \
+    'ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-digest>' \
     'cryptographically verifies WebAuthn' \
     'credential public keys, user handles, counters' \
     'single-writer contract' \
@@ -125,8 +128,14 @@ setup_fixture() {
     '/api/passkey-backup/v1/assertion/complete'
 	  write_file "$service_dir/docs/production-deployment.md" \
 	    'backup.fearlesswallet.io' \
-	    'docker build -t passkey-backup-challenge-service:release .' \
-	    'docker compose -f docker-compose.production.yml up -d --build' \
+	    'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>' \
+	    'gh attestation verify oci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-image-digest>' \
+	    'PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr.io/soramitsu/fearless-passkey-backup' \
+	    'PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>' \
+	    'docker compose -f docker-compose.production.yml config --quiet' \
+	    'docker compose -f docker-compose.production.yml pull' \
+	    'docker compose -f docker-compose.production.yml up -d --no-build' \
+	    'publication evidence is retained for 90 days in a retention-controlled public record' \
 	    'docker run' \
 	    'PASSKEY_ALLOWED_ORIGINS=https://fearlesswallet.io,https://backup.fearlesswallet.io' \
 	    'PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials.json' \
@@ -154,8 +163,13 @@ setup_fixture() {
 	    'npm run audit:deployment-evidence -- --require-ready'
 	  printf '%s\n' 'ready evidence must be no more than 24 hours old liveHealthAttestation platformProvisioningAttestation' >> "$service_dir/docs/production-deployment.md"
 	  write_file "$service_dir/docs/release-checklist.md" \
-	    'docker build -t passkey-backup-challenge-service:release .' \
-	    'docker compose -f docker-compose.production.yml up -d --build' \
+	    'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>' \
+	    'gh attestation verify oci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-image-digest>' \
+	    'PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr.io/soramitsu/fearless-passkey-backup' \
+	    'PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>' \
+	    'docker compose -f docker-compose.production.yml up -d --no-build' \
+	    'preserve evidence before the 90-day Actions artifact retention expires' \
+	    'follow rollback-checklist.md' \
 	    'PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10' \
 	    'PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production' \
 	    'PASSKEY_ANDROID_RELEASE_SIGNER_SHA256_FINGERPRINT="$PASSKEY_ANDROID_RELEASE_SIGNER_SHA256_FINGERPRINT" PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE="$PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE" bash ../../scripts/audit-passkey-android-origin-parity.sh --require-ready' \
@@ -380,6 +394,18 @@ setup_fixture() {
 	    'test("OpenAPI requires one-time Bearer grants and exact hardened POST response matrices", () => {})'
 	  write_file "$workspace/config/passkey-backup-challenge-service.openapi.json" \
 	    '{"components":{"securitySchemes":{"bearerAuth":{}},"responses":{"AuthorizationForbidden":{}}}}'
+
+  mkdir -p "$workspace/.github/workflows" "$service_dir/docs"
+  cp "$SOURCE_ROOT/.github/workflows/passkey-image-publish.yml" "$workspace/.github/workflows/passkey-image-publish.yml"
+  cp "$SOURCE_ROOT/services/passkey-backup-challenge-service/docs/rollback-checklist.md" "$service_dir/docs/rollback-checklist.md"
+  for evidence_file in \
+    production-deployment-evidence.json \
+    audit-deployment-evidence.sh \
+    generate-deployment-evidence-template.sh \
+    test-deployment-evidence-audit.sh \
+    test-deployment-evidence-template.sh; do
+    cp "$SOURCE_ROOT/services/passkey-backup-challenge-service/scripts/$evidence_file" "$service_dir/scripts/$evidence_file"
+  done
 }
 
 run_audit() {
@@ -447,6 +473,54 @@ expect_failure "bad production Docker Compose origins" "production compose origi
 setup_fixture
 printf '%s\n' '    privileged: true' >> "$service_dir/docker-compose.production.yml"
 expect_failure "privileged production Docker Compose" "production compose must not enable privileged mode"
+
+setup_fixture
+perl -0pi -e 's#image: "\$\{PASSKEY_BACKUP_IMAGE_REPOSITORY:\?[^\n]+#image: passkey-backup-challenge-service:release#' "$service_dir/docker-compose.production.yml"
+expect_failure "mutable production Compose image" "immutable production compose image"
+
+setup_fixture
+printf '%s\n' '    build: .' >> "$service_dir/docker-compose.production.yml"
+expect_failure "local production Compose build" "must not build locally or select a mutable"
+
+setup_fixture
+rm "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "missing image publication workflow" "image publication workflow missing"
+
+setup_fixture
+perl -0pi -e 's/  workflow_dispatch:/  pull_request:/' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "pull-request image publication trigger" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's/github\.ref_protected == true/true/' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "unprotected image publication" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's#docker/build-push-action\@[0-9a-f]{40}#docker/build-push-action@v6#' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "floating image publication action" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's/      contents: read/      contents: read\n      pull-requests: write/' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "excess image publication permission" "publication workflow contract invalid"
+
+setup_fixture
+printf '%s\n' '# kubectl apply -f production.yml' >> "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "deployment command in publication workflow" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's/source tag already points to the exact published digest/source tag retry is rejected/' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "non-idempotent image publication retry" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's/--source-digest "\$GITHUB_SHA"/--source-digest "\$existing_digest"/' "$workspace/.github/workflows/passkey-image-publish.yml"
+expect_failure "unbound prior publication provenance" "publication workflow contract invalid"
+
+setup_fixture
+perl -0pi -e 's/empty owner tombstone/owner record/g' "$service_dir/docs/rollback-checklist.md"
+expect_failure "rollback drops owner tombstones" "rollback tombstone preservation checklist"
+
+setup_fixture
+perl -0pi -e 's/recoverable cloud record/deleted cloud record/' "$service_dir/docs/rollback-checklist.md"
+expect_failure "rollback reverses revocation ordering" "rollback cloud-data preservation checklist"
 
 setup_fixture
 perl -0pi -e 's/clientDataJSON/clientDataREMOVED/' "$service_dir/src/validation.js"
@@ -741,7 +815,7 @@ rm "$service_dir/scripts/test-deployment-evidence-template.sh"
 expect_failure "missing deployment evidence template self-test" "deployment evidence template self-test missing"
 
 setup_fixture
-perl -0pi -e 's/TODO_64_HEX_IMAGE_DIGEST/IMAGE_DIGEST_REMOVED/' "$service_dir/scripts/generate-deployment-evidence-template.sh"
+perl -0pi -e 's/TODO_64_HEX_IMAGE_DIGEST/IMAGE_DIGEST_REMOVED/g' "$service_dir/scripts/generate-deployment-evidence-template.sh"
 expect_failure "missing deployment evidence template image digest placeholder" "template image digest placeholder"
 
 setup_fixture

@@ -6,6 +6,7 @@ PARENT_DIR="${WORKFLOW_ACTION_PIN_AUDIT_PARENT:-$(cd "$ROOT_DIR/.." && pwd)}"
 MAX_WORKFLOW_BYTES=$((1024 * 1024))
 
 repos=(
+  "$ROOT_DIR"
   "$ROOT_DIR/fearless-Android"
   "$ROOT_DIR/fearless-iOS"
   "$ROOT_DIR/fearless-wallet-web"
@@ -47,14 +48,26 @@ for repo in "${repos[@]}"; do
   fi
 done
 
-WORKFLOW_ACTION_PIN_FILES="$(printf '%s\n' "${workflow_files[@]}")" node <<'NODE'
+WORKFLOW_ACTION_PIN_FILES="$(printf '%s\n' "${workflow_files[@]}")" \
+WORKFLOW_ACTION_PIN_ROOT_PUBLICATION="$ROOT_DIR/.github/workflows/passkey-image-publish.yml" \
+node <<'NODE'
 const fs = require('node:fs');
 
 const expectedPins = new Map([
   ['actions/checkout', '34e114876b0b11c390a56381ad16ebd13914f8d5'],
   ['actions/setup-node', '49933ea5288caeca8642d1e84afbd3f7d6820020'],
 ]);
+const publicationExpectedPins = new Map([
+  ['actions/checkout', '34e114876b0b11c390a56381ad16ebd13914f8d5'],
+  ['actions/attest-build-provenance', '977bb373ede98d70efdf65b84cb5f73e068dcc2a'],
+  ['actions/upload-artifact', 'ea165f8d65b6e75b540449e92b4886f43607fa02'],
+  ['docker/build-push-action', '10e90e3645eae34f1e60eeb005ba3a3d33f178e8'],
+  ['docker/login-action', 'c94ce9fb468520275223c153574b00df6fe4bcc9'],
+  ['docker/setup-buildx-action', '8d2750c68a42422c14e847fe6c8ac0403b4cbd6f'],
+  ['docker/setup-qemu-action', 'c7c53464625b32c7a7e944ae62b3e17d2b600130'],
+]);
 const files = process.env.WORKFLOW_ACTION_PIN_FILES.split('\n').filter(Boolean);
+const publicationFile = process.env.WORKFLOW_ACTION_PIN_ROOT_PUBLICATION;
 let actionCount = 0;
 
 function fail(message) {
@@ -91,7 +104,7 @@ for (const file of files) {
       fail(`${file}:${index + 1} action is not pinned by a full lowercase commit SHA: ${reference}`);
       continue;
     }
-    const expected = expectedPins.get(remote[1]);
+    const expected = (file === publicationFile ? publicationExpectedPins : expectedPins).get(remote[1]);
     if (expected && remote[2] !== expected) {
       fail(`${file}:${index + 1} ${remote[1]} must use reviewed commit ${expected}`);
     }

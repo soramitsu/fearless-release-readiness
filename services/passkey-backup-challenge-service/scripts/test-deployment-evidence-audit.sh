@@ -23,6 +23,9 @@ write_blocked_fixture() {
   "baseUrl": "https://backup.fearlesswallet.io",
   "healthUrl": "https://backup.fearlesswallet.io/api/passkey-backup/v1/health",
   "imageName": "passkey-backup-challenge-service",
+  "imageRepository": "ghcr.io/soramitsu/fearless-passkey-backup",
+  "imagePublicationWorkflow": ".github/workflows/passkey-image-publish.yml",
+  "imagePublicationCommand": "gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>",
   "port": 8789,
   "credentialStoreVolume": "/data/passkey-backup",
   "credentialStoreFile": "/data/passkey-backup/credentials.json",
@@ -35,7 +38,6 @@ write_blocked_fixture() {
     "request-access-introspection-unprovisioned",
     "trusted-proxy-evidence-missing"
   ],
-  "dockerBuildCommand": "docker build -t passkey-backup-challenge-service:release .",
   "smokeCommand": "PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production",
   "requiredCommands": [
     "npm run lint:syntax",
@@ -44,13 +46,16 @@ write_blocked_fixture() {
     "npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json",
     "npm run test:deployment-evidence-audit",
     "npm run audit:deployment-evidence",
-    "docker build -t passkey-backup-challenge-service:release .",
+    "gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>",
     "PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10 bash ../../scripts/audit-passkey-backup-prerequisites.sh",
     "PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production",
     "npm run audit:deployment-evidence -- --require-ready"
   ],
   "requiredEvidenceFields": [
+    "imageRepository",
     "imageDigest",
+    "imagePublicationRunUrl",
+    "imageProvenanceAttestationUrl",
     "deploymentId",
     "deployedCommit",
     "deployedAt",
@@ -128,7 +133,10 @@ data.status = "ready";
 data.releaseEnabled = true;
 data.blockers = [];
 const record = {
+  imageRepository: "ghcr.io/soramitsu/fearless-passkey-backup",
   imageDigest: "sha256:" + "0123456789abcdef".repeat(4),
+  imagePublicationRunUrl: "https://github.com/soramitsu/fearless-release-readiness/actions/runs/123456789",
+  imageProvenanceAttestationUrl: "https://github.com/soramitsu/fearless-release-readiness/attestations/987654321",
   deploymentId: "render-passkey-prod-001",
   deployedCommit: "0123456789abcdef0123456789abcdef01234567",
   deployedAt: timestamp(now - 5 * 60 * 1000),
@@ -262,7 +270,7 @@ expect_failure "duplicate deployment evidence blocker" "duplicate deployment evi
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>!command.includes("generate:deployment-evidence-template")); fs.writeFileSync(f, JSON.stringify(d));'
-expect_failure "missing deployment evidence template command" "requiredCommands must include lint, tests, Docker build, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
+expect_failure "missing deployment evidence template command" "requiredCommands must include lint, tests, protected-main image publication, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands.push("npm run test:deployment-evidence-audit"); fs.writeFileSync(f, JSON.stringify(d));'
@@ -274,11 +282,33 @@ expect_failure "unsupported deployment evidence required command" "unsupported d
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>command!=="npm test"); fs.writeFileSync(f, JSON.stringify(d));'
-expect_failure "missing deployment npm test command" "requiredCommands must include lint, tests, Docker build, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
+expect_failure "missing deployment npm test command" "requiredCommands must include lint, tests, protected-main image publication, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
 
 write_blocked_fixture "$fixture"
-mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>command!=="docker build -t passkey-backup-challenge-service:release ."); fs.writeFileSync(f, JSON.stringify(d));'
-expect_failure "missing deployment Docker build command" "requiredCommands must include lint, tests, Docker build, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>command!==d.imagePublicationCommand); fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "missing protected-main image publication command" "requiredCommands must include lint, tests, protected-main image publication, deployment evidence audits, template generation, ready audit, live health command, and route smoke command" run_audit "$fixture"
+
+for required_publication_field in imageRepository imagePublicationRunUrl imageProvenanceAttestationUrl; do
+  write_blocked_fixture "$fixture"
+  PASSKEY_PUBLICATION_FIELD="$required_publication_field" mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields=d.requiredEvidenceFields.filter((field)=>field!==process.env.PASSKEY_PUBLICATION_FIELD); fs.writeFileSync(f, JSON.stringify(d));'
+  expect_failure "missing required publication evidence field: $required_publication_field" "requiredEvidenceFields must include all release proof fields" run_audit "$fixture"
+done
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imageRepository="ghcr.io/attacker/fearless-passkey-backup"; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "wrong immutable image repository" "imageRepository must be ghcr.io/soramitsu/fearless-passkey-backup" run_audit "$fixture"
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imagePublicationWorkflow=".github/workflows/unreviewed.yml"; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "wrong image publication workflow" "imagePublicationWorkflow must be .github/workflows/passkey-image-publish.yml" run_audit "$fixture"
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imagePublicationCommand="docker build -t passkey-backup-challenge-service:release ."; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "mutable local image publication command" "imagePublicationCommand must dispatch the protected-main image publication workflow" run_audit "$fixture"
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.dockerBuildCommand="docker build -t passkey-backup-challenge-service:release ."; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "deprecated mutable Docker build contract" "deployment evidence.dockerBuildCommand is not supported in public deployment evidence" run_audit "$fixture"
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields.push("region"); fs.writeFileSync(f, JSON.stringify(d));'
@@ -298,6 +328,48 @@ expect_failure "malformed JSON" "production deployment evidence must be valid JS
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" "$ready_json_mutator"
 expect_success "ready evidence with live health and platform proof" run_audit "$fixture" --require-ready
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" "$ready_json_mutator"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); delete d.deploymentEvidence[0].imageRepository; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "ready evidence missing immutable image repository" "deploymentEvidence[0].imageRepository must be ghcr.io/soramitsu/fearless-passkey-backup" run_audit "$fixture" --require-ready
+
+for missing_url_field in imagePublicationRunUrl imageProvenanceAttestationUrl; do
+  write_blocked_fixture "$fixture"
+  mutate_json "$fixture" "$ready_json_mutator"
+  PASSKEY_PUBLICATION_FIELD="$missing_url_field" mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); delete d.deploymentEvidence[0][process.env.PASSKEY_PUBLICATION_FIELD]; fs.writeFileSync(f, JSON.stringify(d));'
+  expect_failure "ready evidence missing $missing_url_field" "$missing_url_field must be a canonical protected-repository GitHub" run_audit "$fixture" --require-ready
+done
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" "$ready_json_mutator"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.deploymentEvidence[0].imageRepository="ghcr.io/attacker/fearless-passkey-backup"; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "ready evidence from wrong image repository" "deploymentEvidence[0].imageRepository must be ghcr.io/soramitsu/fearless-passkey-backup" run_audit "$fixture" --require-ready
+
+for bad_run_url in \
+  'https://github.com/attacker/fearless-release-readiness/actions/runs/123456789' \
+  'https://github.com/soramitsu/fearless-release-readiness/actions/runs/0' \
+  'https://github.com/soramitsu/fearless-release-readiness/actions/runs/123456789?attempt=2'; do
+  write_blocked_fixture "$fixture"
+  mutate_json "$fixture" "$ready_json_mutator"
+  PASSKEY_BAD_URL="$bad_run_url" mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.deploymentEvidence[0].imagePublicationRunUrl=process.env.PASSKEY_BAD_URL; fs.writeFileSync(f, JSON.stringify(d));'
+  expect_failure "non-canonical publication run URL: $bad_run_url" "imagePublicationRunUrl must be a canonical protected-repository GitHub Actions run URL with a positive integer id" run_audit "$fixture" --require-ready
+done
+
+write_blocked_fixture "$fixture"
+mutate_json "$fixture" "$ready_json_mutator"
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.deploymentEvidence[0].imagePublicationRunUrl += "\n"; fs.writeFileSync(f, JSON.stringify(d));'
+expect_failure "publication run URL with trailing newline" "imagePublicationRunUrl must be a canonical protected-repository GitHub Actions run URL with a positive integer id" run_audit "$fixture" --require-ready
+
+for bad_attestation_url in \
+  'https://github.com/attacker/fearless-release-readiness/attestations/987654321' \
+  'https://github.com/soramitsu/fearless-release-readiness/attestations/0' \
+  'https://github.com/soramitsu/fearless-release-readiness/attestations/987654321#details'; do
+  write_blocked_fixture "$fixture"
+  mutate_json "$fixture" "$ready_json_mutator"
+  PASSKEY_BAD_URL="$bad_attestation_url" mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.deploymentEvidence[0].imageProvenanceAttestationUrl=process.env.PASSKEY_BAD_URL; fs.writeFileSync(f, JSON.stringify(d));'
+  expect_failure "non-canonical provenance attestation URL: $bad_attestation_url" "imageProvenanceAttestationUrl must be a canonical protected-repository GitHub attestation URL with a positive integer id" run_audit "$fixture" --require-ready
+done
 
 # The 24-hour boundary is inclusive. Regenerate immediately if the wall clock
 # crosses a second between fixture construction and the audit.

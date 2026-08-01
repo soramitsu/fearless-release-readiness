@@ -62,7 +62,14 @@ const EXPECTED_HEALTH_URL = `${EXPECTED_BASE_URL}/api/passkey-backup/v1/health`;
 const EXPECTED_SERVICE = 'fearless-passkey-backup';
 const EXPECTED_RP_ID = 'fearlesswallet.io';
 const EXPECTED_IMAGE = 'passkey-backup-challenge-service';
-const EXPECTED_BUILD = 'docker build -t passkey-backup-challenge-service:release .';
+const EXPECTED_IMAGE_REPOSITORY = 'ghcr.io/soramitsu/fearless-passkey-backup';
+const EXPECTED_IMAGE_PUBLICATION_WORKFLOW = '.github/workflows/passkey-image-publish.yml';
+const EXPECTED_IMAGE_PUBLICATION_COMMAND =
+  'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>';
+const EXPECTED_IMAGE_PUBLICATION_RUN_URL =
+  /^https:\/\/github\.com\/soramitsu\/fearless-release-readiness\/actions\/runs\/[1-9][0-9]*$/u;
+const EXPECTED_IMAGE_PROVENANCE_ATTESTATION_URL =
+  /^https:\/\/github\.com\/soramitsu\/fearless-release-readiness\/attestations\/[1-9][0-9]*$/u;
 const EXPECTED_LIVE_HEALTH =
   'PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10 bash ../../scripts/audit-passkey-backup-prerequisites.sh';
 const EXPECTED_SMOKE =
@@ -83,7 +90,7 @@ const REQUIRED_COMMANDS = [
   'npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json',
   'npm run test:deployment-evidence-audit',
   'npm run audit:deployment-evidence',
-  EXPECTED_BUILD,
+  EXPECTED_IMAGE_PUBLICATION_COMMAND,
   EXPECTED_LIVE_HEALTH,
   EXPECTED_SMOKE,
   'npm run audit:deployment-evidence -- --require-ready',
@@ -96,7 +103,10 @@ const REQUIRED_BLOCKERS = [
   'trusted-proxy-evidence-missing',
 ];
 const REQUIRED_FIELDS = [
+  'imageRepository',
   'imageDigest',
+  'imagePublicationRunUrl',
+  'imageProvenanceAttestationUrl',
   'deploymentId',
   'deployedCommit',
   'deployedAt',
@@ -129,13 +139,15 @@ const ALLOWED_TOP_LEVEL_FIELDS = [
   'baseUrl',
   'healthUrl',
   'imageName',
+  'imageRepository',
+  'imagePublicationWorkflow',
+  'imagePublicationCommand',
   'port',
   'credentialStoreVolume',
   'credentialStoreFile',
   'status',
   'releaseEnabled',
   'blockers',
-  'dockerBuildCommand',
   'smokeCommand',
   'requiredCommands',
   'requiredEvidenceFields',
@@ -320,6 +332,14 @@ function assertPublicOperator(value, path) {
   assert(!isTemplatePlaceholder(value), 'operator must not be a placeholder operator');
 }
 
+function matchesCanonicalPublicationUrl(value, pattern) {
+  return (
+    typeof value === 'string' &&
+    !/[\u0000-\u001f\u007f]/u.test(value) &&
+    pattern.test(value)
+  );
+}
+
 function isCanonicalAndroidOrigin(value) {
   if (typeof value !== 'string' || !value.startsWith(ANDROID_ORIGIN_PREFIX)) return false;
   const digest = value.slice(ANDROID_ORIGIN_PREFIX.length);
@@ -406,8 +426,23 @@ function validateRecord(record, index, expectedDeploymentCommit, enforceReadyFre
   if (!isRecord(record)) return;
   assertAllowedKeys(record, REQUIRED_FIELDS, prefix);
 
+  assert(
+    record.imageRepository === EXPECTED_IMAGE_REPOSITORY,
+    `${prefix}.imageRepository must be ${EXPECTED_IMAGE_REPOSITORY}`,
+  );
   assert(/^sha256:[0-9a-f]{64}$/u.test(String(record.imageDigest ?? '')), `${prefix}.imageDigest must be a sha256 image digest`);
   assert(!isRepeatedHexPlaceholder(record.imageDigest), `${prefix}.imageDigest must not be a placeholder image digest`);
+  assert(
+    matchesCanonicalPublicationUrl(record.imagePublicationRunUrl, EXPECTED_IMAGE_PUBLICATION_RUN_URL),
+    `${prefix}.imagePublicationRunUrl must be a canonical protected-repository GitHub Actions run URL with a positive integer id`,
+  );
+  assert(
+    matchesCanonicalPublicationUrl(
+      record.imageProvenanceAttestationUrl,
+      EXPECTED_IMAGE_PROVENANCE_ATTESTATION_URL,
+    ),
+    `${prefix}.imageProvenanceAttestationUrl must be a canonical protected-repository GitHub attestation URL with a positive integer id`,
+  );
   assert(/^[A-Za-z0-9._:-]{3,128}$/u.test(String(record.deploymentId ?? '')), `${prefix}.deploymentId must be a stable deployment id`);
   assert(!isTemplatePlaceholder(record.deploymentId), `${prefix}.deploymentId must not be a placeholder deployment id`);
   assert(isGitCommit(record.deployedCommit), `${prefix}.deployedCommit must be a 40-character lowercase git commit`);
@@ -513,14 +548,22 @@ assert(data.rpId === EXPECTED_RP_ID, `rpId must be ${EXPECTED_RP_ID}`);
 assert(data.baseUrl === EXPECTED_BASE_URL, `baseUrl must be ${EXPECTED_BASE_URL}`);
 assert(data.healthUrl === EXPECTED_HEALTH_URL, `healthUrl must be ${EXPECTED_HEALTH_URL}`);
 assert(data.imageName === EXPECTED_IMAGE, `imageName must be ${EXPECTED_IMAGE}`);
+assert(data.imageRepository === EXPECTED_IMAGE_REPOSITORY, `imageRepository must be ${EXPECTED_IMAGE_REPOSITORY}`);
+assert(
+  data.imagePublicationWorkflow === EXPECTED_IMAGE_PUBLICATION_WORKFLOW,
+  `imagePublicationWorkflow must be ${EXPECTED_IMAGE_PUBLICATION_WORKFLOW}`,
+);
+assert(
+  data.imagePublicationCommand === EXPECTED_IMAGE_PUBLICATION_COMMAND,
+  'imagePublicationCommand must dispatch the protected-main image publication workflow',
+);
 assert(data.port === 8789, 'port must be 8789');
 assert(data.credentialStoreVolume === EXPECTED_VOLUME, `credentialStoreVolume must be ${EXPECTED_VOLUME}`);
 assert(data.credentialStoreFile === EXPECTED_FILE, `credentialStoreFile must be ${EXPECTED_FILE}`);
-assert(data.dockerBuildCommand === EXPECTED_BUILD, 'dockerBuildCommand must build the production image');
 assert(data.smokeCommand === EXPECTED_SMOKE, 'smokeCommand must be the production route smoke command');
 assert(
   hasAllStrings(data.requiredCommands, REQUIRED_COMMANDS),
-  'requiredCommands must include lint, tests, Docker build, deployment evidence audits, template generation, ready audit, live health command, and route smoke command',
+  'requiredCommands must include lint, tests, protected-main image publication, deployment evidence audits, template generation, ready audit, live health command, and route smoke command',
 );
 if (Array.isArray(data.requiredCommands)) {
   const commandSet = new Set(data.requiredCommands);

@@ -91,6 +91,14 @@ function secretLikeKeyReason(value, currentPath = '$') {
 
 check(manifest.schemaVersion === 1, 'schemaVersion must be 1');
 check(manifest.scope === 'passkey-backup-challenge-service-production-deployment-readiness', 'scope mismatch');
+check(manifest.imageRepository === 'ghcr.io/soramitsu/fearless-passkey-backup', 'image repository mismatch');
+check(manifest.imagePublicationWorkflow === '.github/workflows/passkey-image-publish.yml', 'image publication workflow mismatch');
+check(
+  manifest.imagePublicationCommand ===
+    'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>',
+  'image publication command mismatch',
+);
+check(!Object.prototype.hasOwnProperty.call(manifest, 'dockerBuildCommand'), 'mutable Docker build contract must be absent');
 check(manifest.status === 'ready', 'template must show the operator target status');
 check(manifest.releaseEnabled === true, 'template must show the operator target releaseEnabled value');
 check(Array.isArray(manifest.blockers) && manifest.blockers.length === 0, 'template blockers must be empty');
@@ -98,7 +106,18 @@ check(Array.isArray(manifest.deploymentEvidence) && manifest.deploymentEvidence.
 check(secretLikeKeyReason(manifest) === null, 'template must not contain secret-like keys');
 
 const evidence = manifest.deploymentEvidence[0] || {};
+check(evidence.imageRepository === manifest.imageRepository, 'image repository must be copied from manifest');
 check(evidence.imageDigest === 'sha256:TODO_64_HEX_IMAGE_DIGEST', 'image digest placeholder mismatch');
+check(
+  evidence.imagePublicationRunUrl ===
+    'https://github.com/soramitsu/fearless-release-readiness/actions/runs/TODO_POSITIVE_INTEGER_RUN_ID',
+  'image publication run URL placeholder mismatch',
+);
+check(
+  evidence.imageProvenanceAttestationUrl ===
+    'https://github.com/soramitsu/fearless-release-readiness/attestations/TODO_POSITIVE_INTEGER_ATTESTATION_ID',
+  'image provenance attestation URL placeholder mismatch',
+);
 check(evidence.deploymentId === 'TODO_PRODUCTION_DEPLOYMENT_ID', 'deployment id placeholder mismatch');
 check(evidence.deployedCommit === 'TODO_40_HEX_GIT_COMMIT', 'deployed commit placeholder mismatch');
 check(evidence.deployedAt === 'TODO_UTC_DEPLOYED_AT_SECONDS', 'deployedAt placeholder mismatch');
@@ -197,6 +216,13 @@ cp "$DEFAULT_MANIFEST" "$missing_required_field"
 mutate_json "$missing_required_field" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields=d.requiredEvidenceFields.filter((field)=>field!=="imageDigest"); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
 expect_failure "missing image digest field" "requiredEvidenceFields missing imageDigest" bash "$GENERATOR_SCRIPT" --evidence "$missing_required_field"
 
+for required_publication_field in imageRepository imagePublicationRunUrl imageProvenanceAttestationUrl; do
+  missing_publication_field="$tmp_dir/missing-$required_publication_field.json"
+  cp "$DEFAULT_MANIFEST" "$missing_publication_field"
+  PASSKEY_PUBLICATION_FIELD="$required_publication_field" mutate_json "$missing_publication_field" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields=d.requiredEvidenceFields.filter((field)=>field!==process.env.PASSKEY_PUBLICATION_FIELD); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+  expect_failure "missing publication field $required_publication_field" "requiredEvidenceFields missing $required_publication_field" bash "$GENERATOR_SCRIPT" --evidence "$missing_publication_field"
+done
+
 missing_origin_field="$tmp_dir/missing-origin-field.json"
 cp "$DEFAULT_MANIFEST" "$missing_origin_field"
 mutate_json "$missing_origin_field" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields=d.requiredEvidenceFields.filter((field)=>field!=="webauthnAllowedOrigins"); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
@@ -212,6 +238,11 @@ cp "$DEFAULT_MANIFEST" "$duplicate_required_command"
 mutate_json "$duplicate_required_command" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands.push("npm run test:deployment-evidence-audit"); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
 expect_failure "duplicate deployment evidence required command" "duplicate deployment evidence required command in manifest" bash "$GENERATOR_SCRIPT" --evidence "$duplicate_required_command"
 
+mutable_required_command="$tmp_dir/mutable-required-command.json"
+cp "$DEFAULT_MANIFEST" "$mutable_required_command"
+mutate_json "$mutable_required_command" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands.push("docker build -t passkey-backup-challenge-service:release ."); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "mutable local build required command" "unsupported deployment evidence required command in manifest: docker build -t passkey-backup-challenge-service:release ." bash "$GENERATOR_SCRIPT" --evidence "$mutable_required_command"
+
 duplicate_required_field="$tmp_dir/duplicate-required-field.json"
 cp "$DEFAULT_MANIFEST" "$duplicate_required_field"
 mutate_json "$duplicate_required_field" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredEvidenceFields.push("imageDigest"); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
@@ -226,6 +257,26 @@ unsupported_top_level="$tmp_dir/unsupported-top-level.json"
 cp "$DEFAULT_MANIFEST" "$unsupported_top_level"
 mutate_json "$unsupported_top_level" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.region="us-east-1"; fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
 expect_failure "unsupported top-level deployment evidence field" "deployment evidence.region is not supported in public deployment evidence manifest" bash "$GENERATOR_SCRIPT" --evidence "$unsupported_top_level"
+
+mutable_build_contract="$tmp_dir/mutable-build-contract.json"
+cp "$DEFAULT_MANIFEST" "$mutable_build_contract"
+mutate_json "$mutable_build_contract" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.dockerBuildCommand="docker build -t passkey-backup-challenge-service:release ."; fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "deprecated mutable Docker build contract" "deployment evidence.dockerBuildCommand is not supported in public deployment evidence manifest" bash "$GENERATOR_SCRIPT" --evidence "$mutable_build_contract"
+
+wrong_image_repository="$tmp_dir/wrong-image-repository.json"
+cp "$DEFAULT_MANIFEST" "$wrong_image_repository"
+mutate_json "$wrong_image_repository" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imageRepository="ghcr.io/attacker/fearless-passkey-backup"; fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "wrong immutable image repository" "imageRepository must be ghcr.io/soramitsu/fearless-passkey-backup" bash "$GENERATOR_SCRIPT" --evidence "$wrong_image_repository"
+
+wrong_publication_workflow="$tmp_dir/wrong-publication-workflow.json"
+cp "$DEFAULT_MANIFEST" "$wrong_publication_workflow"
+mutate_json "$wrong_publication_workflow" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imagePublicationWorkflow=".github/workflows/unreviewed.yml"; fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "wrong publication workflow" "imagePublicationWorkflow must be .github/workflows/passkey-image-publish.yml" bash "$GENERATOR_SCRIPT" --evidence "$wrong_publication_workflow"
+
+wrong_publication_command="$tmp_dir/wrong-publication-command.json"
+cp "$DEFAULT_MANIFEST" "$wrong_publication_command"
+mutate_json "$wrong_publication_command" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.imagePublicationCommand="gh workflow run unreviewed.yml --ref feature"; fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "wrong publication command" "imagePublicationCommand must be gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>" bash "$GENERATOR_SCRIPT" --evidence "$wrong_publication_command"
 
 unsupported_record_field="$tmp_dir/unsupported-record-field.json"
 cp "$DEFAULT_MANIFEST" "$unsupported_record_field"
@@ -276,5 +327,10 @@ missing_template_self_test="$tmp_dir/missing-template-self-test.json"
 cp "$DEFAULT_MANIFEST" "$missing_template_self_test"
 mutate_json "$missing_template_self_test" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>!command.includes("test:deployment-evidence-template")); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
 expect_failure "missing template self-test command" "requiredCommands missing npm run test:deployment-evidence-template" bash "$GENERATOR_SCRIPT" --evidence "$missing_template_self_test"
+
+missing_publication_command="$tmp_dir/missing-publication-command.json"
+cp "$DEFAULT_MANIFEST" "$missing_publication_command"
+mutate_json "$missing_publication_command" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.requiredCommands=d.requiredCommands.filter((command)=>command!==d.imagePublicationCommand); fs.writeFileSync(f, `${JSON.stringify(d, null, 2)}\n`);'
+expect_failure "missing image publication command" "requiredCommands missing gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>" bash "$GENERATOR_SCRIPT" --evidence "$missing_publication_command"
 
 echo "[passkey-deployment-evidence-template-test] all assertions passed"

@@ -103,22 +103,79 @@ Run exactly one writer process for each mounted credential-store file. Multiple
 replicas require an external transactional credential database; they must not
 share this JSON file over a network filesystem.
 
-## Container Contract
+## Immutable Image Publication and Container Contract
 
-Build the production image from this service directory:
+Production images are published only by
+`.github/workflows/passkey-image-publish.yml`. The workflow has no pull-request
+trigger and no deployment step. It grants package and OIDC permissions only to
+its publication job, whose guard requires this repository, `refs/heads/main`,
+GitHub's protected-ref signal, and an operator-supplied commit equal to both the
+workflow SHA and the current remote `main` tip. Every third-party action is
+pinned to a reviewed full commit SHA.
+
+After all protected-main checks pass, an authorized operator dispatches the
+exact current commit:
 
 ```sh
-docker build -t passkey-backup-challenge-service:release .
+gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness \
+  --ref main -f source_commit=<protected-main-commit>
 ```
 
-The checked production Compose contract is suitable for a single-host Docker
-deployment and keeps the same port, volume, environment, and health route:
+The workflow builds under a unique run-attempt staging tag, resolves the
+manifest's immutable digest, creates GitHub build provenance for that digest,
+and uploads public publication JSON plus the Sigstore bundle before promoting
+`ghcr.io/soramitsu/fearless-passkey-backup:sha-<protected-main-commit>`. Final
+promotion never overwrites a different digest; a retry resumes successfully
+only when `gh attestation verify` proves the existing source tag's digest came
+from this workflow, this protected-main source commit, and this source ref.
+It never deploys the service. Download the evidence from the completed run and
+independently compare its source commit, image digest, immutable reference,
+workflow-run URL, attestation URL, and bundle checksum:
 
 ```sh
+gh run download <publication-run-id> --repo soramitsu/fearless-release-readiness \
+  --name passkey-image-publication-<protected-main-commit>-<run-id>-<run-attempt> \
+  --dir build/reports/passkey-image-publication
+gh attestation verify \
+  oci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-image-digest> \
+  --repo soramitsu/fearless-release-readiness \
+  --signer-workflow soramitsu/fearless-release-readiness/.github/workflows/passkey-image-publish.yml \
+  --source-digest <protected-main-commit> \
+  --source-ref refs/heads/main \
+  --deny-self-hosted-runners
+```
+
+Authenticate the operator host to GHCR through the approved secret-management
+path before verification and pull; never put a registry token in shell history,
+this repository, public evidence, or Compose configuration. A tag is useful for
+finding a publication but is never a production deployment input.
+The `soramitsu/fearless-passkey-backup` GHCR package does not exist before its
+first successful protected-main dispatch. For that first publication, confirm
+the completed run created the package, linked it to this repository, and applied
+the reviewed visibility and Actions-access policy before any deployment. Treat
+this as a deployment-time verification point, not as a pre-existing artifact.
+The Actions artifact is retained for 90 days. Before it expires, promote the
+verified publication JSON, Sigstore bundle checksum, immutable digest,
+publication run URL, and attestation URL into the retention-controlled public
+release/audit record and the protected-main deployment evidence review. Confirm
+that record is readable before allowing the Actions artifact to expire; never
+copy registry credentials, bearer grants, credential-store data, or secrets.
+
+The checked production Compose contract is suitable for a single-host Docker
+deployment and keeps the same port, volume, environment, and health route. It
+requires the reviewed repository and the 64 lowercase hexadecimal characters
+after `sha256:` as separate operator inputs, so an omitted image identity fails
+before container creation:
+
+```sh
+export PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr.io/soramitsu/fearless-passkey-backup
+export PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>
 export PASSKEY_ANDROID_ALLOWED_ORIGIN='android:apk-key-hash:<actual-release-cert-sha256-base64url>'
 export PASSKEY_AUTHORIZATION_INTROSPECTION_URL='https://<wallet-owner-authority>/v1/passkey/consume'
 export PASSKEY_TRUSTED_PROXY_CIDRS='<exact-tls-proxy-ip-or-cidr>'
-docker compose -f docker-compose.production.yml up -d --build
+docker compose -f docker-compose.production.yml config --quiet
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d --no-build
 ```
 
 The `${PASSKEY_ANDROID_ALLOWED_ORIGIN:?…}` interpolation is intentional:
@@ -128,8 +185,8 @@ claim for `android` is accepted only with that Android origin; an `ios` claim is
 accepted only with a configured HTTPS origin. A grant for one platform cannot
 authorize the other platform's WebAuthn origin.
 
-Run the image with a persistent data volume and route
-`https://backup.fearlesswallet.io` to port `8789`:
+If Compose is unavailable, run the same reviewed digest with a persistent data
+volume and route `https://backup.fearlesswallet.io` to port `8789`:
 
 ```sh
 docker run --rm -p 127.0.0.1:8789:8789 \
@@ -140,7 +197,7 @@ docker run --rm -p 127.0.0.1:8789:8789 \
   -e PASSKEY_AUTHORIZATION_AUDIENCE=fearless-passkey-backup \
   -e PASSKEY_TRUST_PROXY_HOPS=1 \
   -e PASSKEY_TRUSTED_PROXY_CIDRS="$PASSKEY_TRUSTED_PROXY_CIDRS" \
-  passkey-backup-challenge-service:release
+  "${PASSKEY_BACKUP_IMAGE_REPOSITORY}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST}"
 ```
 
 The checked-in Dockerfile pins its Node 22 Alpine base by immutable
@@ -157,6 +214,10 @@ It must also require `PASSKEY_AUTHORIZATION_INTROSPECTION_URL`, pin
 `PASSKEY_AUTHORIZATION_AUDIENCE=fearless-passkey-backup`, and set
 `PASSKEY_TRUST_PROXY_HOPS=1` with an operator-supplied
 `PASSKEY_TRUSTED_PROXY_CIDRS` allowlist.
+Rollback must follow [`rollback-checklist.md`](rollback-checklist.md): preserve
+the existing credential volume, schema-v3 counters and owner tombstones, stop
+the current writer before starting the previous digest, and never restore a
+snapshot that could resurrect revoked credentials.
 
 ## Preflight
 
@@ -290,7 +351,8 @@ committed files.
 ## Deployment Evidence
 
 `scripts/production-deployment-evidence.json` must stay blocked with
-`releaseEnabled: false` until the deployed image digest, deployment ID, commit,
+`releaseEnabled: false` until the image repository, deployed image digest,
+publication run URL, provenance attestation URL, deployment ID, commit,
 operator, durable credential-store volume, live health response, and Android/iOS
 platform provisioning evidence are recorded. A blocked manifest must keep
 `deploymentEvidence` empty; partial or historical records cannot coexist with

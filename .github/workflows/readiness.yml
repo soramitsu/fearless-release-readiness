@@ -41,6 +41,8 @@ jobs:
           bash scripts/test-release-pr-readiness-audit.sh
           bash scripts/test-github-governance-audit.sh
           bash scripts/test-workflow-action-pins-audit.sh
+          bash scripts/test-passkey-challenge-service-audit.sh
+          PASSKEY_CHALLENGE_SERVICE_AUDIT_SKIP_COMMANDS=1 bash scripts/audit-passkey-challenge-service.sh
 
   verify:
     name: verify

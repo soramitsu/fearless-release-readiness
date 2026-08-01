@@ -64,15 +64,21 @@ const expected = {
   baseUrl: 'https://backup.fearlesswallet.io',
   healthUrl: 'https://backup.fearlesswallet.io/api/passkey-backup/v1/health',
   imageName: 'passkey-backup-challenge-service',
+  imageRepository: 'ghcr.io/soramitsu/fearless-passkey-backup',
+  imagePublicationWorkflow: '.github/workflows/passkey-image-publish.yml',
+  imagePublicationCommand:
+    'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>',
   port: 8789,
   credentialStoreVolume: '/data/passkey-backup',
   credentialStoreFile: '/data/passkey-backup/credentials.json',
-  dockerBuildCommand: 'docker build -t passkey-backup-challenge-service:release .',
   smokeCommand:
     'PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production',
 };
 const requiredEvidenceFields = [
+  'imageRepository',
   'imageDigest',
+  'imagePublicationRunUrl',
+  'imageProvenanceAttestationUrl',
   'deploymentId',
   'deployedCommit',
   'deployedAt',
@@ -97,7 +103,8 @@ const requiredCommands = [
   'npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json',
   'npm run test:deployment-evidence-audit',
   'npm run audit:deployment-evidence',
-  expected.dockerBuildCommand,
+  expected.imagePublicationCommand,
+  'PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10 bash ../../scripts/audit-passkey-backup-prerequisites.sh',
   expected.smokeCommand,
   'npm run audit:deployment-evidence -- --require-ready',
 ];
@@ -123,13 +130,15 @@ const allowedTopLevelFields = [
   'baseUrl',
   'healthUrl',
   'imageName',
+  'imageRepository',
+  'imagePublicationWorkflow',
+  'imagePublicationCommand',
   'port',
   'credentialStoreVolume',
   'credentialStoreFile',
   'status',
   'releaseEnabled',
   'blockers',
-  'dockerBuildCommand',
   'smokeCommand',
   'requiredCommands',
   'requiredEvidenceFields',
@@ -288,13 +297,17 @@ if (manifest) {
   if (manifest.releaseEnabled !== false) fail('releaseEnabled must stay false in the committed manifest');
 
   const declaredCommandList = requireArray(manifest.requiredCommands, 'requiredCommands');
-  const declaredCommands = declaredCommandList.join('\n');
   if (new Set(declaredCommandList).size !== declaredCommandList.length) {
     fail('duplicate deployment evidence required command in manifest');
   }
   for (const command of requiredCommands) {
-    if (!declaredCommands.includes(command)) {
+    if (!declaredCommandList.includes(command)) {
       fail(`requiredCommands missing ${command}`);
+    }
+  }
+  for (const command of declaredCommandList) {
+    if (!requiredCommands.includes(command)) {
+      fail(`unsupported deployment evidence required command in manifest: ${command}`);
     }
   }
 
@@ -325,7 +338,12 @@ if (errors.length > 0) {
 }
 
 const evidence = {
+  imageRepository: manifest.imageRepository,
   imageDigest: 'sha256:TODO_64_HEX_IMAGE_DIGEST',
+  imagePublicationRunUrl:
+    'https://github.com/soramitsu/fearless-release-readiness/actions/runs/TODO_POSITIVE_INTEGER_RUN_ID',
+  imageProvenanceAttestationUrl:
+    'https://github.com/soramitsu/fearless-release-readiness/attestations/TODO_POSITIVE_INTEGER_ATTESTATION_ID',
   deploymentId: 'TODO_PRODUCTION_DEPLOYMENT_ID',
   deployedCommit: 'TODO_40_HEX_GIT_COMMIT',
   deployedAt: 'TODO_UTC_DEPLOYED_AT_SECONDS',
@@ -394,13 +412,15 @@ const template = {
   baseUrl: manifest.baseUrl,
   healthUrl: manifest.healthUrl,
   imageName: manifest.imageName,
+  imageRepository: manifest.imageRepository,
+  imagePublicationWorkflow: manifest.imagePublicationWorkflow,
+  imagePublicationCommand: manifest.imagePublicationCommand,
   port: manifest.port,
   credentialStoreVolume: manifest.credentialStoreVolume,
   credentialStoreFile: manifest.credentialStoreFile,
   status: 'ready',
   releaseEnabled: true,
   blockers: [],
-  dockerBuildCommand: manifest.dockerBuildCommand,
   smokeCommand: manifest.smokeCommand,
   requiredCommands: manifest.requiredCommands,
   requiredEvidenceFields: manifest.requiredEvidenceFields,

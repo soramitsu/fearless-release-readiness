@@ -94,6 +94,120 @@ NODE
   fi
 }
 
+check_publication_workflow_contract() {
+  local workflow="$ROOT_DIR/.github/workflows/passkey-image-publish.yml"
+  local compose="$SERVICE_DIR/docker-compose.production.yml"
+  if [[ ! -f "$workflow" || ! -f "$compose" ]]; then
+    return
+  fi
+
+  local output
+  set +e
+  output="$(
+    PASSKEY_PUBLICATION_WORKFLOW="$workflow" PASSKEY_PRODUCTION_COMPOSE="$compose" node <<'NODE' 2>&1
+const fs = require('node:fs');
+const workflow = fs.readFileSync(process.env.PASSKEY_PUBLICATION_WORKFLOW, 'utf8');
+const compose = fs.readFileSync(process.env.PASSKEY_PRODUCTION_COMPOSE, 'utf8');
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const expectedImage = 'image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"';
+const imageLines = compose.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith('image:'));
+assert(imageLines.length === 1 && imageLines[0] === expectedImage, 'Compose image must be the exact required repository@sha256:digest expression');
+assert(!/^\s*build:/m.test(compose), 'Compose must not contain a local production build');
+assert(!/^\s*image:\s*[^\n]*:(?:latest|release)\b/m.test(compose), 'Compose must not contain a mutable latest or release image tag');
+
+const trigger = /^on:\n([\s\S]*?)\npermissions:/m.exec(workflow);
+assert(trigger, 'workflow trigger block is missing');
+const triggerNames = [...trigger[1].matchAll(/^  ([a-z_]+):/gm)].map((match) => match[1]);
+assert(JSON.stringify(triggerNames) === JSON.stringify(['workflow_dispatch']), 'workflow must expose only workflow_dispatch');
+assert(/^permissions: \{\}$/m.test(workflow), 'top-level permissions must be empty');
+const permissionBlock = /^    permissions:\n((?:      [^\n]+\n)+)    steps:/m.exec(workflow);
+assert(permissionBlock, 'publication job permissions are missing');
+const permissions = permissionBlock[1].trim().split(/\r?\n/).map((line) => line.trim());
+assert(
+  JSON.stringify(permissions) === JSON.stringify(['contents: read', 'packages: write', 'id-token: write', 'attestations: write']),
+  'publication job permissions exceed the reviewed least-privilege set',
+);
+
+for (const marker of [
+  "github.repository == 'soramitsu/fearless-release-readiness'",
+  "github.ref == 'refs/heads/main'",
+  'github.ref_protected == true',
+  'REQUESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}',
+  '"$REQUESTED_SOURCE_COMMIT" != "$GITHUB_SHA"',
+  'git ls-remote --exit-code origin refs/heads/main',
+  'ref: ${{ github.sha }}',
+  'persist-credentials: false',
+  'IMAGE_REPOSITORY: ghcr.io/soramitsu/fearless-passkey-backup',
+  'Resolve an attestable prior publication',
+  'gh attestation verify "oci://${IMAGE_REPOSITORY}@${existing_digest}"',
+  '--source-digest "$GITHUB_SHA"',
+  '--source-ref refs/heads/main',
+  '--deny-self-hosted-runners',
+  "if: steps.resume.outputs.resumed != 'true'",
+  'PUBLISHED_DIGEST: ${{ steps.resume.outputs.digest || steps.build.outputs.digest }}',
+  'passkey-image-publication-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
+  'retention-days: 90',
+  'source_tag="${IMAGE_REPOSITORY}:sha-${GITHUB_SHA}"',
+  'context: services/passkey-backup-challenge-service',
+  'file: services/passkey-backup-challenge-service/Dockerfile',
+  'platforms: linux/amd64,linux/arm64',
+  'tags: ${{ env.IMAGE_REPOSITORY }}:staging-${{ github.run_id }}-${{ github.run_attempt }}',
+  'subject-digest: ${{ steps.image.outputs.digest }}',
+  'push-to-registry: true',
+  'attestationBundleSha256',
+  'workflowRunUrl',
+  'refusing to overwrite source tag with a different digest',
+  'source tag already points to the exact published digest',
+  'echo "- Source commit: \\`$GITHUB_SHA\\`"',
+  'echo "- Immutable image: \\`$IMMUTABLE_REFERENCE\\`"',
+  'echo "- Provenance: $ATTESTATION_URL"',
+  'echo "- Evidence artifact digest: \\`$EVIDENCE_ARTIFACT_DIGEST\\`"',
+]) {
+  assert(workflow.includes(marker), `workflow marker missing: ${marker}`);
+}
+
+const expectedActions = new Map([
+  ['actions/checkout', '34e114876b0b11c390a56381ad16ebd13914f8d5'],
+  ['docker/setup-qemu-action', 'c7c53464625b32c7a7e944ae62b3e17d2b600130'],
+  ['docker/setup-buildx-action', '8d2750c68a42422c14e847fe6c8ac0403b4cbd6f'],
+  ['docker/login-action', 'c94ce9fb468520275223c153574b00df6fe4bcc9'],
+  ['docker/build-push-action', '10e90e3645eae34f1e60eeb005ba3a3d33f178e8'],
+  ['actions/attest-build-provenance', '977bb373ede98d70efdf65b84cb5f73e068dcc2a'],
+  ['actions/upload-artifact', 'ea165f8d65b6e75b540449e92b4886f43607fa02'],
+]);
+const seenActions = new Set();
+for (const match of workflow.matchAll(/^\s*uses:\s*([^\s#@]+)@([^\s#]+)/gm)) {
+  const [, action, ref] = match;
+  assert(expectedActions.has(action), `unreviewed publication action: ${action}`);
+  assert(/^[0-9a-f]{40}$/.test(ref), `publication action is not pinned by lowercase commit SHA: ${action}`);
+  assert(ref === expectedActions.get(action), `publication action uses an unreviewed commit: ${action}`);
+  seenActions.add(action);
+}
+assert(seenActions.size === expectedActions.size, 'one or more reviewed publication actions are missing');
+
+const secrets = [...workflow.matchAll(/\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}/g)].map((match) => match[1]);
+assert(secrets.length > 0 && secrets.every((name) => name === 'GITHUB_TOKEN'), 'workflow may consume only GITHUB_TOKEN');
+const gateIndex = workflow.indexOf('Validate exact protected-main source');
+assert(gateIndex >= 0 && gateIndex < workflow.indexOf('Log in to GHCR'), 'source gate must precede registry authentication');
+assert(gateIndex < workflow.indexOf('Build and publish exact source'), 'source gate must precede source execution');
+assert(workflow.indexOf('Upload public publication evidence') < workflow.indexOf('Promote the immutable source tag'), 'evidence must be uploaded before final source-tag promotion');
+assert(workflow.lastIndexOf('      - name:') === workflow.indexOf('      - name: Promote the immutable source tag'), 'source-tag promotion must be the final workflow step');
+assert([...workflow.matchAll(/^        if: steps\.resume\.outputs\.resumed != 'true'$/gm)].length === 4, 'resume guards must skip build and new provenance/evidence writes');
+assert(!/(?:^|\s)(?:kubectl|helm|ssh|scp|rsync)\s|docker\s+(?:compose|service|stack)\b/i.test(workflow), 'publication workflow must not contain deployment commands');
+NODE
+  )"
+  local status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
+    record_failure "passkey challenge service publication workflow contract invalid: $output"
+  fi
+}
+
 check_files_and_markers() {
   require_file "$SERVICE_DIR/Dockerfile" "passkey challenge service Dockerfile"
   require_file "$SERVICE_DIR/docker-compose.production.yml" "passkey challenge service production Docker Compose contract"
@@ -101,6 +215,8 @@ check_files_and_markers() {
   require_file "$SERVICE_DIR/README.md" "passkey challenge service README"
   require_file "$SERVICE_DIR/docs/production-deployment.md" "passkey challenge service production deployment docs"
 	  require_file "$SERVICE_DIR/docs/release-checklist.md" "passkey challenge service release checklist"
+	  require_file "$SERVICE_DIR/docs/rollback-checklist.md" "passkey challenge service rollback checklist"
+	  require_file "$ROOT_DIR/.github/workflows/passkey-image-publish.yml" "passkey challenge service image publication workflow"
 	  require_file "$SERVICE_DIR/scripts/production-deployment-evidence.json" "passkey challenge service production deployment evidence"
 	  require_file "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" "passkey challenge service deployment evidence audit"
 	  require_file "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" "passkey challenge service deployment evidence template generator"
@@ -133,7 +249,7 @@ check_files_and_markers() {
   require_pattern "$SERVICE_DIR/Dockerfile" '/data/passkey-backup' "passkey challenge service durable credential data directory"
   require_pattern "$SERVICE_DIR/Dockerfile" 'VOLUME \["/data/passkey-backup"\]' "passkey challenge service durable credential volume"
   require_pattern "$SERVICE_DIR/Dockerfile" 'CMD \["node", "src/server\.js"\]' "passkey challenge service container start command"
-  require_pattern "$SERVICE_DIR/docker-compose.production.yml" 'image: passkey-backup-challenge-service:release' "passkey challenge service production compose image"
+  require_pattern "$SERVICE_DIR/docker-compose.production.yml" 'PASSKEY_BACKUP_IMAGE_REPOSITORY.*@sha256:.*PASSKEY_BACKUP_IMAGE_DIGEST' "passkey challenge service immutable production compose image"
   require_pattern "$SERVICE_DIR/docker-compose.production.yml" 'restart: unless-stopped' "passkey challenge service production compose restart policy"
   require_pattern "$SERVICE_DIR/docker-compose.production.yml" 'NODE_ENV: production' "passkey challenge service production compose NODE_ENV"
   require_pattern "$SERVICE_DIR/docker-compose.production.yml" 'PORT: "8789"' "passkey challenge service production compose port env"
@@ -157,6 +273,9 @@ check_files_and_markers() {
   if grep -Eq 'privileged:[[:space:]]*true|\.env' "$SERVICE_DIR/docker-compose.production.yml"; then
     record_failure "passkey challenge service production compose must not enable privileged mode or depend on .env files"
   fi
+  if grep -Eq '^[[:space:]]*build:|^[[:space:]]*image:.*:(release|latest)([^[:alnum:]_.-]|$)' "$SERVICE_DIR/docker-compose.production.yml"; then
+    record_failure "passkey challenge service production compose must not build locally or select a mutable release/latest tag"
+  fi
 
   require_pattern "$SERVICE_DIR/.dockerignore" '^\.git$' "passkey challenge service Docker context excludes git metadata"
   require_pattern "$SERVICE_DIR/.dockerignore" '^node_modules$' "passkey challenge service Docker context excludes node_modules"
@@ -170,6 +289,8 @@ check_files_and_markers() {
   require_pattern "$SERVICE_DIR/README.md" 'fearless-passkey-backup' "passkey challenge service health identity docs"
   require_pattern "$SERVICE_DIR/README.md" 'docs/production-deployment\.md' "passkey challenge service production deployment doc link"
   require_pattern "$SERVICE_DIR/README.md" 'docs/release-checklist\.md' "passkey challenge service release checklist doc link"
+  require_pattern "$SERVICE_DIR/README.md" 'docs/rollback-checklist\.md' "passkey challenge service rollback checklist doc link"
+  require_pattern "$SERVICE_DIR/README.md" 'ghcr\.io/soramitsu/fearless-passkey-backup@sha256:' "passkey challenge service immutable production image docs"
   require_pattern "$SERVICE_DIR/README.md" 'cryptographically verifies WebAuthn' "passkey challenge service cryptographic verification docs"
   require_pattern "$SERVICE_DIR/README.md" 'credential public keys, user handles, counters' "passkey challenge service persisted credential scope docs"
   require_pattern "$SERVICE_DIR/README.md" 'single-writer contract' "passkey challenge service persistence concurrency docs"
@@ -179,8 +300,15 @@ check_files_and_markers() {
   require_pattern "$SERVICE_DIR/README.md" '/api/passkey-backup/v1/assertion/complete' "passkey challenge service assertion endpoint docs"
 
   require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'backup\.fearlesswallet\.io' "passkey challenge service production host docs"
-  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker build -t passkey-backup-challenge-service:release \.' "passkey challenge service production Docker build docs"
-  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker compose -f docker-compose\.production\.yml up -d --build' "passkey challenge service production compose deployment docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'gh workflow run passkey-image-publish\.yml.*soramitsu/fearless-release-readiness' "passkey challenge service protected-main image publication docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'gh attestation verify' "passkey challenge service image provenance verification docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr\.io/soramitsu/fearless-passkey-backup' "passkey challenge service production image repository docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>' "passkey challenge service production image digest docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker compose -f docker-compose\.production\.yml config --quiet' "passkey challenge service production compose validation docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker compose -f docker-compose\.production\.yml pull' "passkey challenge service immutable image pull docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker compose -f docker-compose\.production\.yml up -d --no-build' "passkey challenge service immutable compose deployment docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'retained for 90 days' "passkey challenge service publication evidence retention docs"
+  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'retention-controlled public' "passkey challenge service protected publication evidence docs"
   require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'docker run' "passkey challenge service production Docker run docs"
   require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'PASSKEY_ALLOWED_ORIGINS=https://fearlesswallet\.io,https://backup\.fearlesswallet\.io' "passkey challenge service production origins docs"
 	  require_pattern "$SERVICE_DIR/docs/production-deployment.md" 'PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials\.json' "passkey challenge service production credential store docs"
@@ -213,8 +341,13 @@ check_files_and_markers() {
 	  if grep -Eq -- '^[[:space:]]*npm run smoke:production[[:space:]]*$' "$SERVICE_DIR/docs/production-deployment.md"; then
 	    record_failure "passkey challenge service production deployment docs must not recommend an unauthorized bare production smoke"
 	  fi
-	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'docker build -t passkey-backup-challenge-service:release \.' "passkey challenge service release Docker build checklist"
-	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'docker compose -f docker-compose\.production\.yml up -d --build' "passkey challenge service release Docker Compose checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'gh workflow run passkey-image-publish\.yml.*soramitsu/fearless-release-readiness' "passkey challenge service release image publication checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'gh attestation verify.*ghcr\.io/soramitsu/fearless-passkey-backup@sha256:' "passkey challenge service release provenance verification checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'PASSKEY_BACKUP_IMAGE_REPOSITORY=ghcr\.io/soramitsu/fearless-passkey-backup' "passkey challenge service release image repository checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'PASSKEY_BACKUP_IMAGE_DIGEST=<reviewed-64-lowercase-hex-without-sha256-prefix>' "passkey challenge service release image digest checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'docker compose -f docker-compose\.production\.yml up -d --no-build' "passkey challenge service release immutable Docker Compose checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" '90-day Actions artifact retention' "passkey challenge service publication retention checklist"
+	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'rollback-checklist\.md' "passkey challenge service rollback release checklist"
 	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'PASSKEY_BACKUP_LIVE_HEALTH=1 PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS=10' "passkey challenge service release live health checklist"
 	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'PASSKEY_BACKUP_BASE_URL=https://backup\.fearlesswallet\.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production' "passkey challenge service authorized release route smoke checklist"
 	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'PASSKEY_ANDROID_RELEASE_SIGNER_SHA256_FINGERPRINT=' "passkey challenge service signed Android release artifact checklist"
@@ -235,12 +368,28 @@ check_files_and_markers() {
 	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'audit:deployment-evidence -- --require-ready' "passkey challenge service deployment evidence ready checklist"
 	  require_pattern "$SERVICE_DIR/docs/release-checklist.md" 'no more than 24 hours old' "passkey challenge service evidence freshness checklist"
 
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'last-known-good' "passkey challenge service rollback image selection checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'gh attestation verify' "passkey challenge service rollback provenance verification checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'pre-release snapshot' "passkey challenge service pre-release snapshot checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'rollback-time snapshot' "passkey challenge service rollback-time snapshot checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'Exactly one writer' "passkey challenge service rollback one-writer checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'docker compose down -v' "passkey challenge service rollback volume preservation checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'empty owner tombstone' "passkey challenge service rollback tombstone preservation checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'resurrect a revoked credential' "passkey challenge service rollback revocation preservation checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'revoke-all.*must succeed' "passkey challenge service rollback revocation ordering checklist"
+	  require_pattern "$SERVICE_DIR/docs/rollback-checklist.md" 'recoverable cloud record' "passkey challenge service rollback cloud-data preservation checklist"
+
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" '"baseUrl":[[:space:]]*"https://backup\.fearlesswallet\.io"' "passkey challenge service deployment evidence production base URL"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" '"status":[[:space:]]*"blocked"' "passkey challenge service deployment evidence blocked state"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" '"releaseEnabled":[[:space:]]*false' "passkey challenge service deployment evidence release-disabled state"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'production-deployment-evidence-missing' "passkey challenge service deployment missing-evidence blocker"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'live-health-failing' "passkey challenge service deployment live health blocker"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'platform-provisioning-incomplete' "passkey challenge service platform provisioning blocker"
+	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" '"imageRepository":[[:space:]]*"ghcr\.io/soramitsu/fearless-passkey-backup"' "passkey challenge service deployment immutable image repository"
+	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" '"imagePublicationWorkflow":[[:space:]]*"\.github/workflows/passkey-image-publish\.yml"' "passkey challenge service deployment publication workflow"
+	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'gh workflow run passkey-image-publish\.yml --repo soramitsu/fearless-release-readiness --ref main' "passkey challenge service repo-bound deployment publication command"
+	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'imagePublicationRunUrl' "passkey challenge service deployment publication run field"
+	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'imageProvenanceAttestationUrl' "passkey challenge service deployment provenance attestation field"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'imageDigest' "passkey challenge service deployment image digest field"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'deploymentId' "passkey challenge service deployment id field"
 	  require_pattern "$SERVICE_DIR/scripts/production-deployment-evidence.json" 'smokePassedAt' "passkey challenge service live health timestamp field"
@@ -252,6 +401,9 @@ check_files_and_markers() {
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'releaseEnabled must remain false while deployment evidence is blocked' "passkey challenge service blocked deployment release gate"
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'ready deployment evidence requires at least one successful live production smoke record' "passkey challenge service ready deployment evidence gate"
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'imageDigest.*sha256 image digest' "passkey challenge service image digest audit gate"
+	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'imageRepository must be' "passkey challenge service image repository audit gate"
+	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'imagePublicationRunUrl must be a canonical protected-repository' "passkey challenge service publication run URL audit gate"
+	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'imageProvenanceAttestationUrl must be a canonical protected-repository' "passkey challenge service provenance URL audit gate"
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'smokePassedAt.*ISO-8601 UTC second timestamp' "passkey challenge service smoke timestamp audit gate"
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'deployedAt.*not be in the future' "passkey challenge service future deployment timestamp gate"
 	  require_pattern "$SERVICE_DIR/scripts/audit-deployment-evidence.sh" 'smokePassedAt.*not be in the future' "passkey challenge service future smoke timestamp gate"
@@ -267,6 +419,10 @@ check_files_and_markers() {
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'release enabled while blocked' "passkey challenge service blocked deployment negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'ready evidence without live smoke' "passkey challenge service missing live smoke negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'bad image digest evidence' "passkey challenge service bad image digest negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'wrong immutable image repository' "passkey challenge service wrong image repository negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'non-canonical publication run URL' "passkey challenge service publication URL negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'non-canonical provenance attestation URL' "passkey challenge service provenance URL negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'mutable local image publication command' "passkey challenge service mutable publication negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'wrong production smoke command evidence' "passkey challenge service wrong smoke command negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'future deployment timestamp evidence' "passkey challenge service future deployment timestamp negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'future smoke timestamp evidence' "passkey challenge service future smoke timestamp negative test"
@@ -280,6 +436,8 @@ check_files_and_markers() {
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-audit.sh" 'missing deployment evidence template command' "passkey challenge service missing template command negative test"
 	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_64_HEX_IMAGE_DIGEST' "passkey challenge service deployment evidence template image digest placeholder"
 	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_40_HEX_GIT_COMMIT' "passkey challenge service deployment evidence template commit placeholder"
+	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_POSITIVE_INTEGER_RUN_ID' "passkey challenge service publication run template placeholder"
+	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_POSITIVE_INTEGER_ATTESTATION_ID' "passkey challenge service provenance template placeholder"
 	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'platformProvisioning' "passkey challenge service deployment evidence template platform provisioning target"
 	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_CANONICAL_HEALTH_RESPONSE_SHA256' "passkey challenge service live attestation digest template"
 	  require_pattern "$SERVICE_DIR/scripts/generate-deployment-evidence-template.sh" 'TODO_CANONICAL_PLATFORM_PROVISIONING_SHA256' "passkey challenge service platform attestation digest template"
@@ -290,6 +448,8 @@ check_files_and_markers() {
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-template.sh" 'nested secret-like manifest key' "passkey challenge service deployment evidence template nested-secret negative test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-template.sh" 'liveHealthAttestation' "passkey challenge service live attestation template self-test"
 	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-template.sh" 'missing template generator command' "passkey challenge service deployment evidence template command negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-template.sh" 'mutable local build required command' "passkey challenge service mutable image build template negative test"
+	  require_pattern "$SERVICE_DIR/scripts/test-deployment-evidence-template.sh" 'wrong immutable image repository' "passkey challenge service wrong image repository template negative test"
 	  require_pattern "$SERVICE_DIR/scripts/production-smoke.mjs" 'registrationChallenge' "passkey challenge service production smoke registration challenge route"
 	  require_pattern "$SERVICE_DIR/scripts/production-smoke.mjs" 'assertionChallenge' "passkey challenge service production smoke assertion challenge route"
 	  require_pattern "$SERVICE_DIR/scripts/production-smoke.mjs" 'registrationComplete' "passkey challenge service production smoke registration complete route"
@@ -427,6 +587,7 @@ main() {
 
   check_package_contract
   check_files_and_markers
+  check_publication_workflow_contract
 
   if [[ "$SKIP_COMMANDS" != "1" ]]; then
     if ! command -v npm >/dev/null 2>&1; then

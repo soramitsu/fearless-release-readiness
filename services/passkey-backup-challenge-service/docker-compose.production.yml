@@ -1,9 +1,6 @@
 services:
   passkey-backup-challenge-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: passkey-backup-challenge-service:release
+    image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"
     restart: unless-stopped
     init: true
     read_only: true
@@ -40,7 +37,8 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:8789/api/passkey-backup/v1/health').then(async (r) => { const body = await r.json(); process.exit(r.ok && body.ok === true && body.service === 'fearless-passkey-backup' && body.rpId === 'fearlesswallet.io' && body.schemaVersion === 1 ? 0 : 1); }).catch(() => process.exit(1))"
+        - >-
+          node -e "fetch('http://127.0.0.1:8789/api/passkey-backup/v1/health').then(async (r) => { const body = await r.json(); process.exit(r.ok && body.ok === true && body.service === 'fearless-passkey-backup' && body.rpId === 'fearlesswallet.io' && body.schemaVersion === 1 ? 0 : 1); }).catch(() => process.exit(1))"
       interval: 30s
       timeout: 5s
       start_period: 10s

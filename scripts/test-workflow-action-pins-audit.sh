@@ -33,6 +33,7 @@ copy_or_seed_workflows() {
 write_fixture() {
   rm -rf "$FIXTURE_ROOT" "$FIXTURE_PARENT/ton-indexer" "$FIXTURE_PARENT/solswap-indexer" "$FIXTURE_PARENT/polkaswap-indexer"
   mkdir -p "$FIXTURE_ROOT"
+  copy_or_seed_workflows "$ROOT_DIR/.github/workflows" "$FIXTURE_ROOT/.github/workflows"
   for repo in "${repos[@]}"; do
     copy_or_seed_workflows "$ROOT_DIR/$repo/.github/workflows" "$FIXTURE_ROOT/$repo/.github/workflows"
   done
@@ -74,6 +75,11 @@ write_fixture
 workflow="$FIXTURE_ROOT/fearless-site-web/.github/workflows/ci.yml"
 sed -i.bak 's#actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020#actions/setup-node@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#' "$workflow"
 expect_failure "unreviewed-full-sha" "actions/setup-node must use reviewed commit" run_audit
+
+write_fixture
+workflow="$FIXTURE_ROOT/.github/workflows/passkey-image-publish.yml"
+sed -i.bak 's#docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8#docker/build-push-action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#' "$workflow"
+expect_failure "unreviewed-publication-action" "docker/build-push-action must use reviewed commit" run_audit
 
 write_fixture
 workflow="$FIXTURE_PARENT/ton-indexer/.github/workflows/ci.yml"

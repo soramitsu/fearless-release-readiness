@@ -50,6 +50,14 @@ The health response service identity is `fearless-passkey-backup`.
 The production deployment runbook lives in
 [`docs/production-deployment.md`](docs/production-deployment.md), and release
 promotion must follow [`docs/release-checklist.md`](docs/release-checklist.md).
+Production images are published from the exact protected `main` commit by
+`.github/workflows/passkey-image-publish.yml`, carry GitHub build-provenance
+attestation, and are deployed only as
+`ghcr.io/soramitsu/fearless-passkey-backup@sha256:<reviewed-digest>`; local
+mutable release tags are not production artifacts. Incident recovery must
+follow [`docs/rollback-checklist.md`](docs/rollback-checklist.md) so the durable
+credential store, signature counters, revocations, owner tombstones, and
+single-writer invariant survive an image rollback.
 
 Registration and assertion ceremonies remain in memory and expire by TTL; only
 registered public verification records are persisted. Docker deployments must mount
