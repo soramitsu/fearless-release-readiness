@@ -24,7 +24,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. Android's latest scoped backup run passes 199 JVM tests and two API 36 emulator journal cases; its previous exact-head full app CI passed. iOS's latest journal increment passes 42 selected Release simulator tests, while the earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. Android's latest scoped backup run passes 200 JVM tests and two API 36 emulator journal cases; its previous exact-head full app CI passed. iOS's latest journal increment passes 44 selected Release simulator tests, while the earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
 
 The owner/grant authority core and its optional existing-owner WebAuthn verifier pass 45 tests on each of two Node runtimes; first-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
@@ -243,27 +243,31 @@ owner/account scope and one durable upload-attempt marker. The Drive create API
 requires this journal and returns a reconciliation result rather than sending a
 second POST for an existing attempt. Corrupt, partial, mismatched or reused
 operations fail closed; the journal cannot advance an owner head or mark backup
-complete. Exact pushed iOS source head
-`8852a358f90d0f2ca6c95caf60b04c4e8fccb9c8` passes 42 selected arm64
-Release simulator tests, zero failures/skips, including restart, interruption,
-single-POST and prior generation/wrapper cases. The local receipt is
-`fearless-iOS-production-consolidated-20260731/build/reports/ios-drive-journal-20260923/source-receipt.json`, SHA-256
-`0cb2b2448b208a9463ec0288b86a4d325c53d92de89a7673a1086cbb9df92b27`.
-Exact-head Branch Flow and Release Safety CI pass; the Codecov simulator job is
-running. Independent review remains required.
+complete. A separate read-only review found that the new directory entry and
+complete-looking interrupted records needed additional fsync before admission;
+both paths now fail closed on sync errors. Exact pushed iOS source head
+`8267a564abf6116d729ad599e7c41717bbe2a9ba` passes 44 selected arm64
+Release simulator tests, zero failures/skips, including parent-sync failure,
+interrupted-record re-sync, restart, single-POST and prior generation/wrapper
+cases. The local receipt is
+`fearless-iOS-production-consolidated-20260731/build/reports/ios-drive-journal-20260923/authfix-receipt.json`,
+SHA-256 `851aa87985c876a2919de45767b0807625c9183457fff3be5b9ae9b4961093f7`.
+Exact-head hosted CI and independent security approval remain required.
 
 Android's separate journal uses app-private no-backup storage, exact ciphertext
 and context checks, fsynced attempt admission and cross-process locking. Its
 public Drive generation create API now requires a journal, operation ID and
 independently supplied scope; the POST helper only accepts the journal-returned
-candidate. Exact pushed Android source head
-`28562e0fa2bf86578222b3527551f61722d065a0` passes 199 backup JVM tests,
+candidate. A selected-account/token failure now occurs before the one-attempt
+marker, leaving an unsent candidate retryable under the same operation and ID.
+Exact pushed Android source head
+`4c0d21c65a3dcab45727cee546ece205f8f18acc` passes 200 backup JVM tests,
 Detekt, instrumentation APK packaging and two API 36 emulator cases covering
 native filesystem behavior and replay denial. The local receipt is
-`fearless-Android-production-consolidated-20260731/build/reports/android-generation-journal-20260923/handoff-receipt.json`,
-SHA-256 `6e9f18f971c3a00253f36a1d9878417f60c9598dd97343e0b6c13e6c9b6e4460`.
+`fearless-Android-production-consolidated-20260731/build/reports/android-generation-journal-authfix-20260923/authfix-receipt.json`,
+SHA-256 `96123d61475681ae506b109c64db444f908444e5ba107ca2cf13df785bf9f2b7`.
 Exact-head Branch Flow CI passes; Android full CI and IAS are running, and
-independent review remains pending. Neither platform has an owner/grant upload
+independent security approval remains pending. Neither platform has an owner/grant upload
 coordinator, local decrypt-before-complete or real replacement-device proof;
 recovery remains disabled. These local journals are not a portable backup
 format, while their FPBKGEN1 ciphertext is shared.
