@@ -162,7 +162,12 @@ function challengeMutationRequest(request, rawBody) {
   if (request.path === registration || request.path === assertion) {
     exact(body, [request.path === registration ? 'registrationId' : 'assertionId', 'rpId', 'credential']);
     if (body.rpId !== RP_ID) deny('invalid_request');
-    const response = credentialResponse(body.credential, request.path === registration ? 'registration' : 'authentication');
+    // The legacy route permits a null userHandle only when its claimed
+    // challenge was credential-directed. That fact must come from the trusted
+    // verifier evidence below, never from the client response alone.
+    const response = credentialResponse(body.credential,
+      request.path === registration ? 'registration' : 'authentication',
+      { allowNullUserHandle: request.path === assertion });
     return { kind: request.path === registration ? 'registration' : 'assertion',
       credentialId: response.id,
       ...(request.path === assertion ? { userHandle: response.response.userHandle } : {}) };
@@ -180,7 +185,7 @@ function challengeMutationRequest(request, rawBody) {
   }
   deny('invalid_request');
 }
-function verifiedMutationEvidence(kind, evidence, credentialId, owner) {
+function verifiedMutationEvidence(kind, evidence, credentialId, owner, userHandle) {
   if (kind === 'registration') {
     exact(evidence, ['credential']);
     let snapshot;
@@ -189,7 +194,10 @@ function verifiedMutationEvidence(kind, evidence, credentialId, owner) {
     return credentialRecord(snapshot, credentialId, owner.user_handle);
   }
   if (kind === 'assertion') {
-    exact(evidence, ['expectedCounter', 'newCounter', 'deviceType', 'backedUp']);
+    exact(evidence, userHandle === null
+      ? ['expectedCounter', 'newCounter', 'deviceType', 'backedUp', 'directedCredentialId']
+      : ['expectedCounter', 'newCounter', 'deviceType', 'backedUp']);
+    if (userHandle === null && evidence.directedCredentialId !== credentialId) deny('verification_failed');
     const snapshot = { expectedCounter: evidence.expectedCounter, newCounter: evidence.newCounter,
       deviceType: evidence.deviceType, backedUp: evidence.backedUp };
     counter(snapshot.expectedCounter);
@@ -390,7 +398,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       const target = challengeMutationRequest(binding, rawBody);
       return store.transaction((tx) => {
         const { grant, owner } = liveGrant(tx, token, binding);
-        const verified = verifiedMutationEvidence(target.kind, evidence, target.credentialId, owner);
+        const verified = verifiedMutationEvidence(target.kind, evidence, target.credentialId, owner, target.userHandle);
         let result;
         if (target.kind === 'registration') {
           insertCredential(tx, owner, verified);
@@ -398,7 +406,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
             generation: bumpGeneration(tx, owner).generation };
         } else if (target.kind === 'assertion') {
           const credential = activeCredential(tx, target.credentialId, owner.subject);
-          if (target.userHandle !== credential.user_handle) deny('verification_failed');
+          if (target.userHandle !== null && target.userHandle !== credential.user_handle) deny('verification_failed');
           if (credential.counter !== verified.expectedCounter || credential.device_type !== verified.deviceType ||
               ((credential.counter !== 0 || verified.newCounter !== 0) && verified.newCounter <= credential.counter)) {
             deny('credential_counter_replay');

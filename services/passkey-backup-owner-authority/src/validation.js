@@ -56,7 +56,7 @@ export function requestBinding(value, audience) {
 // This is public WebAuthn transport data only. In particular, never forward PRF
 // or largeBlob extension output to an adapter. Native clients must strip it
 // BEFORE HTTP serialization; rejection here cannot undo transmission.
-export function credentialResponse(value, kind) {
+export function credentialResponse(value, kind, { allowNullUserHandle = false } = {}) {
   exact(value, ['id', 'rawId', 'type', 'response', 'clientExtensionResults']);
   base64(value.id, 1, 384);
   if (value.rawId !== value.id || value.type !== 'public-key') deny('invalid_request');
@@ -71,7 +71,9 @@ export function credentialResponse(value, kind) {
     exact(value.response, ['clientDataJSON', 'authenticatorData', 'signature', 'userHandle']);
     base64(value.response.authenticatorData, 37, 8192);
     base64(value.response.signature, 1, 2048);
-    base64(value.response.userHandle, 1, 64);
+    if (value.response.userHandle !== null || !allowNullUserHandle) {
+      base64(value.response.userHandle, 1, 64);
+    }
   } else {
     exact(value.response, ['clientDataJSON', 'attestationObject']);
     base64(value.response.attestationObject, 1, 16384);

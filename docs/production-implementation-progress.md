@@ -747,6 +747,29 @@ owner mapping, convert the seven HTTP routes or enable recovery. The one-writer
 cutover, wallet proof, app attestation and live replacement-device evidence are
 still required.
 
+## Credential-directed assertion compatibility and live site check — 2026-09-24
+
+The non-deployed owner authority's internal exact-grant mutation now preserves
+the legacy challenge service's credential-directed assertion: a null WebAuthn
+user handle is accepted only with server-owned evidence naming the exact
+credential ID selected by that challenge. Discoverable owner authentication
+still requires the historical credential's concrete handle. Wrong or absent
+direction evidence leaves the credential counter and grant unchanged. The full
+owner suite passes 79/79 with syntax and diff checks. No HTTP service supplies
+that evidence yet, and the shared one-writer cutover remains blocked.
+
+The selected site branch [PR #49](https://github.com/soramitsu/fearless-site-web/pull/49)
+contains the intended JSON association contracts and response headers. The
+strict live verifier against `https://fearlesswallet.io` still fails: Android
+does not publish `delegate_permission/common.get_login_creds`; Apple publishes
+an extensionless AASA as `application/octet-stream` without `webcredentials`;
+all three association URLs lack `X-Content-Type-Options: nosniff` and differ
+from source. The live development app ID is also the old
+`YLWWUD25VZ.jp.co.soramitsu.fearless.dev`, rather than the selected source
+`YLWWUD25VZ.jp.co.soramitsu.fearlesswallet.dev`. The source PR still needs
+review, deployment and exact Play-distributed certificate comparison before
+passkey recovery can be enabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

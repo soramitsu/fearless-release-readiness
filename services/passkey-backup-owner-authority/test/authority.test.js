@@ -28,6 +28,13 @@ test('default production adapters deny bootstrap and never accept truthy client 
   await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof }), 'verifier_unavailable');
   await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof, verified: true }), 'invalid_request');
 });
+test('discoverable owner authentication still requires a concrete credential user handle', async (t) => {
+  const { core, bootstrap } = setup(t);
+  await bootstrap();
+  const challenge = core.beginAuthentication('android');
+  await rejects(core.completeAuthentication({ ceremonyId: challenge.ceremonyId,
+    credential: assertion(null) }), 'invalid_request');
+});
 test('bootstrap produces random stable owner namespace; raw sessions and grants never persist', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();

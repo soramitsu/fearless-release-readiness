@@ -136,6 +136,26 @@ test('atomic challenge counter commit accepts a proven legacy credential handle'
   assert.equal(row(path, id).counter, 1);
 });
 
+test('null assertion handle requires the trusted credential-directed challenge ID', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const id = b64(2);
+  const body = assertionRequest(id, null);
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  const evidence = { expectedCounter: 0, newCounter: 1,
+    deviceType: 'multiDevice', backedUp: true };
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, evidence), 'invalid_request');
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, { ...evidence, directedCredentialId: b64(7) }), 'verification_failed');
+  assert.equal(row(path, id).counter, 0);
+  assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, { ...evidence, directedCredentialId: id }),
+  { status: 'authenticated', credentialId: id, counter: 1 });
+  assert.equal(row(path, id).counter, 1);
+  denied(() => core.consumeGrant(grant.token, body.request), 'authorization_failed');
+});
+
 test('counter evidence is copied once before validation and SQLite write', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
