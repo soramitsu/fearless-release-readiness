@@ -1158,6 +1158,22 @@ signing key. The Android adapter continues to reject those rows rather than
 silently downgrade them. A forward-only explicit watch provenance path is in
 progress; previously stored ambiguous rows cannot be auto-classified safely.
 
+The same iOS PR has advanced to pushed
+`775af4808c4dd9723cd5ab8692d444da07f15104`. Its second read-only proof
+checks named Bitcoin and Taira chain slots against the original root mnemonic
+or explicit raw-wallet-seed bridge. It verifies the Bitcoin first-receive
+private/public key and Taira ED25519 key against the released derivation,
+recorded account identity and chain address, rejecting altered keys and source
+markers. Focused simulator suites pass 45/45 at this exact head; scoped
+SwiftFormat, strict SwiftLint, project-file lint and diff checks pass. This
+does not verify other per-chain signers or install a wallet.
+The native TON root proof also accepts Android V3's original 32-byte private
+seed only with its mnemonic in field 5; native iOS retains its 64-byte
+seed-plus-public key and field-12 phrase. Both shapes must prove the same
+V4R2 public key and address. The simulator test covers these representations
+using one fixture; a real Android-derived cross-platform vector and provider
+restoration remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
