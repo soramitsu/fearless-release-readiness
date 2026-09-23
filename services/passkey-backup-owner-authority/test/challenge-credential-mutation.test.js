@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { hash } from '../src/validation.js';
-import { assertion, audience, b64, register, setup } from './fixtures.js';
+import { assertion, audience, b64, downgradeStoreFixture, register, setup } from './fixtures.js';
 
 const route = {
   registration: '/api/passkey-backup/v1/registration/complete',
@@ -251,24 +251,14 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   denied(() => restarted.consumeGrant(second.token, body.request), 'authorization_failed');
 });
 
-test('explicit v1-to-v2 owner migration retains existing credential and permits atomic counter commit', async (t) => {
+test('explicit v1-to-v3 owner migration retains existing credential and permits atomic counter commit', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
   const id = b64(2);
   const body = assertionRequest(id, challenge.userHandle);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   core.close();
-  const db = new DatabaseSync(path);
-  db.exec(`
-    DROP TABLE backup_heads;
-    DROP TABLE backup_operations;
-    CREATE TABLE meta_v1 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=1)) STRICT;
-    INSERT INTO meta_v1 SELECT id,wall,observed,1 FROM meta;
-    DROP TABLE meta;
-    ALTER TABLE meta_v1 RENAME TO meta;
-    PRAGMA user_version=1;
-  `);
-  db.close();
+  downgradeStoreFixture(path, 1);
   denied(() => open(), 'store_unavailable');
   const migrated = open({ migrate: true });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });

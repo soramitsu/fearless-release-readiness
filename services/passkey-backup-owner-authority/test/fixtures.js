@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createOwnerAuthority } from '../src/authority.js';
@@ -13,6 +14,32 @@ export const assertion = (userHandle, id = b64(2)) => ({ id, rawId: id, type: 'p
   response: { clientDataJSON: b64(1), authenticatorData: b64(3, 37), signature: b64(4, 64), userHandle } });
 export const request = (path = Object.keys(SCOPES)[0], body = '{}') => ({ schemaVersion: 1, audience,
   method: 'POST', path, bodySha256: hash(body), scope: SCOPES[path] });
+
+// Test-only reconstruction of a pre-v3 file. No production downgrade exists.
+export function downgradeStoreFixture(path, version) {
+  if (version !== 1 && version !== 2) throw new Error('unsupported fixture version');
+  const db = new DatabaseSync(path);
+  try {
+    db.exec(`
+      BEGIN IMMEDIATE;
+      DROP TRIGGER legacy_credential_identity_no_update;
+      DROP TRIGGER legacy_credential_metadata_no_delete;
+      DROP TRIGGER legacy_credential_metadata_no_update;
+      DROP TRIGGER legacy_credential_metadata_owner_insert;
+      DROP TRIGGER storage_bindings_no_delete;
+      DROP TRIGGER storage_bindings_no_update;
+      DROP TABLE legacy_credential_metadata;
+      DROP TABLE storage_bindings;
+      ${version === 1 ? 'DROP TABLE backup_heads; DROP TABLE backup_operations;' : ''}
+      CREATE TABLE meta_previous (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=${version})) STRICT;
+      INSERT INTO meta_previous SELECT id,wall,observed,${version} FROM meta;
+      DROP TABLE meta;
+      ALTER TABLE meta_previous RENAME TO meta;
+      PRAGMA user_version=${version};
+      COMMIT;
+    `);
+  } finally { db.close(); }
+}
 // Deliberately noncryptographic server-only doubles. Never exported from src or
 // configured by an environment variable/production fallback.
 export function verifier(overrides = {}) {

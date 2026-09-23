@@ -578,8 +578,9 @@ authenticated random-owner session, both bound to an immutable source digest,
 storage key and owner; first-owner creation additionally needs original-wallet
 proof and app attestation. The cutover must drain JSON writes, preserve every
 credential field and tombstone in a versioned SQLite schema, then switch all
-seven routes together to one grant/credential transaction. No verified link,
-full-field schema, transactional import or integrated HTTP service exists yet.
+seven routes together to one grant/credential transaction. The subsequent v3
+schema adds full-field capacity, but no verified link, transactional import or
+integrated HTTP service exists yet.
 Therefore no live route was converted, and portable recovery remains disabled.
 Neither mobile platform yet serializes and restores every historical wallet
 secret. iOS `MetaAccountModel` and Keychain tags for entropy, Substrate/EVM
@@ -589,6 +590,33 @@ Local checks on this source passed: owner authority 70/70 tests, challenge
 service 112/112 tests, both syntax suites, diff check, source-publication 88
 negative cases, and both release-bundle fixture suites. These are blocked-path
 checks, not production recovery or transaction acceptance.
+
+## Owner SQLite v3 metadata capacity — 2026-09-23
+
+The owner authority now explicitly upgrades v1→v2→v3 or v2→v3 within one
+SQLite transaction. Existing credentials, per-credential handles, counters,
+sessions, grants and backup heads survive; failed migration rolls back and
+normal startup still rejects older or incomplete schemas. New immutable
+storage-key bindings hold an owner link, historical owner hash, sealed-source
+digest and proof commitment. Separate legacy metadata rows hold AAGUID,
+optional ordered transports and registration platform. An empty binding can
+represent a durable owner tombstone. Tests cover both upgrade paths, a
+partially colliding migration, missing safety trigger, metadata immutability,
+wrong-owner attachment and post-upgrade grant/head continuity. Source and
+release-bundle required-file lists now include the migration test.
+
+These tables are only representation capacity. No JSON rows were imported,
+no proof was validated, no random owner was inferred from a Google identity,
+and no live challenge route was converted. Read-only reconciliation remains
+`migrationPermitted: false`; the HTTP JSON writer and SQLite core are still
+separate and recovery remains disabled. A reviewed proof-bound cohort importer,
+one-writer HTTP cutover, crash/race acceptance and replacement-device tests
+remain mandatory before production recovery can be enabled.
+
+Current-source checks passed: owner authority 75/75 tests, challenge service
+112/112 tests, both syntax suites, source-publication 88 negative cases, both
+release-bundle fixture suites and diff check. These are source and blocked-path
+checks, not production recovery acceptance.
 
 ## Completion record
 

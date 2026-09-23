@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { b64, audience, request, setup } from './fixtures.js';
+import { b64, audience, downgradeStoreFixture, request, setup } from './fixtures.js';
 
 const denies = (action, code) => assert.throws(action, (error) => error.code === code);
 function candidate(owner, overrides = {}) {
@@ -186,17 +186,7 @@ test('version-one store migration is explicit and preserves existing owner crede
   const { core, path, open, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   core.close();
-  const db = new DatabaseSync(path);
-  db.exec(`
-    DROP TABLE backup_heads;
-    DROP TABLE backup_operations;
-    CREATE TABLE meta_v1 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=1)) STRICT;
-    INSERT INTO meta_v1 SELECT id,wall,observed,1 FROM meta;
-    DROP TABLE meta;
-    ALTER TABLE meta_v1 RENAME TO meta;
-    PRAGMA user_version=1;
-  `);
-  db.close();
+  downgradeStoreFixture(path, 1);
   denies(() => open(), 'store_unavailable');
   const migrated = open({ migrate: true });
   assert.equal(migrated.readBackupHead(owner.sessionToken).ownerSubject, owner.subject);

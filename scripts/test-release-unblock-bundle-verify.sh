@@ -1595,6 +1595,7 @@ workspaceSource.requiredTrackedFiles = [
   'services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js',
   'services/passkey-backup-owner-authority/test/generation-head.test.js',
   'services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js',
+  'services/passkey-backup-owner-authority/test/legacy-schema-migration.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
   'services/passkey-backup-owner-authority/test/webauthn-verifier.test.js',

@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { authorizationSubjectHash } from '../../passkey-backup-challenge-service/src/authorization.js';
 import { reconcileLegacyCredentialStores } from '../src/legacy-reconciliation.js';
@@ -46,7 +47,7 @@ test('read-only reconciliation reports real handle mismatch and retained tombsto
   assert.equal(report.mode, 'read-only');
   assert.equal(report.migrationPermitted, false);
   assert.equal(report.legacySchemaVersion, 3);
-  assert.equal(report.ownerSchemaVersion, 2);
+  assert.equal(report.ownerSchemaVersion, 3);
   assert.deepEqual(report.counts, {
     legacyStorageKeys: 2, legacyCredentials: 1, ownerSubjects: 1, ownerCredentials: 1,
     matchingPublicCredentialRows: 0, unmappedStorageKeys: 1, unmappedCredentials: 0,
@@ -78,6 +79,34 @@ test('v4 and unmapped owners remain blocked; the operator CLI cannot authorize m
   assert.equal(run.status, 3, run.stderr);
   assert.equal(JSON.parse(run.stdout).migrationPermitted, false);
   assert.deepEqual(readFileSync(legacyPath), before);
+});
+
+test('matching v3 public rows and metadata remain unverified and cannot admit migration', async (t) => {
+  const { core, path, dir, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const legacyPath = join(dir, 'credentials.json');
+  const document = writeLegacy(legacyPath, owner.subject);
+  const historical = document.credentialsByStorageKey[0].credentials[0];
+  core.close();
+  const db = new DatabaseSync(path);
+  db.exec('PRAGMA foreign_keys=ON');
+  db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(historical.userId, historical.id);
+  db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+    storageKey, owner.subject, authorizationSubjectHash(owner.subject),
+    createHash('sha256').update('sealed source').digest('hex'),
+    createHash('sha256').update('unverified proof').digest('hex'), 1);
+  db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+    historical.id, storageKey, historical.aaguid, JSON.stringify(historical.transports), historical.registrationPlatform);
+  db.close();
+  const report = reconcileLegacyCredentialStores({ legacyPath, ownerPath: path });
+  assert.equal(report.counts.matchingPublicCredentialRows, 1);
+  assert.equal(report.counts.conflictingCredentials, 0);
+  assert.ok(report.diagnostics.some((item) => item.kind === 'storage_binding_unverified'));
+  assert.ok(report.diagnostics.some((item) => item.kind === 'credential_metadata_unverified'));
+  assert.equal(report.migrationPermitted, false);
+  assert.ok(report.blockers.includes('challenge_http_still_writes_json'));
+  assert.equal(JSON.stringify(report).includes(storageKey), false);
+  assert.equal(JSON.stringify(report).includes(historical.id), false);
 });
 
 test('invalid, symlinked and missing sources fail closed without creating a replacement', async (t) => {

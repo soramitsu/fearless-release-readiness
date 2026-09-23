@@ -3,7 +3,7 @@
 This is a design for a future, reviewed migration. **No live credential route is
 converted or admitted by this document.** The current challenge HTTP process
 writes schema-4 JSON after separate grant introspection; the owner authority
-uses schema-2 SQLite and has no HTTP listener. The read-only reconciliation
+uses schema-3 SQLite and has no HTTP listener. The read-only reconciliation
 report always denies migration. Its two file snapshots are sequential and are
 not proof of ownership or an atomic cross-store view.
 
@@ -45,13 +45,15 @@ for one storage key must not authorize another, even if account names match.
    conflicting owner hash, missing proof, changed snapshot or an owner binding
    already claimed by another namespace. Never initialize an empty database to
    bypass failure.
-2. A versioned SQLite migration must add storage-key→random-owner binding and
-   preserve the complete historical public metadata and zero-credential
-   tombstones. Credential-scoped historical user handles must remain intact;
-   they cannot be replaced by `owners.user_handle`. Import a proven cohort and
-   its proof commitment in one durable SQLite transaction with collision and
-   counter checks. Retain an encrypted, immutable pre-cutover snapshot for
-   audit and forward recovery. Import is not a Google-account operation.
+2. SQLite schema v3 now has storage-key→random-owner binding and capacity for
+   complete historical public metadata and zero-credential tombstones. It
+   preserves credential-scoped historical user handles in `credentials` rather
+   than replacing them with `owners.user_handle`. No legacy row or owner link
+   has been imported. A future reviewed importer must verify the proof and
+   source digest, then import a proven cohort and its proof commitment in one
+   durable SQLite transaction with collision and counter checks. Retain an
+   encrypted, immutable pre-cutover snapshot for audit and forward recovery.
+   Import is not a Google-account operation.
 3. A new HTTP composition must use that same SQLite database as the **sole**
    credential and grant writer for all seven protected routes. The exact raw
    request-body grant and registration/counter/revocation change must commit
@@ -81,8 +83,9 @@ The owner core's `consumeGrant` now returns
 `credentialAuthority: "owner-sqlite-v2"`. The legacy challenge introspector's
 closed schema-1 response rejects that extra field before calling any of its
 four HTTP mutation handlers. This prevents this non-deployed owner core from
-being accidentally wired as a grant source for the JSON writer. It does not
-convert a route, prove a legacy owner, or make two stores atomic; a future
+being accidentally wired as a grant source for the JSON writer. The marker
+names the protocol fence, not the database schema version; v3 retains it.
+It does not convert a route, prove a legacy owner, or make two stores atomic; a future
 integrated HTTP service needs a new reviewed, explicit owner-authority contract.
 The trusted introspection endpoint must preserve the marker; a proxy or
 different service that strips or forges responses is outside this narrow

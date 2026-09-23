@@ -8,8 +8,8 @@ const MAX_DIAGNOSTICS = 512;
 /**
  * Read-only, fail-closed migration inventory. It never links an owner, imports a
  * credential, rewrites JSON, or opens SQLite for writing. Even an exact match
- * cannot authorize migration: the owner database has no storage-key binding or
- * fields for all historical transport/AAGUID/platform metadata.
+ * cannot authorize migration: v3 has representation capacity but no verified
+ * proof or import path, and the live JSON writer still runs independently.
  */
 export function reconcileLegacyCredentialStores({ legacyPath, ownerPath }) {
   if (!isAbsolute(legacyPath) || !isAbsolute(ownerPath)) throw new Error('absolute_store_paths_required');
@@ -22,6 +22,8 @@ export function reconcileLegacyCredentialStores({ legacyPath, ownerPath }) {
     byHash.set(key, record);
   }
   const ownerCredentials = new Map(owner.credentials.map((record) => [record.id, record]));
+  const storageBindings = new Map(owner.storageBindings.map((record) => [record.storage_key, record]));
+  const legacyMetadata = new Map(owner.legacyCredentialMetadata.map((record) => [record.credential_id, record]));
   const legacyCredentialIds = new Set();
   const counts = {
     legacyStorageKeys: legacy.credentialsByStorageKey.size,
@@ -52,9 +54,12 @@ export function reconcileLegacyCredentialStores({ legacyPath, ownerPath }) {
       counts.unmappedStorageKeys += 1;
       add('owner_unmapped', currentStorageIndex);
     }
-    // An empty map is a durable owner tombstone. The owner schema has no
-    // equivalent storageKey binding even if this hash happens to resolve.
-    add('storage_binding_unrepresented', currentStorageIndex);
+    // Empty maps are durable tombstones. A v3 row can represent one but this
+    // inventory cannot validate a proof commitment or authorize the link.
+    const binding = storageBindings.get(storageKey);
+    add(!binding ? 'storage_binding_unrepresented' :
+      binding.owner !== mapped?.subject || binding.legacy_owner_hash !== subjectHash
+        ? 'storage_binding_conflict' : 'storage_binding_unverified', currentStorageIndex);
     let credentialEntryIndex = 0;
     for (const [id, record] of credentials) {
       const currentCredentialIndex = credentialEntryIndex++;
@@ -69,15 +74,19 @@ export function reconcileLegacyCredentialStores({ legacyPath, ownerPath }) {
       if (!mapped || linked.owner !== mapped.subject || linked.revoked !== 0 ||
           linked.public_key !== record.publicKey || linked.user_handle !== record.userId ||
           linked.counter !== record.counter || linked.device_type !== record.deviceType ||
-          linked.backed_up !== Number(record.backedUp) || mapped.user_handle !== record.userId) {
+          linked.backed_up !== Number(record.backedUp)) {
         counts.conflictingCredentials += 1;
         add('credential_state_conflict', currentStorageIndex, currentCredentialIndex);
         continue;
       }
       counts.matchingPublicCredentialRows += 1;
-      // AAGUID, transports and registration platform are absent from the
-      // authority schema. A matching core row is still not migration-ready.
-      add('credential_metadata_unrepresented', currentStorageIndex, currentCredentialIndex);
+      const metadata = legacyMetadata.get(id);
+      add(!metadata ? 'credential_metadata_unrepresented' :
+        metadata.storage_key !== storageKey || metadata.aaguid !== record.aaguid ||
+        metadata.registration_platform !== record.registrationPlatform ||
+        metadata.transports_json !== (record.transports === undefined ? null : JSON.stringify(record.transports))
+          ? 'credential_metadata_conflict' : 'credential_metadata_unverified',
+      currentStorageIndex, currentCredentialIndex);
     }
   }
   for (const id of ownerCredentials.keys()) {
@@ -94,8 +103,8 @@ export function reconcileLegacyCredentialStores({ legacyPath, ownerPath }) {
     omittedDiagnostics,
     blockers: Object.freeze([
       'challenge_http_still_writes_json',
-      'storage_key_owner_binding_missing',
-      'historical_metadata_schema_missing',
+      'storage_key_owner_binding_unverified',
+      'historical_metadata_import_unverified',
       'verified_legacy_owner_migration_missing',
     ]),
   });

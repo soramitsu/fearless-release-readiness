@@ -3,7 +3,7 @@ import { constants, closeSync, fsyncSync, lstatSync, openSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, deny } from './validation.js';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
  operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
@@ -18,9 +18,56 @@ CREATE TABLE backup_heads (
  operation_id TEXT NOT NULL REFERENCES backup_operations(operation_id)
 ) STRICT;
 `;
+// This adds capacity for a future proof-bound legacy cohort import. It does
+// not import JSON, assign an owner, or expose a writer. Existing v2 credential
+// rows and their per-credential user handles remain unchanged. A binding with
+// zero credential metadata rows is the historical owner tombstone.
+const LEGACY_COHORT_SCHEMA = `
+CREATE TABLE storage_bindings (
+ storage_key TEXT PRIMARY KEY CHECK(length(storage_key) BETWEEN 8 AND 128),
+ owner TEXT NOT NULL REFERENCES owners(subject),
+ legacy_owner_hash TEXT NOT NULL CHECK(length(legacy_owner_hash)=43),
+ source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64),
+ proof_sha256 TEXT NOT NULL UNIQUE CHECK(length(proof_sha256)=64),
+ created INTEGER NOT NULL CHECK(created>=0)
+) STRICT;
+CREATE INDEX storage_bindings_owner ON storage_bindings(owner);
+CREATE TABLE legacy_credential_metadata (
+ credential_id TEXT PRIMARY KEY REFERENCES credentials(id) ON DELETE RESTRICT,
+ storage_key TEXT NOT NULL REFERENCES storage_bindings(storage_key) ON DELETE RESTRICT,
+ aaguid TEXT NOT NULL CHECK(length(aaguid)=36),
+ transports_json TEXT CHECK(transports_json IS NULL OR length(transports_json)<=256),
+ registration_platform TEXT NOT NULL CHECK(registration_platform IN ('android','ios'))
+) STRICT;
+CREATE INDEX legacy_credential_metadata_storage ON legacy_credential_metadata(storage_key);
+CREATE TRIGGER storage_bindings_no_update BEFORE UPDATE ON storage_bindings
+BEGIN SELECT RAISE(ABORT,'immutable storage binding'); END;
+CREATE TRIGGER storage_bindings_no_delete BEFORE DELETE ON storage_bindings
+BEGIN SELECT RAISE(ABORT,'immutable storage binding'); END;
+CREATE TRIGGER legacy_credential_metadata_owner_insert BEFORE INSERT ON legacy_credential_metadata
+BEGIN
+ SELECT RAISE(ABORT,'legacy credential owner mismatch') WHERE NOT EXISTS (
+  SELECT 1 FROM credentials c JOIN storage_bindings b ON b.storage_key=NEW.storage_key
+  WHERE c.id=NEW.credential_id AND c.owner=b.owner
+ );
+END;
+CREATE TRIGGER legacy_credential_metadata_no_update BEFORE UPDATE ON legacy_credential_metadata
+BEGIN SELECT RAISE(ABORT,'immutable legacy credential metadata'); END;
+CREATE TRIGGER legacy_credential_metadata_no_delete BEFORE DELETE ON legacy_credential_metadata
+BEGIN SELECT RAISE(ABORT,'immutable legacy credential metadata'); END;
+CREATE TRIGGER legacy_credential_identity_no_update
+BEFORE UPDATE OF owner,public_key,user_handle ON credentials
+WHEN EXISTS (SELECT 1 FROM legacy_credential_metadata WHERE credential_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'immutable legacy credential identity'); END;
+`;
+const REQUIRED_LEGACY_TRIGGERS = [
+  'storage_bindings_no_update', 'storage_bindings_no_delete',
+  'legacy_credential_metadata_owner_insert', 'legacy_credential_metadata_no_update',
+  'legacy_credential_metadata_no_delete', 'legacy_credential_identity_no_update',
+];
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=2)) STRICT;
-INSERT INTO meta VALUES(1,0,0,2);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=3)) STRICT;
+INSERT INTO meta VALUES(1,0,0,3);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -53,7 +100,8 @@ CREATE INDEX sessions_owner ON sessions(owner);
 CREATE INDEX grants_session ON grants(session);
 CREATE INDEX ceremonies_expiry ON ceremonies(expires);
 ${BACKUP_HEAD_SCHEMA}
-PRAGMA user_version=2;
+${LEGACY_COHORT_SCHEMA}
+PRAGMA user_version=3;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -63,6 +111,22 @@ DROP TABLE meta;
 ALTER TABLE meta_v2 RENAME TO meta;
 PRAGMA user_version=2;
 `;
+const MIGRATE_V2_TO_V3 = `
+${LEGACY_COHORT_SCHEMA}
+CREATE TABLE meta_v3 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=3)) STRICT;
+INSERT INTO meta_v3 SELECT id,wall,observed,3 FROM meta WHERE id=1 AND version=2;
+DROP TABLE meta;
+ALTER TABLE meta_v3 RENAME TO meta;
+PRAGMA user_version=3;
+`;
+
+function validateLegacyCohortSchema(db) {
+  db.prepare('SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256,created FROM storage_bindings LIMIT 0').all();
+  db.prepare('SELECT credential_id,storage_key,aaguid,transports_json,registration_platform FROM legacy_credential_metadata LIMIT 0').all();
+  for (const name of REQUIRED_LEGACY_TRIGGERS) {
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?").get(name)) deny('store_invalid');
+  }
+}
 
 function privateFile(path, directory = false) {
   const st = lstatSync(path);
@@ -103,10 +167,15 @@ export class AuthorityStore {
       this.#db.exec('BEGIN IMMEDIATE');
       try {
         if (create) this.#db.exec(SCHEMA);
-        const oldVersion = this.#db.prepare('PRAGMA user_version').get().user_version;
+        let oldVersion = this.#db.prepare('PRAGMA user_version').get().user_version;
         if (!create && migrate && oldVersion === 1 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 1) {
           this.#db.exec(MIGRATE_V1_TO_V2);
+          oldVersion = 2;
+        }
+        if (!create && migrate && oldVersion === 2 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 2) {
+          this.#db.exec(MIGRATE_V2_TO_V3);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -114,6 +183,7 @@ export class AuthorityStore {
             this.#db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
         this.#db.prepare('SELECT owner, revision, operation_id FROM backup_heads LIMIT 0').all();
         this.#db.prepare('SELECT owner, revision, operation_id FROM backup_operations LIMIT 0').all();
+        validateLegacyCohortSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -193,17 +263,27 @@ export function readOwnerCredentialSnapshot(path) {
     db = new DatabaseSync(path, { readOnly: true });
     db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF;');
     db.exec('BEGIN');
-    if (db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
-        db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
+    const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
+    if (![2, SCHEMA_VERSION].includes(schemaVersion) ||
+        db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
+    if (schemaVersion === SCHEMA_VERSION) validateLegacyCohortSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()
       .map((row) => Object.freeze({ ...row }));
+    const storageBindings = schemaVersion === SCHEMA_VERSION
+      ? db.prepare('SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256,created FROM storage_bindings ORDER BY storage_key').all()
+        .map((row) => Object.freeze({ ...row })) : [];
+    const legacyCredentialMetadata = schemaVersion === SCHEMA_VERSION
+      ? db.prepare('SELECT credential_id,storage_key,aaguid,transports_json,registration_platform FROM legacy_credential_metadata ORDER BY credential_id').all()
+        .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
-    return Object.freeze({ schemaVersion: SCHEMA_VERSION,
-      owners: Object.freeze(owners), credentials: Object.freeze(credentials) });
+    return Object.freeze({ schemaVersion,
+      owners: Object.freeze(owners), credentials: Object.freeze(credentials),
+      storageBindings: Object.freeze(storageBindings),
+      legacyCredentialMetadata: Object.freeze(legacyCredentialMetadata) });
   } catch {
     try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
     deny('store_unavailable');
