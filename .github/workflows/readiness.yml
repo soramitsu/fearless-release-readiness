@@ -32,6 +32,8 @@ jobs:
           git diff --check
           node --check scripts/audit-source-publication-readiness.mjs
           node --check scripts/audit-passkey-enabled-acceptance.mjs
+          node --check scripts/audit-release-shipping-manifest.mjs
+          node --test scripts/test-release-shipping-manifest.mjs
           node --check scripts/capture-source-freeze.mjs
           node --check scripts/quarantine-source-publication-outputs.mjs
           node --check scripts/extract-android-apk-signer-evidence.mjs

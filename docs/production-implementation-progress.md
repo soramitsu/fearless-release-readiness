@@ -26,7 +26,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. Android has 194 passing scoped app tests and exact dependency-source validation; full release/device/store qualification is outstanding. iOS now passes all **463 Release integration tests**, zero failures/skips, after app-level key/sign/send authorization and internal-review race fixes. All 4,090 captured app source files stayed unchanged during that run, and both pinned dependencies verified. These remain development checks. Both app source trees are now committed and pushed on review branches, but independent security review, green protected CI and distribution acceptance are outstanding.
 
-The new owner/grant authority core passes 37 tests on each of two Node runtimes; it remains unintegrated with production cryptographic verification, legacy credential transactions and native Drive/PRF recovery. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
+The owner/grant authority core and its optional existing-owner WebAuthn verifier pass 45 tests on each of two Node runtimes; first-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
 ## Source preservation
 
@@ -137,35 +137,61 @@ An optional adapter in the owner authority now performs actual WebAuthn verifica
 
 First-owner bootstrap still rejects, because self-custody wallet proof and app attestation have not been integrated. The existing challenge store and owner authority are still separate, so atomic credential lifecycle, safe legacy migration, decryption proof before enrollment and final-route rotation remain unresolved. The adapter is not deployed and does not authorize passkey recovery. The source-publication and release-bundle required-file lists now include its code and focused tests; protected CI is configured to run the owner suite on Node 22.13.0.
 
+The root review candidate at `0ce474d54e2b2d1bc8efdf76a968711048077c10`
+passed all three exact-head hosted jobs (`validate`, `verify`, and
+`verify-owner`). The `validate` job exercises blocked-state/readiness contracts;
+its success is not a full-live release pass. PR #1 still requires independent
+review and a final reviewed shipping manifest.
+
 ## Drive and credential-wrapper increments — 2026-09-23
 
 Android's disabled Google Drive adapter now pins each operation to one selected
 account/token, traverses bounded file-list pages and rejects ambiguous,
 incomplete, mismatched or oversized legacy metadata. The Android backup module
-passes 145 tests using an isolated clean checkout of the pinned Utils source;
+passes 149 tests using an isolated clean checkout of the pinned Utils source;
 that avoids both dependency-verification overrides and changes to the user's
-modified Utils checkout. The `2a23224b` full CI stopped at one Detekt issue in
-the Drive pager, so no later CI stages from that run count as passing. The issue
-is corrected, local Detekt and backup tests pass, and the corrected source is
-pushed at `0052fbe9292bd23bd0360550959a51f20afa2516`; its exact-head CI is
-pending. The new client-only WebAuthn PRF/HKDF/AES-GCM wrapper and
-canonical opaque binary record bind owner, credential, wallet metadata and key
-epoch to the random 32-byte backup key. Fixed independent Node vector and
-tamper/round-trip tests pass; the [shared format](passkey-credential-wrapper-v1.md)
-is published for iOS parity. The wrapper and analysis fix are both in the
-Android review branch.
+modified Utils checkout. Local Detekt passes. The `2a23224b` full CI stopped at
+one Detekt issue in the Drive pager; the next run exposed HMAC usage in the
+MoonPay scanner and was corrected with a SHA-256-pinned wrapper-only exception.
+The new client-only WebAuthn PRF/HKDF/AES-GCM wrapper and canonical opaque
+binary record bind owner, credential, wallet metadata and key epoch to the
+random 32-byte backup key. Fixed independent Node vector and tamper/round-trip
+tests pass; the [shared format](passkey-credential-wrapper-v1.md) is published
+for iOS parity. Public PRF salts can now be requested during registration, or
+evaluated by a fresh assertion restricted to one known credential when creation
+omits output. The native result rejects mismatched or noncanonical IDs before
+exposing local PRF output. These changes are pushed at
+`b322702b00cc0ad2b6f19ce24c28e41225674f24` on the existing Android review
+branch; its exact-head full CI and IAS are in progress. The preceding full CI
+was canceled when this newer source was pushed, so it is not passing evidence.
 
 iOS native Google Drive appData access is pushed on the existing iOS review
-branch at `b1b3c5fe01413c41de424f3e1438c33afe3ca773`. It uses explicit
+branch. It uses explicit
 Google account selection and `drive.appdata` consent, pins the selected account
 to a bounded transport, and retains the existing encrypted `FPBKAEAD` envelope.
-Its 84 focused Release tests pass. The iOS agent is porting the client-side
-wrapper byte contract. Both Drive adapters remain disabled; neither implements
+Its 84 focused Release tests pass. The matching iOS PRF/HKDF/AES-GCM credential
+wrapper and exact cross-platform vector are pushed on the same review branch;
+its exact-head Release Safety CI passed at `0feef6db19b1b020ad8e1ae6e071587ec87e2ccf`.
+A separate iOS 18+ native PRF ceremony path is now pushed at
+`f9d25054e8cc4da30286ecad9fe8c881cc8c5ed2`; 117 focused Release tests
+passed with zero failures/skips, targeted lint is clean, and Branch Flow and
+Release Safety passed at that exact head. Codecov remains in progress. Typed local
+PRF results require an exact server-verification receipt; the production adapter
+is unavailable because the service does not yet return one. The iOS 15 minimum
+and legacy executor remain unchanged. Both Drive adapters remain disabled; neither implements
 immutable generations, verified decryption-before-complete, owner lifecycle or
 replacement-device restoration yet. The iOS Drive adapter accepts a stable
 Google subject across email changes, while the interim Android adapter still
 requires metadata email equality; this must be reconciled before a cross-platform
 restore can qualify. No server or app has been enabled.
+
+The full-live root audit now invokes a detached canonical shipping-manifest
+validator before enabled passkey acceptance. Its synthetic fixture accepts one
+complete exact-source/artifact/evidence set and rejects dirty or symlinked
+sources, substituted Iroha branches, missing evidence, noncanonical JSON and changed
+digests. It binds all selected repositories, four source dependencies, route and
+feature-policy digests, distribution identities, artifacts and raw evidence.
+No actual shipping manifest exists yet, so the production gate correctly fails.
 
 ## Current local access check
 

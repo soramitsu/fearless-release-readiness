@@ -2311,6 +2311,8 @@ run_passkey_prerequisites() {
 }
 
 run_passkey_production_smoke() {
+  echo "[release-readiness] Verify exact shipping manifest before live passkey smoke"
+  "$NODE_BIN" "$ROOT_DIR/scripts/audit-release-shipping-manifest.mjs" || return $?
   cd "$ROOT_DIR/services/passkey-backup-challenge-service"
   /usr/bin/env \
     -u NODE_TLS_REJECT_UNAUTHORIZED \

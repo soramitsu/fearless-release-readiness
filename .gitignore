@@ -25,6 +25,7 @@
 # Local reports, artifacts, nested checkouts, credentials, and device evidence
 # must remain outside this repository even if a parent rule changes later.
 /build/
+/config/release-shipping-manifest.json
 /release/
 /release-evidence/
 /release-worktrees/
