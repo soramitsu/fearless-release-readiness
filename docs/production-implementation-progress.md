@@ -662,10 +662,12 @@ Utils and WebSocket source checkouts. `docs/portable-wallet-material-inventory.m
 records V3 Substrate/EVM/TON roots, V2 chain keys, historical V1 material and
 multi-wallet identity requirements. This repairs a legacy path; the public
 remote-backup compatibility stub remains unavailable and portable recovery is
-still disabled. Exact-head hosted Android CI is pending.
+still disabled. Exact-head hosted Android [CI run 35880595419](https://github.com/soramitsu/fearless-Android/actions/runs/35880595419)
+passed, including the API 30/31/36 migration, instrumentation, AAB and native
+binary checks. This does not replace signed Play upgrade or device acceptance.
 
 iOS draft [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
-now points to pushed source `c81e587eccc02954f280ab45652d59b6b0296c18`.
+now points to pushed source `51884d7f60d0c284b8c483eee503b77384f94e89`.
 The legacy cloud-backup flow rejects absent cloud storage and incomplete seed
 or keystore exports. After upload it downloads and decrypts the candidate,
 compares all intended wallet-material fields, and reports completion only
@@ -673,18 +675,62 @@ after the local backed-up state write succeeds. The code at preceding commit
 `10b33d20e037a507682d7956e63197717f195f7d` passes a single-architecture
 iOS Simulator Debug workspace build and diff check. The subsequent documentation
 commit inventories the original Keychain roots, native TON material and
-chain-specific accounts that a shared wallet format must preserve. Exact-head
-hosted Release CI remains pending. The local Release build
+chain-specific accounts that a shared wallet format must preserve. Hosted
+Release Safety passed at preceding head `7fe6dadcbe3a3fd89be03ba222872b2630410a66`;
+the new scene head requires its own hosted checks. The local Release build
 could not complete because its dual-architecture Charts dependency compiler
 jobs consumed excessive memory. This change does not provide the production
 passkey wallet serializer, owner-session integration, or replacement-device
 recovery.
 
 The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
-at `3f20fe44a8e3c3b0d2e78e100551419684646d85` has green hosted
+previously had green hosted checks at
+`7df9c5131d471a53232025814399ec6bb45b3f23` for
 `verify`, `verify-owner` and `validate` checks. These checks validate the
-current source tooling and metadata-only, non-deployed credential authority;
-they are not proof of a live recovery service or shipping build.
+source tooling and metadata-only, non-deployed credential authority at that
+head; the updated head requires new exact-head checks. They are not proof of
+a live recovery service or shipping build.
+
+## Exact-file legacy Drive backup checkpoint — 2026-09-24
+
+Shared-features [PR #84](https://github.com/soramitsu/shared-features-spm/pull/84)
+now points to immutable source `b7ef68761b7962fc06193b500467da7ba5498070`
+(tree `53bb7f75f3cd1a30f2ab53e189535decbffa42e9`). The legacy iOS Google
+Drive backup flow captures the ID returned by a new upload, downloads that exact
+file, compares its encrypted bytes and decrypts it before allowing the app to
+report backup completion. Legacy restore looks for the exact address filename
+inside every strict backup folder, follows Drive pagination, and selects the
+newest unambiguous generation. It fails closed on incomplete listings, download
+errors, wrong wallet identity and a password failure for that generation.
+Deletion removes every exact-name mobile generation, oldest first, without
+selecting extension files.
+Focused iOS Simulator cloud-storage tests passed 32/32. These checks protect
+the legacy flow from verifying or restoring a different same-named file; they
+are not the portable passkey backup format or a replacement-device recovery
+test. Real Drive concurrency and historical wallet cohorts remain unqualified.
+
+The iOS candidate at `51884d7f60d0c284b8c483eee503b77384f94e89` pins
+that exact shared-features revision in both workspace resolution files, the
+project, the compatibility package and the source
+manifest. Package resolution, exact-source verification of 1,262 files and
+SwiftPM pin consistency pass. The exact-head hosted iOS Release Safety and
+Codecov workflows remain pending; Branch Flow has passed.
+The prior iOS head's hosted simulator job executed 1,582 tests and failed one
+connection-pool stress test on its ten-second completion bound; the remaining
+tests had no failures. The subsequent source retains all 1,000 reset cycles
+and gives the concurrent work a 60-second bound. That exact test passed on an
+iOS 27 simulator with a focused scene-configuration test (2/2).
+
+The same iOS head adopts a single UIWindowScene, preserving the iOS 15
+minimum, the root presenter, custom-scheme callbacks and Google Drive OAuth
+handler. The Xcode 27 Debug simulator app builds and no longer triggers the
+missing-scene lifecycle assertion. A local fresh-install app built without
+signing entitlements failed a Keychain lookup with Security status `-34018`;
+the temporary diagnostic was removed. Attempts to run a manually re-signed
+simulator artifact did not launch, so signed fresh-install and upgrade startup
+remain unqualified. They require a correctly provisioned device or delivered
+build, not an unsigned simulator result. No existing wallet simulator data was
+reset.
 
 ## Completion record
 
