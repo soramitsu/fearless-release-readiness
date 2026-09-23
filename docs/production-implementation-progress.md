@@ -479,6 +479,42 @@ Root commit `32c1805bb8f8eb2813ba933721d99d760bdec9c1` rejects an assertion coun
 
 Android commit `a102e48b645684ff8c67d953f586ddff07eb0868` and iOS commit `c05df34769b7dcb4af6a9eb223b7d34be91c13d1` require exact cloud readback and local decryption before the disabled legacy save paths report success. Registration readback failure invokes the existing new-credential compensation. Android's 215 backup JVM tests and Detekt pass locally; iOS's 63 focused Release simulator tests, SwiftFormat lint and diff check pass. The previous Android head passed validation-only IAS at [run 35856661016](https://github.com/soramitsu/fearless-Android/actions/runs/35856661016), and the previous iOS head passed Codecov and Release Safety. These older results are not exact-head qualification of the new commits. The new iOS Branch Flow and Release Safety jobs passed; full mobile CI is still running or queued. Neither platform has a complete immutable-generation promotion, physical replacement-device recovery or store-signed upgrade. The Google Drive list/create path and credential/owner cross-store revocation remain unqualified.
 
+## Owner-side transactional credential mutation candidate — 2026-09-23
+
+The non-deployed owner authority has a server-only `commitChallengeCredentialMutation`
+candidate. It binds the exact existing route grant and raw request-body digest,
+checks the live owner/session/credential, and consumes the grant in the same
+SQLite transaction as a public credential insert, counter compare-and-swap or
+revocation/generation bump. Separate-process assertion-versus-revocation and
+duplicate-counter races, wrong-body/PRF rejection, before/after-commit ambiguity,
+restart and explicit v1→v2 owner database migration are covered. All 66 owner
+tests and 109 existing challenge-service tests pass locally; syntax checks pass.
+The release source and bundle inventories now require the new test file. The
+bundle OpenAPI expectations were also brought into line with the existing 409
+final-route confirmation response and exact credential-directed null-handle
+schema. The source-publication suite passed 88 adversarial cases; release-bundle
+export and verifier fixture suites both passed. These validate source/evidence
+contracts, not a deployed integrated credential store.
+
+This is **not** cross-store atomicity in the running challenge service. Its HTTP
+routes still mutate independent schema-4 JSON after separate grant introspection
+and do not invoke the new SQLite method. Historical deterministic user handles
+cannot be silently replaced by the random owner handles, and there is no
+verified legacy credential/owner migration or storage-key binding yet. The
+transaction candidate must remain internal until all seven routes use one
+reviewed authoritative store, historical records are preserved, and crash and
+device acceptance pass. Recovery remains disabled and undeployed.
+
+In parallel, the Android head-binding candidate was pushed at
+`b3238631c`; its pinned-Utils backup suite passed 217/217 locally and Detekt
+passed. This is source-level progress on the disabled path, not verified
+portable recovery or a final Android distribution result.
+The iOS head-binding candidate was pushed at
+`613affcdd018b14623d85602cf7d33b2f0fc3ab0`; its pinned dependency
+verifier and 29/29 focused arm64 Release simulator tests passed with no
+failures or skips on an iOS 26.5 simulator. This is also disabled-path
+plumbing, not replacement-device recovery or distribution acceptance.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

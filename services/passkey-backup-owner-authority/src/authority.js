@@ -133,6 +133,73 @@ function mintGrant(tx, current, binding) {
     binding.audience, binding.method, binding.path, binding.bodySha256, binding.scope, expires);
   return { token: grant, expiresAt: expires / 1000 };
 }
+function liveGrant(tx, token, binding) {
+  const grant = tx.query('SELECT * FROM grants WHERE digest=?', hash(opaque(token, 'grant.')));
+  if (!grant || grant.expires <= tx.now || grant.audience !== binding.audience ||
+      grant.method !== binding.method || grant.path !== binding.path ||
+      grant.body_hash !== binding.bodySha256 || grant.scope !== binding.scope) deny();
+  const current = tx.query('SELECT * FROM sessions WHERE digest=?', grant.session);
+  if (!current || current.expires <= tx.now || current.owner !== grant.owner ||
+      current.generation !== grant.generation) deny();
+  const owner = activeOwner(tx, grant.owner, grant.generation);
+  activeCredential(tx, current.credential, grant.owner);
+  return { grant, current, owner };
+}
+function challengeMutationRequest(request, rawBody) {
+  if (!(rawBody instanceof Uint8Array) || rawBody.byteLength === 0 || rawBody.byteLength > 64 * 1024) deny('invalid_request');
+  // Own one immutable snapshot for both hashing and parsing. A caller must not
+  // be able to change a shared byte view between those two checks.
+  const bytes = Buffer.from(rawBody);
+  if (hash(bytes) !== request.bodySha256) deny('invalid_request');
+  let body;
+  try {
+    body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch { deny('invalid_request'); }
+  const registration = '/api/passkey-backup/v1/registration/complete';
+  const assertion = '/api/passkey-backup/v1/assertion/complete';
+  const revoke = '/api/passkey-backup/v1/credentials/revoke';
+  const revokeAll = '/api/passkey-backup/v1/credentials/revoke-all';
+  if (request.path === registration || request.path === assertion) {
+    exact(body, [request.path === registration ? 'registrationId' : 'assertionId', 'rpId', 'credential']);
+    if (body.rpId !== RP_ID) deny('invalid_request');
+    const response = credentialResponse(body.credential, request.path === registration ? 'registration' : 'authentication');
+    return { kind: request.path === registration ? 'registration' : 'assertion',
+      credentialId: response.id,
+      ...(request.path === assertion ? { userHandle: response.response.userHandle } : {}) };
+  }
+  if (request.path === revoke) {
+    exact(body, ['storageKey', 'credentialId', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
+    if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
+    base64(body.credentialId, 1, 384);
+    return { kind: 'revoke', credentialId: body.credentialId };
+  }
+  if (request.path === revokeAll) {
+    exact(body, ['storageKey', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
+    if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
+    return { kind: 'revoke-all' };
+  }
+  deny('invalid_request');
+}
+function verifiedMutationEvidence(kind, evidence, credentialId, owner) {
+  if (kind === 'registration') {
+    exact(evidence, ['credential']);
+    let snapshot;
+    try { snapshot = structuredClone(evidence.credential); }
+    catch { deny('invalid_request'); }
+    return credentialRecord(snapshot, credentialId, owner.user_handle);
+  }
+  if (kind === 'assertion') {
+    exact(evidence, ['expectedCounter', 'newCounter', 'deviceType', 'backedUp']);
+    const snapshot = { expectedCounter: evidence.expectedCounter, newCounter: evidence.newCounter,
+      deviceType: evidence.deviceType, backedUp: evidence.backedUp };
+    counter(snapshot.expectedCounter);
+    counter(snapshot.newCounter);
+    backupFlags(snapshot);
+    return snapshot;
+  }
+  exact(evidence, []);
+  return evidence;
+}
 function generationDescriptor(tx, row) {
   if (!row) return null;
   const parentRevision = row.revision - 1;
@@ -299,19 +366,52 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     },
     consumeGrant(token, request) {
       const binding = requestBinding(request, audience);
-      const digest = hash(opaque(token, 'grant.'));
       return store.transaction((tx) => {
-        const grant = tx.query('SELECT * FROM grants WHERE digest=?', digest);
-        if (!grant || grant.expires <= tx.now || grant.audience !== binding.audience || grant.method !== binding.method ||
-            grant.path !== binding.path || grant.body_hash !== binding.bodySha256 || grant.scope !== binding.scope) deny();
-        const current = tx.query('SELECT * FROM sessions WHERE digest=?', grant.session);
-        if (!current || current.expires <= tx.now || current.owner !== grant.owner || current.generation !== grant.generation) deny();
-        activeOwner(tx, grant.owner, grant.generation);
-        activeCredential(tx, current.credential, grant.owner);
-        tx.run('DELETE FROM grants WHERE digest=?', digest); // Consumption committed before response; never restored on disconnect.
+        const { grant, current } = liveGrant(tx, token, binding);
+        tx.run('DELETE FROM grants WHERE digest=?', grant.digest); // Consumption committed before response; never restored on disconnect.
         return { schemaVersion: 1, active: true, subject: grant.owner, audience: binding.audience,
           method: binding.method, path: binding.path, bodySha256: binding.bodySha256, scope: binding.scope,
           platform: current.platform, expiresAt: grant.expires / 1000 };
+      });
+    },
+    // Server-only migration target for the challenge service's four credential
+    // mutations. The exact route grant, current owner/session/credential and
+    // canonical public credential row are checked and changed under one SQLite
+    // writer lock. The existing JSON-backed HTTP routes do not call this yet.
+    commitChallengeCredentialMutation(token, request, rawBody, evidence) {
+      const binding = requestBinding(request, audience);
+      const target = challengeMutationRequest(binding, rawBody);
+      return store.transaction((tx) => {
+        const { grant, owner } = liveGrant(tx, token, binding);
+        const verified = verifiedMutationEvidence(target.kind, evidence, target.credentialId, owner);
+        let result;
+        if (target.kind === 'registration') {
+          insertCredential(tx, owner, verified);
+          result = { status: 'registered', credentialId: target.credentialId,
+            generation: bumpGeneration(tx, owner).generation };
+        } else if (target.kind === 'assertion') {
+          const credential = activeCredential(tx, target.credentialId, owner.subject);
+          if (target.userHandle !== credential.user_handle || target.userHandle !== owner.user_handle) deny('verification_failed');
+          if (credential.counter !== verified.expectedCounter || credential.device_type !== verified.deviceType ||
+              ((credential.counter !== 0 || verified.newCounter !== 0) && verified.newCounter <= credential.counter)) {
+            deny('credential_counter_replay');
+          }
+          tx.run('UPDATE credentials SET counter=?, backed_up=? WHERE id=?',
+            verified.newCounter, Number(verified.backedUp), credential.id);
+          result = { status: 'authenticated', credentialId: credential.id, counter: verified.newCounter };
+        } else if (target.kind === 'revoke') {
+          activeCredential(tx, target.credentialId, owner.subject);
+          tx.run('UPDATE credentials SET revoked=1 WHERE id=?', target.credentialId);
+          const remaining = tx.query('SELECT count(*) AS n FROM credentials WHERE owner=? AND revoked=0', owner.subject).n;
+          result = { status: 'revoked', credentialId: target.credentialId,
+            remainingCredentials: remaining, generation: bumpGeneration(tx, owner).generation };
+        } else {
+          tx.run('UPDATE credentials SET revoked=1 WHERE owner=?', owner.subject);
+          result = { status: 'revoked-all', remainingCredentials: 0,
+            generation: bumpGeneration(tx, owner).generation };
+        }
+        tx.run('DELETE FROM grants WHERE digest=?', grant.digest);
+        return result;
       });
     },
     revokeCredential(token, credentialId, confirmFinalRecoveryRemoval = false) {

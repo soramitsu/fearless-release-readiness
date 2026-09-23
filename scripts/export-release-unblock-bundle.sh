@@ -1464,6 +1464,7 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
   'services/passkey-backup-owner-authority/src/webauthn-verifier.js',
   'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js',
   'services/passkey-backup-owner-authority/test/generation-head.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
@@ -3403,7 +3404,7 @@ const passkeyProductionRequiredContracts = [
   'OpenAPI info.description must document the exact Android release signing-certificate origin requirement',
   'all seven OpenAPI POST operations must require bearerAuth and expose exact 401, 403, and 503 ErrorResponse references',
   'OpenAPI credential lifecycle responses must expose only bounded public metadata descriptors and exact idempotent revocation result schemas',
-  'OpenAPI Base64UrlUserId and assertion userHandle must remain required canonical 43-character unpadded base64url SHA-256 values',
+  'OpenAPI Base64UrlUserId remains canonical 43-character unpadded base64url SHA-256; assertion userHandle is required and permits null only for an exact credential-directed challenge',
   'OpenAPI health response must require ok=true, service=fearless-passkey-backup, rpId=fearlesswallet.io, and schemaVersion=1',
   'production Docker Compose must bind 127.0.0.1:8789:8789 and mount passkey-backup-data:/data/passkey-backup',
   'production Docker Compose must keep PASSKEY_ALLOWED_ORIGINS pinned to fearlesswallet.io and backup.fearlesswallet.io',
@@ -3529,8 +3530,8 @@ function assertPasskeyOpenApi(openApi, label) {
     [passkeyChallengeServicePaths.registrationComplete, 'completePasskeyRegistration', '#/components/schemas/ChallengeResult', ['200', '400', '401', '403', '404', '409', '413', '415', '429', '500', '503']],
     [passkeyChallengeServicePaths.assertionComplete, 'completePasskeyAssertion', '#/components/schemas/ChallengeResult', ['200', '400', '401', '403', '404', '409', '413', '415', '429', '500', '503']],
     [passkeyChallengeServicePaths.credentialsList, 'listPasskeyCredentials', '#/components/schemas/CredentialListResponse', ['200', '400', '401', '403', '404', '413', '415', '429', '500', '503']],
-    [passkeyChallengeServicePaths.credentialsRevoke, 'revokePasskeyCredential', '#/components/schemas/CredentialRevokeResponse', ['200', '400', '401', '403', '413', '415', '429', '500', '503']],
-    [passkeyChallengeServicePaths.credentialsRevokeAll, 'revokeAllPasskeyCredentials', '#/components/schemas/CredentialRevokeAllResponse', ['200', '400', '401', '403', '413', '415', '429', '500', '503']],
+    [passkeyChallengeServicePaths.credentialsRevoke, 'revokePasskeyCredential', '#/components/schemas/CredentialRevokeResponse', ['200', '400', '401', '403', '409', '413', '415', '429', '500', '503']],
+    [passkeyChallengeServicePaths.credentialsRevokeAll, 'revokeAllPasskeyCredentials', '#/components/schemas/CredentialRevokeAllResponse', ['200', '400', '401', '403', '409', '413', '415', '429', '500', '503']],
   ]
   for (const [routePath, operationId, responseRef, responseStatuses] of routeExpectations) {
     const operation = openApi.paths[routePath]?.post
@@ -3572,8 +3573,15 @@ function assertPasskeyOpenApi(openApi, label) {
       schemas.Base64UrlUserId?.minLength !== 43 || schemas.Base64UrlUserId?.maxLength !== 43) {
     fail(`${label}.components.schemas.Base64UrlUserId must be canonical 43-character unpadded base64url`)
   }
+  const assertionUserHandle = schemas.AssertionAuthenticatorResponse?.properties?.userHandle
   if (!schemas.AssertionAuthenticatorResponse?.required?.includes('userHandle') ||
-      schemas.AssertionAuthenticatorResponse?.properties?.userHandle?.$ref !== '#/components/schemas/Base64UrlUserId') {
+      !assertionUserHandle || Object.keys(assertionUserHandle).sort().join(',') !== 'description,oneOf' ||
+      assertionUserHandle.description !== 'Null is accepted only for an assertion whose challenge was bound to an exact credentialId.' ||
+      !Array.isArray(assertionUserHandle.oneOf) || assertionUserHandle.oneOf.length !== 2 ||
+      Object.keys(assertionUserHandle.oneOf[0] ?? {}).join(',') !== '$ref' ||
+      assertionUserHandle.oneOf[0].$ref !== '#/components/schemas/Base64UrlUserId' ||
+      Object.keys(assertionUserHandle.oneOf[1] ?? {}).join(',') !== 'type' ||
+      assertionUserHandle.oneOf[1].type !== 'null') {
     fail(`${label}.components.schemas.AssertionAuthenticatorResponse.userHandle mismatch`)
   }
   assertExactStringArray(schemas.RegistrationChallengeResponse?.required, [

@@ -62,6 +62,7 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
   'services/passkey-backup-owner-authority/src/webauthn-verifier.js',
   'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js',
   'services/passkey-backup-owner-authority/test/generation-head.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
