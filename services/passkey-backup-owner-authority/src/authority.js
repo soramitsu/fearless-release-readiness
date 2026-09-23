@@ -115,10 +115,16 @@ function generationRequest(input) {
     storageAccountBinding: input.storageAccountBinding,
   };
 }
-function generationDescriptor(row) {
+function generationDescriptor(tx, row) {
   if (!row) return null;
+  const parentRevision = row.revision - 1;
+  const parent = parentRevision > 0 ? tx.query(
+    'SELECT bundle_sha256 FROM backup_operations WHERE owner=? AND revision=?', row.owner, parentRevision,
+  ) : null;
+  if (parentRevision > 0 && !parent) throw Error('Backup generation has no retained parent');
   return Object.freeze({
-    headRevision: String(row.revision), generationId: row.generation_id,
+    headRevision: String(row.revision), parentHeadRevision: String(parentRevision),
+    parentHeadSha256: parent?.bundle_sha256 ?? null, generationId: row.generation_id,
     bundleSha256: row.bundle_sha256, keyEpoch: String(row.key_epoch),
     driveFileId: row.drive_file_id, storageAccountBinding: row.account_binding,
   });
@@ -133,7 +139,7 @@ function backupHead(tx, owner) {
     owner.subject, current.revision - 1) : null;
   if (current.revision > 1 && !previous) throw Error('Backup head has no retained predecessor');
   return { schemaVersion: 1, ownerSubject: owner.subject, backupNamespace: owner.namespace,
-    head: generationDescriptor(head), previous: generationDescriptor(previous) };
+    head: generationDescriptor(tx, head), previous: generationDescriptor(tx, previous) };
 }
 
 /**
@@ -333,7 +339,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         const current = session(tx, token);
         const owner = activeOwner(tx, current.owner, current.generation);
         const operation = tx.query('SELECT * FROM backup_operations WHERE operation_id=? AND owner=?', operationId, owner.subject);
-        return operation ? { status: 'committed', descriptor: generationDescriptor(operation) } : { status: 'absent' };
+        return operation ? { status: 'committed', descriptor: generationDescriptor(tx, operation) } : { status: 'absent' };
       });
     },
     // Metadata CAS only. The caller must have uploaded, downloaded, unwrapped,
@@ -349,7 +355,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         const priorOperation = tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId);
         if (priorOperation) {
           if (priorOperation.owner !== owner.subject || priorOperation.request_hash !== requestHash) deny('operation_conflict');
-          return { status: 'committed', descriptor: generationDescriptor(priorOperation) };
+          return { status: 'committed', descriptor: generationDescriptor(tx, priorOperation) };
         }
         const state = backupHead(tx, owner);
         const expectedRevision = decimal(request.expectedHeadRevision);
@@ -370,7 +376,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           request.storageAccountBinding);
         tx.run('INSERT INTO backup_heads VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision, operation_id=excluded.operation_id',
           owner.subject, revision, request.operationId);
-        return { status: 'committed', descriptor: generationDescriptor(tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId)) };
+        return { status: 'committed', descriptor: generationDescriptor(tx,
+          tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId)) };
       });
     },
   });

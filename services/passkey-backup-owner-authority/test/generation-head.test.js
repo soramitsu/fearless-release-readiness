@@ -36,6 +36,8 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
   const accepted = core.commitGenerationMetadata(owner.sessionToken, first);
   assert.equal(accepted.status, 'committed');
   assert.equal(accepted.descriptor.headRevision, '1');
+  assert.equal(accepted.descriptor.parentHeadRevision, '0');
+  assert.equal(accepted.descriptor.parentHeadSha256, null);
   assert.equal(core.backupOperationStatus(owner.sessionToken, first.operationId).status, 'committed');
   const second = candidate(owner, {
     operationId: b64(23), generationId: b64(24), expectedHeadRevision: '1',
@@ -44,12 +46,16 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
   core.commitGenerationMetadata(owner.sessionToken, second);
   const current = core.readBackupHead(owner.sessionToken);
   assert.equal(current.head.generationId, second.generationId);
+  assert.equal(current.head.parentHeadRevision, '1');
+  assert.equal(current.head.parentHeadSha256, first.bundleSha256);
   assert.deepEqual(current.previous, accepted.descriptor);
   core.close();
   const restarted = open();
   assert.deepEqual(restarted.readBackupHead(owner.sessionToken), current);
   // The original exact operation remains reconcilable after a later head update.
   assert.deepEqual(restarted.commitGenerationMetadata(owner.sessionToken, { ...first }), accepted);
+  assert.equal(restarted.backupOperationStatus(owner.sessionToken, second.operationId).descriptor.parentHeadSha256,
+    first.bundleSha256);
   assert.equal(restarted.backupOperationStatus(owner.sessionToken, b64(99)).status, 'absent');
 });
 
