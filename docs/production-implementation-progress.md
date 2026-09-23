@@ -137,6 +137,36 @@ An optional adapter in the owner authority now performs actual WebAuthn verifica
 
 First-owner bootstrap still rejects, because self-custody wallet proof and app attestation have not been integrated. The existing challenge store and owner authority are still separate, so atomic credential lifecycle, safe legacy migration, decryption proof before enrollment and final-route rotation remain unresolved. The adapter is not deployed and does not authorize passkey recovery. The source-publication and release-bundle required-file lists now include its code and focused tests; protected CI is configured to run the owner suite on Node 22.13.0.
 
+## Drive and credential-wrapper increments — 2026-09-23
+
+Android's disabled Google Drive adapter now pins each operation to one selected
+account/token, traverses bounded file-list pages and rejects ambiguous,
+incomplete, mismatched or oversized legacy metadata. The Android backup module
+passes 145 tests using an isolated clean checkout of the pinned Utils source;
+that avoids both dependency-verification overrides and changes to the user's
+modified Utils checkout. The `2a23224b` full CI stopped at one Detekt issue in
+the Drive pager, so no later CI stages from that run count as passing. The issue
+is corrected, local Detekt and backup tests pass, and the corrected source is
+pushed at `0052fbe9292bd23bd0360550959a51f20afa2516`; its exact-head CI is
+pending. The new client-only WebAuthn PRF/HKDF/AES-GCM wrapper and
+canonical opaque binary record bind owner, credential, wallet metadata and key
+epoch to the random 32-byte backup key. Fixed independent Node vector and
+tamper/round-trip tests pass; the [shared format](passkey-credential-wrapper-v1.md)
+is published for iOS parity. The wrapper and analysis fix are both in the
+Android review branch.
+
+iOS native Google Drive appData access is pushed on the existing iOS review
+branch at `b1b3c5fe01413c41de424f3e1438c33afe3ca773`. It uses explicit
+Google account selection and `drive.appdata` consent, pins the selected account
+to a bounded transport, and retains the existing encrypted `FPBKAEAD` envelope.
+Its 84 focused Release tests pass. The iOS agent is porting the client-side
+wrapper byte contract. Both Drive adapters remain disabled; neither implements
+immutable generations, verified decryption-before-complete, owner lifecycle or
+replacement-device restoration yet. The iOS Drive adapter accepts a stable
+Google subject across email changes, while the interim Android adapter still
+requires metadata email equality; this must be reconciled before a cross-platform
+restore can qualify. No server or app has been enabled.
+
 ## Current local access check
 
 Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. Apple device records exist, but none had an active tunnel (81 disconnected, one unavailable). The configured Android SDK's `adb` is available and reported zero connected devices. Receipt: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish local inventory only; store access, provisioning, private-key use and actual device qualification remain unverified. No device was reset or uninstalled.
