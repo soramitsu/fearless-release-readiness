@@ -1131,6 +1131,33 @@ codec mismatch for captured cohorts, but it is not the independent security
 review required by the release plan. Neither platform has real
 replacement-device recovery or distribution-signed upgrade evidence.
 
+## Read-only imported-root signing proof — 2026-09-24
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+now points to pushed `46b6ace1e915d4da4cfcddc7d460795b6d098ed0`.
+A separate read-only proof decodes `FPWMSM01` and signs a domain-separated
+local challenge from each imported Substrate, standalone EVM, historical V1
+Substrate and native TON root key. It verifies the recorded public key,
+Substrate account ID or V1 SS58 address, EVM address, and TON V4R2 workchain
+and account hash in either supported address encoding. If a native TON phrase
+is present, it must derive the same original private key. Altered secrets,
+addresses and phrase material fail closed. Four new tests exercise real
+captured iOS roots, all three released Substrate crypto types, historical V1
+and both TON address encodings. The focused iPhone 15 simulator capture and
+codec suites pass 44/44 at the exact pushed source; scoped SwiftFormat,
+strict SwiftLint, project-file lint and diff checks pass. Hosted exact-head
+CI and independent review remain pending.
+
+This result proves only signed root identities. It does not validate every
+chain account or derivation recipe, make Keychain/Core Data writes atomic,
+establish export parity on a replacement device, or authorize backup
+completion. The proof has no installer or recovery call site. Android
+historical watch-only rows remain ambiguous: released storage has no custody
+provenance, so an absent key can mean either a watch-only wallet or a lost
+signing key. The Android adapter continues to reject those rows rather than
+silently downgrade them. A forward-only explicit watch provenance path is in
+progress; previously stored ambiguous rows cannot be auto-classified safely.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
