@@ -647,6 +647,42 @@ and requires review and final exact-head CI. Neither mobile app has passed
 store-delivered upgrade acceptance or cross-platform replacement-device
 recovery.
 
+## Legacy wallet-material preservation checkpoint — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+now points to pushed source `2ae7fe4f43a2462a479f25d334ee0d4512690f71`.
+The legacy Google-backup importer no longer drops a separately backed-up EVM
+private key when a Substrate mnemonic is present. Both roots enter one durable
+wallet creation. A key that matches mnemonic derivation retains its export
+metadata; an independent key retains its exact address and is not falsely
+represented as derived from the Substrate phrase. Malformed keys fail before
+the wallet mutation, and an import failure cannot advance to the success view.
+Focused repository/interactor/importer JVM tests pass with the exact pinned
+Utils and WebSocket source checkouts. `docs/portable-wallet-material-inventory.md`
+records V3 Substrate/EVM/TON roots, V2 chain keys, historical V1 material and
+multi-wallet identity requirements. This repairs a legacy path; the public
+remote-backup compatibility stub remains unavailable and portable recovery is
+still disabled. Exact-head hosted Android CI is pending.
+
+iOS draft [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+now points to pushed source `10b33d20e037a507682d7956e63197717f195f7d`.
+The legacy cloud-backup flow rejects absent cloud storage and incomplete seed
+or keystore exports. After upload it downloads and decrypts the candidate,
+compares all intended wallet-material fields, and reports completion only
+after the local backed-up state write succeeds. The exact changed source
+passes a single-architecture iOS Simulator Debug workspace build and diff
+check; exact-head hosted Release CI remains pending. The local Release build
+could not complete because its dual-architecture Charts dependency compiler
+jobs consumed excessive memory. This change does not provide the production
+passkey wallet serializer, owner-session integration, or replacement-device
+recovery.
+
+The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
+at `3f20fe44a8e3c3b0d2e78e100551419684646d85` has green hosted
+`verify`, `verify-owner` and `validate` checks. These checks validate the
+current source tooling and metadata-only, non-deployed credential authority;
+they are not proof of a live recovery service or shipping build.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
