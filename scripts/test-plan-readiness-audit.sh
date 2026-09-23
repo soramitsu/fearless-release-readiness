@@ -6281,7 +6281,7 @@ write_root_readiness_scripts() {
     "fearless-Android	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	1258" \
     "fearless-iOS	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	1301" \
     "fearless-wallet-web	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062" \
-    "fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	45" \
+    "fearless-site-web-app-associations-20260726	soramitsu/fearless-site-web	fix/app-association-publication	develop	49" \
     "../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13" \
     "../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16" \
 	    "../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1" \
@@ -6382,7 +6382,7 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/quarantine-source-publication-outputs.mjs" \
     '#!/usr/bin/env node' \
     "const FORBIDDEN_REPOSITORY = '../iroha';" \
-    "const MAINTAINED_REPOSITORIES = ['fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer'];" \
+    "const MAINTAINED_REPOSITORIES = ['fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web-app-associations-20260726', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer'];" \
     "const parsed = { mode: 'dry-run' }; arg === '--apply'; arg === '--rollback'; --apply and --rollback are mutually exclusive" \
     'source publication config paths must be exactly; forbidden repository selected; root/config overrides and test environment are forbidden in production mode' \
     'ignored candidate contains tracked content; ignored candidate contains non-ignored untracked content; candidate is no longer an ignored-only root' \
@@ -7841,8 +7841,8 @@ write_root_readiness_scripts() {
     'validate_release_output_contracts() { echo "function assertObjectKeys"; echo "function assertUtcTimestamp"; echo "function assertNonNegativeInteger"; echo "function assertString"; echo "function assertLogFile"; echo "summary.json check keys"; echo "actions blocker keys"; echo "summary.json schemaVersion mismatch"; echo "actions.json schemaVersion mismatch"; echo "assertObjectKeys(summary, summaryKeys, '\''summary.json'\'')"; echo "assertObjectKeys(actions, actionsKeys, '\''actions.json'\'')"; echo "assertObjectKeys(summary.totals, totalsKeys, '\''summary.json totals'\'')"; echo "assertObjectKeys(actions.totals, totalsKeys, '\''actions.json totals'\'')"; echo "UTC ISO-8601 timestamp"; echo "must be a non-negative integer"; echo "actions.json generatedAt must match summary.json"; echo "blockers.md generatedAt must match summary.json"; echo "summary.json runLive must be boolean"; echo "actions.json runLive must be boolean"; echo "actions.json runLive must match summary.json"; echo "summary.json status mismatch"; echo "actions.json status mismatch"; echo "summary.json passed total mismatch"; echo "summary.json failed total mismatch"; echo "summary.json skipped total mismatch"; echo "summary.json total mismatch"; echo "actions.json passed total mismatch"; echo "actions.json failed total mismatch"; echo "actions.json skipped total mismatch"; echo "actions.json total mismatch"; echo "summary.json checks must be an array"; echo "actions.json blockers must be an array"; echo "summary.json check count mismatch"; echo "actions.json blocker count mismatch"; echo "blockers.md heading mismatch"; echo "blockers.md generatedAt line count mismatch"; echo "blockers.md runLive mismatch"; echo "blockers.md totals mismatch"; echo "blockers.md failed heading count mismatch"; echo "blockers.md failed heading order mismatch"; echo "blockers.md exit code mismatch"; echo "blockers.md log path mismatch"; echo "blockers.md recommended action mismatch"; echo "blockers.md externalPrerequisite mismatch"; echo "blockers.md unblockCategory mismatch"; echo "blockers.md verificationCommand mismatch"; echo "log file must be a regular file"; echo "failed log file must be non-empty"; echo "function logEvidencePreview"; echo "summary name for"; echo "summary exitCode for"; echo "summary logFile for"; echo "summary requiresExternalAction mismatch"; echo "summary recommendedAction mismatch"; echo "summary unblockCategory mismatch"; echo "summary externalPrerequisite mismatch"; echo "summary verificationCommand mismatch"; echo "actions requiresExternalAction mismatch"; echo "actions slug at index"; echo "actions name mismatch"; echo "actions exitCode for"; echo "actions exitCode mismatch"; echo "actions logFile for"; echo "actions logFile mismatch"; echo "actions recommendedAction mismatch"; echo "actions unblockCategory mismatch"; echo "actions externalPrerequisite mismatch"; echo "actions verificationCommand for"; echo "actions verificationCommand mismatch"; echo "blockers.md requiresExternalAction mismatch"; echo "actions blocker order mismatch"; echo "blockers.md section order mismatch"; echo "blockers.md missing slug line"; echo "blockers.md duplicate slug line"; echo "blockers.md unexpected failed-checks section"; echo "blockers.md unexpected no-blockers success message"; echo "blockers.md missing skipped-checks section"; echo "blockers.md skipped section order mismatch"; echo "actions evidencePreview mismatch"; echo "blockers.md evidence preview mismatch"; echo "blockers.md evidence preview block count mismatch"; echo "Validated release-readiness output contracts"; echo "Release readiness output contract validation failed"; }' \
 	'terminal_output_contract_failure_contract() { output_contract_log="$REPORT_DIR/release-output-contract.log"; : > "$output_contract_log"; if validate_release_output_contracts > "$output_contract_log" 2>&1; then :; else printf '\''%s\n'\'' "Release readiness output contract validation failed" >> "$output_contract_log"; record_check_result "Release readiness output contracts" "release-output-contract" "failed" 1 "$output_contract_log"; write_summary; write_action_manifest; write_blocker_report; output_contract_revalidation_log="$REPORT_DIR/release-output-contract-revalidation.log"; : > "$output_contract_revalidation_log"; validate_release_output_contracts > "$output_contract_revalidation_log" 2>&1; fi; }' \
     "echo 'actions evidencePreview must be a string'" \
-    "echo 'fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io'" \
-    "echo '--root \"\$ROOT_DIR/fearless-site-web\"'" \
+    "echo 'fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io'" \
+    "echo '--root \"\$ROOT_DIR/fearless-site-web-app-associations-20260726\"'" \
     "echo 'exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects'" \
     "echo '\${label} must be an object'" \
     "echo 'function assertSummaryExitCodeForStatus'" \
@@ -7964,7 +7964,7 @@ write_root_readiness_scripts() {
     "echo 'secret-like deployment evidence value'" \
     "echo 'source_publication_report_has_unsafe_iroha_state()'" \
     "echo \"preflightBytes = fs.readFileSync(preflightPath) preflightSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex') report.schemaVersion !== 3 report.phase !== 'postflight' report.preflightReportSha256 !== preflightSha256 report.status !== 'failed' report.checkRemote !== true preflight.schemaVersion !== 3 preflight.phase !== 'preflight' preflight.preflightReportSha256 !== null irohaRows.length !== 1\"" \
-    "echo \"expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha'] identityFields = [ preflightSources = [preflight.workspaceSource postflightSources = [report.workspaceSource source publication preflight did not pass before release checks preflightSources.length === 9 && postflightSources.length === 9 preflightSource.path !== expectedSourcePaths[index] postflightSource.path !== expectedSourcePaths[index] preflightSource.status === 'passed' hasOwn(preflightSource, field) hasOwn(postflightSource, field) preflightSource[field] === postflightSource[field] postflightSource.failures.includes(preflightContinuityDiagnostic) if (!hasExactPreflightPostflightPair) process.exit(1)\"" \
+    "echo \"expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web-app-associations-20260726', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha'] identityFields = [ preflightSources = [preflight.workspaceSource postflightSources = [report.workspaceSource source publication preflight did not pass before release checks preflightSources.length === 9 && postflightSources.length === 9 preflightSource.path !== expectedSourcePaths[index] postflightSource.path !== expectedSourcePaths[index] preflightSource.status === 'passed' hasOwn(preflightSource, field) hasOwn(postflightSource, field) preflightSource[field] === postflightSource[field] postflightSource.failures.includes(preflightContinuityDiagnostic) if (!hasExactPreflightPostflightPair) process.exit(1)\"" \
     "echo \"identityFields = ['path', 'repository', 'head', 'base', 'prNumber', 'prUrl', 'prState', 'prHeadSha', 'repositoryPath', 'originUrl', 'originRepository', 'branch', 'headSha', 'upstream', 'upstreamSha', 'currentBranchRemoteSha', 'currentBranchRemotePresent', 'remoteHeadSha', 'remoteBranchPresent']\"" \
     "echo 'unsafeFailures = new Set( MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_START sequencer'" \
     "echo 'hasCanonicalCounts unmergedFailure iroha.unmergedCount > 0 report.totals.unmerged >= iroha.unmergedCount iroha.failures.includes(unmergedFailure) hasOperation || hasUnmergedIndex'" \
@@ -8130,7 +8130,7 @@ write_root_readiness_scripts() {
     "echo 'source publication self-test failure'" \
 	    "echo 'skip-live Iroha-only plan failure ignores stale live source report'" \
 	    "echo 'expected skip-live stale-report regression to export and verify an unblock bundle'" \
-	    "echo 'stablePaths = [\".\",\"fearless-Android\",\"fearless-iOS\",\"fearless-wallet-web\",\"fearless-site-web\",\"../ton-indexer\",\"../solswap-indexer\",\"../polkaswap-indexer\"] repositories = [...stableSources.slice(1), currentIrohaRow] sources = [workspaceSource, ...repositories] totals:{sources:9,...sourceTotals}'" \
+	    "echo 'stablePaths = [\".\",\"fearless-Android\",\"fearless-iOS\",\"fearless-wallet-web\",\"fearless-site-web-app-associations-20260726\",\"../ton-indexer\",\"../solswap-indexer\",\"../polkaswap-indexer\"] repositories = [...stableSources.slice(1), currentIrohaRow] sources = [workspaceSource, ...repositories] totals:{sources:9,...sourceTotals}'" \
 	    "echo 'postflight-continuity Iroha-only plan failure plan-unpublished-iroha-postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift-postflight-continuity authoritative-current drift may equal merged PR head plan-unpublished-iroha-drift-current-equals-pr legacy v2 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v2 wrong-phase Iroha publication proof stays local|plan-unpublished-iroha-wrong-report-phase wrong-preflight-digest Iroha publication proof stays local|plan-unpublished-iroha-wrong-preflight-digest missing actual-branch Iroha publication proof stays local|plan-unpublished-iroha-missing-actual-proof forged actual-branch Iroha publication proof stays local|plan-unpublished-iroha-forged-actual-proof mismatched Iroha PR-head diagnostic stays local|plan-unpublished-iroha-mismatched-proof-failure missing Iroha PR-head SHA proof stays local|plan-unpublished-iroha-missing-pr-head forged Iroha PR-head SHA proof stays local|plan-unpublished-iroha-forged-pr-head missing Iroha PR-head mismatch diagnostic stays local|plan-unpublished-iroha-missing-pr-diagnostic invalid Iroha configured-ref proof stays local|plan-unpublished-iroha-invalid-configured-ref-proof missing Iroha ignored-output diagnostic stays local|plan-unpublished-iroha-missing-ignored-diagnostic stale Iroha local/current diagnostic stays local|plan-unpublished-iroha-stale-current-diagnostic preflight/postflight source-row mismatch stays local|plan-unpublished-iroha-preflight-row-mismatch wrong Iroha postflight-continuity marker stays local|plan-unpublished-iroha-wrong-continuity-marker duplicate Iroha postflight-continuity marker stays local|plan-unpublished-iroha-duplicate-continuity-marker reordered Iroha postflight-continuity marker stays local|plan-unpublished-iroha-reordered-continuity-marker Iroha postflight-continuity marker plus unrelated failure stays local|plan-unpublished-iroha-continuity-marker-plus-extra missing Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-missing-current-diagnostic missing Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-missing-cached-diagnostic reordered Iroha authoritative-current drift diagnostics stay local|plan-unpublished-iroha-drift-reordered-diagnostics forged Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-forged-current-diagnostic forged Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-forged-cached-diagnostic unrelated extra Iroha authoritative-current drift failure stays local|plan-unpublished-iroha-drift-unrelated-extra wrong Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-wrong-continuity-marker duplicate Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-duplicate-continuity-marker Iroha authoritative-current drift marker plus unrelated failure stays local|plan-unpublished-iroha-drift-continuity-marker-plus-extra Iroha authoritative-current drift proof with synchronized current SHA stays local|plan-unpublished-iroha-drift-current-equals-local Iroha authoritative-current drift proof with divergent cached upstream stays local|plan-unpublished-iroha-drift-upstream-differs-from-local Iroha authoritative-current drift proof with local PR head stays local|plan-unpublished-iroha-drift-pr-equals-local Iroha authoritative-current drift proof with present configured ref stays local|plan-unpublished-iroha-drift-configured-ref-present Iroha authoritative-current drift proof with configured-ref SHA stays local|plan-unpublished-iroha-drift-configured-ref-sha Iroha authoritative-current drift proof with not-present current ref stays local|plan-unpublished-iroha-drift-current-ref-not-present Iroha authoritative-current drift proof with nonzero worktree count stays local|plan-unpublished-iroha-drift-nonzero-count'" \
 	    "echo 'passkey production smoke must use the canonical helper, timeout, response-size, and isolated Node TLS/proxy/CA environment'" \
 	    "echo 'passkey production smoke inherited forbidden Node TLS/proxy/CA environment'" \
@@ -9921,7 +9921,7 @@ write_all_repos() {
   write_iroha_production_send_fixture "$workspace/fearless-wallet-web" "browser-extension" "$workspace/fearless-wallet-web/.github/workflows/ci.yml"
   write_web_iroha_source_only_readiness_fixture "$workspace/fearless-wallet-web"
   write_native_passkey_fixture "$workspace/fearless-Android" "$workspace/fearless-iOS"
-  write_site_repo "$workspace/fearless-site-web"
+  write_site_repo "$workspace/fearless-site-web-app-associations-20260726"
   write_indexer_repo "$parent/ton-indexer" "TON_INDEXER_BASE_URL" "https://ti.soramitsu.io"
   write_indexer_repo "$parent/solswap-indexer" "SOLSWAP_INDEXER_BASE_URL" "https://si.soramitsu.io"
   write_polkaswap_repo "$parent/polkaswap-indexer"
@@ -10066,11 +10066,11 @@ perl -0pi -e 's/Docker action is not pinned by sha256 digest/Docker tags accepte
 expect_failure "missing workflow action Docker digest gate" "root workflow action Docker digest gate missing"
 
 reset_fixture
-perl -0pi -e 's#fearless-site-web/scripts/verify-app-associations\.mjs#fearless-site-web/scripts/weaker-live-check.mjs#' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's#fearless-site-web-app-associations-20260726/scripts/verify-app-associations\.mjs#fearless-site-web-app-associations-20260726/scripts/weaker-live-check.mjs#' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "missing strict live site association aggregate gate" "root aggregate audit strict live site association verifier missing"
 
 reset_fixture
-perl -0pi -e 's#--root "\$ROOT_DIR/fearless-site-web"#--root .#' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's#--root "\$ROOT_DIR/fearless-site-web-app-associations-20260726"#--root .#' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "wrong strict live site association source root" "root aggregate audit strict live site association source root missing"
 
 reset_fixture
@@ -10090,15 +10090,15 @@ perl -0pi -e 's/expected strict fearless-site-web live app association verifier 
 expect_failure "missing skip-live site association isolation fixture" "root aggregate audit skip-live site association isolation fixture missing"
 
 reset_fixture
-perl -0pi -e 's/\^1\.11\.0/^1.10.0/' "$workspace/fearless-site-web/package.json"
+perl -0pi -e 's/\^1\.11\.0/^1.10.0/' "$workspace/fearless-site-web-app-associations-20260726/package.json"
 expect_failure "stale fearless-site-web Nuxt Image remediation" "fearless-site-web patched Nuxt Image dependency missing"
 
 reset_fixture
-perl -0pi -e 's/yarn audit:dependencies\n/yarn audit:dependencies:omitted\n/' "$workspace/fearless-site-web/.github/workflows/ci.yml"
+perl -0pi -e 's/yarn audit:dependencies\n/yarn audit:dependencies:omitted\n/' "$workspace/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
 expect_failure "missing fearless-site-web full dependency audit" "fearless-site-web full dependency audit missing"
 
 reset_fixture
-perl -0pi -e 's/6\.4\.3/6.4.2/' "$workspace/fearless-site-web/yarn.lock"
+perl -0pi -e 's/6\.4\.3/6.4.2/' "$workspace/fearless-site-web-app-associations-20260726/yarn.lock"
 expect_failure "fearless-site-web locked Vite remediation drift" "fearless-site-web locked Vite remediation missing"
 
 reset_fixture
@@ -10882,59 +10882,59 @@ perl -0pi -e 's/https:\/\/blockstream.info\/testnet\/api/https:\/\/example.inval
 expect_failure "missing web Bitcoin canonical indexer smoke docs" "fearless-wallet-web Bitcoin smoke docs canonical indexer missing"
 
 reset_fixture
-perl -0pi -e 's/\n          yarn audit:dependencies:production//' "$workspace/fearless-site-web/.github/workflows/ci.yml"
+perl -0pi -e 's/\n          yarn audit:dependencies:production//' "$workspace/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
 expect_failure "missing website production audit" "fearless-site-web production dependency audit missing"
 
 reset_fixture
-perl -0pi -e 's/\n      - run: yarn test:app-associations && yarn verify:app-associations//' "$workspace/fearless-site-web/.github/workflows/ci.yml"
+perl -0pi -e 's/\n      - run: yarn test:app-associations && yarn verify:app-associations//' "$workspace/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
 expect_failure "missing website app-association adversarial CI gate" "fearless-site-web app-association adversarial CI gate missing"
 
 reset_fixture
-perl -0pi -e 's/actual\.length === sortedExpected\.length/sortedExpected.every((key) => actual.includes(key))/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/actual\.length === sortedExpected\.length/sortedExpected.every((key) => actual.includes(key))/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association unknown-key validation" "fearless-site-web app-association strict unknown-key rejection missing"
 
 reset_fixture
-perl -0pi -e 's/64 \* 1024/1024 * 1024/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/64 \* 1024/1024 * 1024/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "drifted website association size ceiling" "fearless-site-web app-association 64 KiB limit missing"
 
 reset_fixture
-perl -0pi -e 's/!stat\.isSymbolicLink\(\)/stat.isSymbolicLink()/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/!stat\.isSymbolicLink\(\)/stat.isSymbolicLink()/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association symlink validation" "fearless-site-web app-association source symlink rejection missing"
 
 reset_fixture
-perl -0pi -e 's/stat\.size <= MAX_ASSOCIATION_BYTES/stat.size >= MAX_ASSOCIATION_BYTES/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/stat\.size <= MAX_ASSOCIATION_BYTES/stat.size >= MAX_ASSOCIATION_BYTES/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association source size validation" "fearless-site-web app-association source size bound missing"
 
 reset_fixture
-perl -0pi -e 's/byteLength > MAX_ASSOCIATION_BYTES/byteLength < MAX_ASSOCIATION_BYTES/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/byteLength > MAX_ASSOCIATION_BYTES/byteLength < MAX_ASSOCIATION_BYTES/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association streamed size validation" "fearless-site-web app-association streamed live size bound missing"
 
 reset_fixture
-perl -0pi -e 's/stableJson\(liveValue\) !== stableJson\(sourceValue\)/stableJson(liveValue) === stableJson(sourceValue)/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/stableJson\(liveValue\) !== stableJson\(sourceValue\)/stableJson(liveValue) === stableJson(sourceValue)/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association source-live comparison" "fearless-site-web app-association exact source/live equality rejection missing"
 
 reset_fixture
-perl -0pi -e 's/response\.status !== 200/response.status >= 500/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/response\.status !== 200/response.status >= 500/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association HTTP status validation" "fearless-site-web app-association exact HTTP 200 live gate missing"
 
 reset_fixture
-perl -0pi -e 's/toLowerCase/toUpperCase/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/toLowerCase/toUpperCase/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association nosniff validation" "fearless-site-web app-association nosniff live gate missing"
 
 reset_fixture
-perl -0pi -e 's/https:/http:/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/https:/http:/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "insecure website association live-base policy" "fearless-site-web app-association HTTPS live-base policy missing"
 
 reset_fixture
-perl -0pi -e 's/!url\.search/url.search/' "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e 's/!url\.search/url.search/' "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "fail-open website association canonical live-base validation" "fearless-site-web app-association canonical live-base policy missing"
 
 reset_fixture
-perl -0pi -e 's/retired production iOS application identifier/retired production identifier accepted/' "$workspace/fearless-site-web/scripts/test-app-associations.sh"
+perl -0pi -e 's/retired production iOS application identifier/retired production identifier accepted/' "$workspace/fearless-site-web-app-associations-20260726/scripts/test-app-associations.sh"
 expect_failure "missing retired production iOS application identifier adversarial case" "fearless-site-web retired production iOS application identifier adversarial test missing"
 
 reset_fixture
-perl -0pi -e "s/YLWWUD25VZ\\.jp\\.co\\.soramitsu\\.fearlesswallet',/YLWWUD25VZ.jp.co.soramitsu.fearless',/" "$workspace/fearless-site-web/scripts/verify-app-associations.mjs"
+perl -0pi -e "s/YLWWUD25VZ\\.jp\\.co\\.soramitsu\\.fearlesswallet',/YLWWUD25VZ.jp.co.soramitsu.fearless',/" "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs"
 expect_failure "retired production iOS application identifier in website verifier" "fearless-site-web verifier IOS_APPLICATION_IDS must exactly match current fearless-iOS Release/Development application identifiers"
 
 reset_fixture
@@ -10946,15 +10946,15 @@ perl -0pi -e 's/iCloud\.jp\.co\.soramitsu\.fearlesswallet"/iCloud.jp.co.soramits
 expect_failure "retired production bundle identifier in root passkey config" "root passkey release CloudKit container must match the current iOS Release bundle ID"
 
 reset_fixture
-perl -0pi -e 's/globalThis\.fetch/const mockedFetch/' "$workspace/fearless-site-web/scripts/test-app-associations-fetch-mock.mjs"
+perl -0pi -e 's/globalThis\.fetch/const mockedFetch/' "$workspace/fearless-site-web-app-associations-20260726/scripts/test-app-associations-fetch-mock.mjs"
 expect_failure "missing website association mocked fetch" "fearless-site-web app-association mocked fetch implementation missing"
 
 reset_fixture
-perl -0pi -e "s/'x-content-type-options': 'nosniff'/'x-content-type-options': 'unsafe'/" "$workspace/fearless-site-web/nuxt.config.ts"
+perl -0pi -e "s/'x-content-type-options': 'nosniff'/'x-content-type-options': 'unsafe'/" "$workspace/fearless-site-web-app-associations-20260726/nuxt.config.ts"
 expect_failure "missing website Android association Nitro nosniff header" "fearless-site-web Android association Nitro nosniff header missing"
 
 reset_fixture
-perl -0pi -e 's/\n  schedule:\n    - cron[^\n]*//' "$workspace/fearless-site-web/.github/workflows/app-association-live-gate.yml"
+perl -0pi -e 's/\n  schedule:\n    - cron[^\n]*//' "$workspace/fearless-site-web-app-associations-20260726/.github/workflows/app-association-live-gate.yml"
 expect_failure "missing website scheduled association live gate" "fearless-site-web scheduled app-association live gate trigger missing"
 
 reset_fixture

@@ -8,7 +8,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 FIXTURE_ROOT="$TMP_DIR/fearless"
 FIXTURE_PARENT="$TMP_DIR"
 
-repos=(fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web fearless-site-web)
+repos=(fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web fearless-site-web-app-associations-20260726)
 siblings=(ton-indexer solswap-indexer polkaswap-indexer)
 
 copy_or_seed_workflows() {
@@ -83,7 +83,7 @@ sed -i.bak 's#actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5#actions/
 expect_failure "floating-tag" "action is not pinned by a full lowercase commit SHA" run_audit
 
 write_fixture
-workflow="$FIXTURE_ROOT/fearless-site-web/.github/workflows/ci.yml"
+workflow="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
 sed -i.bak 's#actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020#actions/setup-node@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#' "$workflow"
 expect_failure "unreviewed-full-sha" "actions/setup-node must use reviewed commit" run_audit
 
@@ -114,7 +114,7 @@ rm -rf "$FIXTURE_PARENT/polkaswap-indexer/.github/workflows"
 expect_failure "missing-workflows" "workflow directory missing or unsafe" run_audit
 
 write_fixture
-target="$FIXTURE_ROOT/fearless-site-web/.github/workflows/ci.yml"
+target="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
 rm "$target"
 ln -s /etc/passwd "$target"
 expect_failure "workflow-symlink" "workflow must be a regular non-symlink file" run_audit

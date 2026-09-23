@@ -1458,7 +1458,7 @@ JSON
 fearless-Android-production-consolidated-20260731	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260
 fearless-iOS-production-consolidated-20260731	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304
 fearless-wallet-web	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062
-fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	45
+fearless-site-web-app-associations-20260726	soramitsu/fearless-site-web	fix/app-association-publication	develop	49
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
 ../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16
 ../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1
@@ -1486,7 +1486,7 @@ const configured = [
   ['fearless-Android-production-consolidated-20260731', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', 1260],
   ['fearless-iOS-production-consolidated-20260731', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', 1304],
   ['fearless-wallet-web', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-canonical-indexer-evidence', 'develop', 1062],
-  ['fearless-site-web', 'soramitsu/fearless-site-web', 'codex/site-todo-debt-baseline-hardening', 'develop', 45],
+  ['fearless-site-web-app-associations-20260726', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', 49],
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', 16],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', 1],
@@ -2552,7 +2552,7 @@ if (!passkeySmokeBlocker?.passkeyProductionContractHandoff?.requiredContracts?.i
 if (!passkeySmokeBlocker?.passkeyProductionContractHandoff?.requiredContracts?.includes('production Docker Compose must keep PASSKEY_ALLOWED_ORIGINS pinned to fearlesswallet.io and backup.fearlesswallet.io')) {
   throw new Error('missing passkey production compose origins requirement')
 }
-if (!passkeySmokeBlocker?.passkeyProductionContractHandoff?.verificationCommands?.includes('PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io')) {
+if (!passkeySmokeBlocker?.passkeyProductionContractHandoff?.verificationCommands?.includes('PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io')) {
   throw new Error('missing passkey production contract prerequisite verification command')
 }
 if (!passkeySmokeBlocker?.passkeyProductionContractHandoff?.requiredContracts?.includes('production config request authorization must atomically consume one-time bearer grants, bind the exact body digest, fail closed, and prohibit raw platform account identifiers')) {

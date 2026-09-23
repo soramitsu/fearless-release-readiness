@@ -389,7 +389,7 @@ const fs = require('fs')
 const file = process.argv[2]
 const target = `
     passkey-backup-prerequisites)
-      printf '%s' "PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io"
+      printf '%s' "PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io"
       ;;`
 let text = fs.readFileSync(file, 'utf8')
 if (!text.includes(target)) throw new Error('passkey-backup-prerequisites command arm missing from fixture')

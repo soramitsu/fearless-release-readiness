@@ -13,7 +13,7 @@ const EXPECTED_REPOSITORIES = new Map([
   ['fearless-Android-production-consolidated-20260731', { repository: 'soramitsu/fearless-Android', head: 'codex/android-production-consolidated-20260731', base: 'develop', prNumber: 1260 }],
   ['fearless-iOS-production-consolidated-20260731', { repository: 'soramitsu/fearless-iOS', head: 'codex/testflight-redesign-2026.8.17', base: 'develop', prNumber: 1304 }],
   ['fearless-wallet-web', { repository: 'soramitsu/fearless-wallet-web', head: 'codex/web-bitcoin-canonical-indexer-evidence', base: 'develop', prNumber: 1062 }],
-  ['fearless-site-web', { repository: 'soramitsu/fearless-site-web', head: 'codex/site-todo-debt-baseline-hardening', base: 'develop', prNumber: 45 }],
+  ['fearless-site-web-app-associations-20260726', { repository: 'soramitsu/fearless-site-web', head: 'fix/app-association-publication', base: 'develop', prNumber: 49 }],
   ['../ton-indexer', { repository: 'tonswap-org/ton-indexer', head: 'codex/ti-smoke-body-preview-tests', base: 'develop', prNumber: 13 }],
   ['../solswap-indexer', { repository: 'solswap-io/solswap-indexer', head: 'codex/si-smoke-body-preview-tests', base: 'develop', prNumber: 16 }],
   ['../polkaswap-indexer', { repository: 'sora-xor/polkaswap-indexer', head: 'codex/pi-deployment-evidence-gate', base: 'develop', prNumber: 1 }],
@@ -89,7 +89,7 @@ const WORKSPACE_NESTED_REPOSITORIES = [
   'fearless-Android-production-consolidated-20260731',
   'fearless-iOS-production-consolidated-20260731',
   'fearless-wallet-web',
-  'fearless-site-web',
+  'fearless-site-web-app-associations-20260726',
 ];
 const SOURCE_PHASES = new Set(['standalone', 'preflight', 'postflight']);
 const MAX_PREFLIGHT_AGE_MS = 6 * 60 * 60 * 1000;
@@ -1292,7 +1292,7 @@ function isAllowedIgnoredPath(source, ignoredPath) {
       'vendor/bundle',
     ],
     'fearless-wallet-web': ['node_modules'],
-    'fearless-site-web': ['node_modules'],
+    'fearless-site-web-app-associations-20260726': ['node_modules'],
     '../ton-indexer': ['node_modules'],
     '../solswap-indexer': ['node_modules'],
     '../polkaswap-indexer': ['node_modules'],
@@ -1312,7 +1312,7 @@ function isAllowedPostflightGeneratedPath(source, ignoredPath) {
     '.': ['build', 'services/passkey-backup-challenge-service/build'],
     'fearless-iOS-production-consolidated-20260731': ['build'],
     'fearless-wallet-web': ['build', 'coverage', 'dist'],
-    'fearless-site-web': ['.nuxt', '.output'],
+    'fearless-site-web-app-associations-20260726': ['.nuxt', '.output'],
     '../ton-indexer': ['build', 'dist'],
     '../solswap-indexer': ['build', 'dist'],
     '../polkaswap-indexer': ['build', 'dist'],

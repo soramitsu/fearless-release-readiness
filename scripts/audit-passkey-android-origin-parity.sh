@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ASSOCIATION_FILE="${PASSKEY_ANDROID_ASSOCIATION_FILE:-$ROOT_DIR/fearless-site-web/src/public/.well-known/assetlinks.json}"
+ASSOCIATION_FILE="${PASSKEY_ANDROID_ASSOCIATION_FILE:-$ROOT_DIR/fearless-site-web-app-associations-20260726/src/public/.well-known/assetlinks.json}"
 EVIDENCE_FILE="${PASSKEY_DEPLOYMENT_EVIDENCE_FILE:-$ROOT_DIR/services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json}"
 CONFIG_FILE="${PASSKEY_BACKUP_PRODUCTION_CONFIG_FILE:-$ROOT_DIR/config/passkey-backup-production.json}"
 APK_EVIDENCE_HELPER="$ROOT_DIR/scripts/extract-android-apk-signer-evidence.mjs"

@@ -30,7 +30,7 @@ write_config() {
     printf 'fearless-Android\texample/android\ttopic\tdevelop\t1\n'
     printf 'fearless-iOS\texample/ios\ttopic\tdevelop\t2\n'
     printf 'fearless-wallet-web\texample/wallet\ttopic\tdevelop\t3\n'
-    printf 'fearless-site-web\texample/site\ttopic\tdevelop\t4\n'
+    printf 'fearless-site-web-app-associations-20260726\texample/site\ttopic\tdevelop\t4\n'
     printf '../ton-indexer\texample/ton\ttopic\tdevelop\t5\n'
     printf '../solswap-indexer\texample/sol\ttopic\tdevelop\t6\n'
     printf '../polkaswap-indexer\texample/polka\ttopic\tdevelop\t7\n'
@@ -55,7 +55,7 @@ make_fixture() {
     fearless-Android \
     fearless-iOS \
     fearless-wallet-web \
-    fearless-site-web \
+    fearless-site-web-app-associations-20260726 \
     ../ton-indexer \
     ../solswap-indexer \
     ../polkaswap-indexer; do
@@ -139,7 +139,7 @@ manifest="$quarantine_root/manifest.json"
 [[ -L "$quarantine_root/fearless-Android/ignored/external-link" ]] || fail 'internal symlink was followed or lost'
 [[ "$(sha256_of "$OUTSIDE/shared.txt")" == "$outside_sha" ]] || fail 'external symlink target content changed'
 [[ "$(mode_of "$OUTSIDE/shared.txt")" == "$outside_mode" ]] || fail 'external/hardlink peer permissions changed'
-for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
+for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
   [[ "$("$GIT_BIN" -C "$ROOT/$repository" ls-files --others --ignored --exclude-standard --directory -z | tr -cd '\0' | wc -c | tr -d ' ')" == 0 ]] || fail "$repository retained ignored outputs"
 done
 [[ "$(sha256_of "$OUTSIDE/iroha-target/sentinel.txt")" == "$iroha_before" ]] || fail 'apply touched Iroha sentinel'
@@ -156,7 +156,7 @@ expect_failure automatic_rollback 'completed moves were rolled back' \
 rollback_manifest="$(find "$ROOT/build/quarantine" -name manifest.json -print | sort | tail -n 1)"
 [[ "$(jq -r '.status' "$rollback_manifest")" == rolled-back ]] || fail 'automatic rollback manifest is not complete'
 [[ "$(jq '[.entries[] | select(.status == "rolled-back")] | length' "$rollback_manifest")" == 2 ]] || fail 'automatic rollback count mismatch'
-for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
+for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
   [[ -d "$ROOT/$repository/ignored" ]] || fail "automatic rollback lost $repository output"
 done
 

@@ -320,7 +320,7 @@ if [[ "$TEST_MODE" == "1" ]]; then
     "$ROOT_DIR/fearless-Android" \
     "$ROOT_DIR/fearless-iOS" \
     "$ROOT_DIR/fearless-wallet-web" \
-    "$ROOT_DIR/fearless-site-web" \
+    "$ROOT_DIR/fearless-site-web-app-associations-20260726" \
     "$ROOT_DIR/services/passkey-backup-challenge-service" \
     "$PARENT_DIR/ton-indexer" \
     "$PARENT_DIR/solswap-indexer" \
@@ -698,7 +698,7 @@ const preflightGeneratedAtMs = Date.parse(preflight.generatedAt)
 const postflightGeneratedAtMs = Date.parse(report.generatedAt)
 const preflightAgeMs = postflightGeneratedAtMs - preflightGeneratedAtMs
 const sharedReportFields = ['workspaceRoot', 'workspaceParent', 'configFile', 'rootOwnerConfigFile', 'releasePrConfigFile']
-const expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha']
+const expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web-app-associations-20260726', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha']
 if (process.env.RELEASE_READINESS_TEST_MODE !== '1') {
   expectedSourcePaths[1] = 'fearless-Android-production-consolidated-20260731'
   expectedSourcePaths[2] = 'fearless-iOS-production-consolidated-20260731'
@@ -875,7 +875,7 @@ recommended_action_for_slug() {
       printf '%s' "Record the passkey backup image digest, deployment ID, operator, healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1, durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json, WebAuthn origin allowlist, fail-closed request-access policy, trusted-proxy policy, platform provisioning evidence, and successful smoke timestamp. Independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate, set PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate to identify the source, and prove the derived origin matches assetlinks; AAB upload-key evidence is rejected and absence or mismatch keeps passkey flags disabled. Then rerun npm run audit:deployment-evidence -- --require-ready in services/passkey-backup-challenge-service and bash scripts/audit-passkey-android-origin-parity.sh --require-ready from the workspace root."
       ;;
     passkey-backup-prerequisites)
-      printf '%s' "Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS and require live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1. Deploy https://fearlesswallet.io association files so the strict site verifier observes exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects. Keep Android/iOS passkey backup flags disabled until health, site associations, and platform provisioning pass, then rerun PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io."
+      printf '%s' "Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS and require live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1. Deploy https://fearlesswallet.io association files so the strict site verifier observes exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects. Keep Android/iOS passkey backup flags disabled until health, site associations, and platform provisioning pass, then rerun PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io."
       ;;
     passkey-production-smoke)
       printf '%s' "Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS. Provision PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper as a readable executable that issues single-use bearer grants for the exact smoke requests, then run the passkey production smoke to verify health, all four ceremony routes, and credential list/revoke/revoke-all contracts without persisting a test credential or creating an owner record."
@@ -953,7 +953,7 @@ verification_command_for_slug() {
       printf '%s' "cd services/passkey-backup-challenge-service && npm run audit:deployment-evidence -- --require-ready && cd ../.. && bash scripts/audit-passkey-android-origin-parity.sh --require-ready"
       ;;
     passkey-backup-prerequisites)
-      printf '%s' "PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io"
+      printf '%s' "PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io"
       ;;
     passkey-production-smoke)
       printf '%s' "cd services/passkey-backup-challenge-service && PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production"
@@ -2276,14 +2276,14 @@ run_passkey_deployment_evidence() {
     PASSKEY_DEPLOYMENT_EVIDENCE_ROOT="$ROOT_DIR/services/passkey-backup-challenge-service" \
       PASSKEY_DEPLOYMENT_GH_BIN="$RELEASE_GH_BIN" \
       "$NPM_BIN" run audit:deployment-evidence -- --require-ready
-    PASSKEY_ANDROID_ASSOCIATION_FILE="$ROOT_DIR/fearless-site-web/src/public/.well-known/assetlinks.json" \
+    PASSKEY_ANDROID_ASSOCIATION_FILE="$ROOT_DIR/fearless-site-web-app-associations-20260726/src/public/.well-known/assetlinks.json" \
       PASSKEY_DEPLOYMENT_EVIDENCE_FILE="$ROOT_DIR/services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json" \
       PASSKEY_BACKUP_PRODUCTION_CONFIG_FILE="$ROOT_DIR/config/passkey-backup-production.json" \
       "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh" --require-ready
   else
     PASSKEY_DEPLOYMENT_EVIDENCE_ROOT="$ROOT_DIR/services/passkey-backup-challenge-service" \
       "$NPM_BIN" run audit:deployment-evidence
-    PASSKEY_ANDROID_ASSOCIATION_FILE="$ROOT_DIR/fearless-site-web/src/public/.well-known/assetlinks.json" \
+    PASSKEY_ANDROID_ASSOCIATION_FILE="$ROOT_DIR/fearless-site-web-app-associations-20260726/src/public/.well-known/assetlinks.json" \
       PASSKEY_DEPLOYMENT_EVIDENCE_FILE="$ROOT_DIR/services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json" \
       PASSKEY_BACKUP_PRODUCTION_CONFIG_FILE="$ROOT_DIR/config/passkey-backup-production.json" \
       "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh"
@@ -2295,8 +2295,8 @@ run_passkey_prerequisites() {
   if [[ "$RUN_LIVE" == true ]]; then
     PASSKEY_AUDIT_ROOT="$ROOT_DIR" PASSKEY_BACKUP_LIVE_HEALTH=1 \
       "$ROOT_DIR/scripts/audit-passkey-backup-prerequisites.sh" || status=$?
-    "$NODE_BIN" "$ROOT_DIR/fearless-site-web/scripts/verify-app-associations.mjs" \
-      --root "$ROOT_DIR/fearless-site-web" \
+    "$NODE_BIN" "$ROOT_DIR/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs" \
+      --root "$ROOT_DIR/fearless-site-web-app-associations-20260726" \
       --live-base-url https://fearlesswallet.io || {
       local site_status=$?
       if [[ "$status" -eq 0 ]]; then

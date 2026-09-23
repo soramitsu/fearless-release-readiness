@@ -57,7 +57,7 @@ write_source_config() {
     $'fearless-Android-production-consolidated-20260731\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260' \
     $'fearless-iOS-production-consolidated-20260731\tsoramitsu/fearless-iOS\tcodex/testflight-redesign-2026.8.17\tdevelop\t1304' \
     $'fearless-wallet-web\tsoramitsu/fearless-wallet-web\tcodex/web-bitcoin-canonical-indexer-evidence\tdevelop\t1062' \
-    $'fearless-site-web\tsoramitsu/fearless-site-web\tcodex/site-todo-debt-baseline-hardening\tdevelop\t45' \
+    $'fearless-site-web-app-associations-20260726\tsoramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\t49' \
     $'../ton-indexer\ttonswap-org/ton-indexer\tcodex/ti-smoke-body-preview-tests\tdevelop\t13' \
     $'../solswap-indexer\tsolswap-io/solswap-indexer\tcodex/si-smoke-body-preview-tests\tdevelop\t16' \
     $'../polkaswap-indexer\tsora-xor/polkaswap-indexer\tcodex/pi-deployment-evidence-gate\tdevelop\t1' \
@@ -72,7 +72,7 @@ write_release_config() {
     $'soramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\tmerged\tvalidate' \
     $'soramitsu/fearless-iOS\tcodex/testflight-redesign-2026.8.17\tdevelop\tmerged\tvalidate' \
     $'soramitsu/fearless-wallet-web\tcodex/web-bitcoin-canonical-indexer-evidence\tdevelop\tmerged\tvalidate' \
-    $'soramitsu/fearless-site-web\tcodex/site-todo-debt-baseline-hardening\tdevelop\tmerged\tvalidate' \
+    $'soramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\tmerged\tvalidate' \
     $'tonswap-org/ton-indexer\tcodex/ti-smoke-body-preview-tests\tdevelop\tmerged\tvalidate' \
     $'solswap-io/solswap-indexer\tcodex/si-smoke-body-preview-tests\tdevelop\tmerged\tvalidate' \
     $'sora-xor/polkaswap-indexer\tcodex/pi-deployment-evidence-gate\tdevelop\tmerged\tvalidate' \
@@ -180,7 +180,7 @@ printf '%s\n' \
   '/fearless-Android-production-consolidated-20260731/' \
   '/fearless-iOS-production-consolidated-20260731/' \
   '/fearless-wallet-web/' \
-  '/fearless-site-web/' > "$ROOT/.gitignore"
+  '/fearless-site-web-app-associations-20260726/' > "$ROOT/.gitignore"
 
 "$REAL_GIT" -C "$ROOT" init -q -b codex/root-release
 "$REAL_GIT" -C "$ROOT" config user.name 'Release Test'
@@ -195,7 +195,7 @@ printf '%s\n' \
 init_repo "$ROOT/fearless-Android-production-consolidated-20260731" soramitsu/fearless-Android codex/android-production-consolidated-20260731
 init_repo "$ROOT/fearless-iOS-production-consolidated-20260731" soramitsu/fearless-iOS codex/testflight-redesign-2026.8.17
 init_repo "$ROOT/fearless-wallet-web" soramitsu/fearless-wallet-web codex/web-bitcoin-canonical-indexer-evidence
-init_repo "$ROOT/fearless-site-web" soramitsu/fearless-site-web codex/site-todo-debt-baseline-hardening
+init_repo "$ROOT/fearless-site-web-app-associations-20260726" soramitsu/fearless-site-web fix/app-association-publication
 init_repo "$PARENT/ton-indexer" tonswap-org/ton-indexer codex/ti-smoke-body-preview-tests
 init_repo "$PARENT/solswap-indexer" solswap-io/solswap-indexer codex/si-smoke-body-preview-tests
 init_repo "$PARENT/polkaswap-indexer" sora-xor/polkaswap-indexer codex/pi-deployment-evidence-gate
@@ -247,7 +247,7 @@ printf '%s\n' \
   '    soramitsu/fearless-Android) repo_path="$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731" ;;' \
   '    soramitsu/fearless-iOS) repo_path="$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731" ;;' \
   '    soramitsu/fearless-wallet-web) repo_path="$FIXTURE_ROOT/fearless-wallet-web" ;;' \
-  '    soramitsu/fearless-site-web) repo_path="$FIXTURE_ROOT/fearless-site-web" ;;' \
+  '    soramitsu/fearless-site-web) repo_path="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726" ;;' \
   '    tonswap-org/ton-indexer) repo_path="$FIXTURE_PARENT/ton-indexer" ;;' \
   '    solswap-io/solswap-indexer) repo_path="$FIXTURE_PARENT/solswap-indexer" ;;' \
   '    sora-xor/polkaswap-indexer) repo_path="$FIXTURE_PARENT/polkaswap-indexer" ;;' \
@@ -278,7 +278,7 @@ printf '%s\n' \
   '  repos/soramitsu/fearless-Android/pulls/1260) repository=soramitsu/fearless-Android; repo_path="$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731"; head=codex/android-production-consolidated-20260731; base=develop; number=1260 ;;' \
   '  repos/soramitsu/fearless-iOS/pulls/1304) repository=soramitsu/fearless-iOS; repo_path="$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731"; head=codex/testflight-redesign-2026.8.17; base=develop; number=1304 ;;' \
   '  repos/soramitsu/fearless-wallet-web/pulls/1062) repository=soramitsu/fearless-wallet-web; repo_path="$FIXTURE_ROOT/fearless-wallet-web"; head=codex/web-bitcoin-canonical-indexer-evidence; base=develop; number=1062 ;;' \
-  '  repos/soramitsu/fearless-site-web/pulls/45) repository=soramitsu/fearless-site-web; repo_path="$FIXTURE_ROOT/fearless-site-web"; head=codex/site-todo-debt-baseline-hardening; base=develop; number=45 ;;' \
+  '  repos/soramitsu/fearless-site-web/pulls/49) repository=soramitsu/fearless-site-web; repo_path="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726"; head=fix/app-association-publication; base=develop; number=49 ;;' \
   '  repos/tonswap-org/ton-indexer/pulls/13) repository=tonswap-org/ton-indexer; repo_path="$FIXTURE_PARENT/ton-indexer"; head=codex/ti-smoke-body-preview-tests; base=develop; number=13 ;;' \
   '  repos/solswap-io/solswap-indexer/pulls/16) repository=solswap-io/solswap-indexer; repo_path="$FIXTURE_PARENT/solswap-indexer"; head=codex/si-smoke-body-preview-tests; base=develop; number=16 ;;' \
   '  repos/sora-xor/polkaswap-indexer/pulls/1) repository=sora-xor/polkaswap-indexer; repo_path="$FIXTURE_PARENT/polkaswap-indexer"; head=codex/pi-deployment-evidence-gate; base=develop; number=1 ;;' \
@@ -631,15 +631,15 @@ rm "$ROOT/fearless-wallet-web/ignored-generated.ts"
 cp "$TMP_DIR/wallet-info-exclude" "$ROOT/fearless-wallet-web/.git/info/exclude"
 
 printf '%s\n' 'external source' > "$TMP_DIR/external-source.txt"
-ln -s "$TMP_DIR/external-source.txt" "$ROOT/fearless-site-web/escaping-source-link"
-"$REAL_GIT" -C "$ROOT/fearless-site-web" add escaping-source-link
+ln -s "$TMP_DIR/external-source.txt" "$ROOT/fearless-site-web-app-associations-20260726/escaping-source-link"
+"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" add escaping-source-link
 expect_failure escaping-tracked-symlink 'tracked symlinks escape the repository root' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-site-web" restore --staged escaping-source-link
-rm "$ROOT/fearless-site-web/escaping-source-link"
+"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" restore --staged escaping-source-link
+rm "$ROOT/fearless-site-web-app-associations-20260726/escaping-source-link"
 
-"$REAL_GIT" -C "$ROOT/fearless-site-web" checkout -q --detach
+"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" checkout -q --detach
 expect_failure detached 'HEAD is detached' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-site-web" checkout -q codex/site-todo-debt-baseline-hardening
+"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" checkout -q fix/app-association-publication
 
 "$REAL_GIT" -C "$PARENT/ton-indexer" checkout -q -b wrong-branch
 expect_failure wrong-branch 'current branch mismatch' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"

@@ -17,7 +17,7 @@ const REPOSITORIES = Object.freeze([
   'fearless-Android',
   'fearless-iOS',
   'fearless-wallet-web',
-  'fearless-site-web',
+  'fearless-site-web-app-associations-20260726',
   '../ton-indexer',
   '../solswap-indexer',
   '../polkaswap-indexer',
