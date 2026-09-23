@@ -77,6 +77,46 @@ unknown commit outcome, and multi-process writers. Verify every historical
 credential still signs or exports the original key after an exact signed app
 upgrade. None of those acceptance results exists for this cutover yet.
 
+## Pending challenge and credential-scope contract
+
+The JSON service's registration and assertion completion bodies contain only a
+challenge ID and public WebAuthn response. They do not establish the wallet
+storage key, chosen credential, random owner or platform. Before those routes
+can switch, the SQLite writer must issue and durably claim a versioned,
+single-use pending challenge containing the exact storage key, random owner,
+owner generation, platform, nonce, expiry, expected per-key WebAuthn user
+handle and (for a credential-directed assertion) allowed credential ID. Claim
+must commit before asynchronous WebAuthn work. Verification must use that
+record's nonce and qualified origin; completion must recheck the claimed row,
+session, grant, owner generation, credential public key/handle/counter and
+storage-key mapping under one SQLite writer lock before consuming the grant
+and committing the mutation. A null response user handle is admissible only
+when the claimed challenge already names the same credential ID. An ID supplied
+by an adapter without the claimed server record is insufficient.
+
+The current HTTP registration challenge derives its user handle by hashing
+the UTF-8 bytes `user`, one NUL byte, then the storage key. Owner-native
+enrollment instead uses a random owner handle. A proven legacy-key
+registration needs the deterministic handle
+and an atomic credential-to-key mapping with its verified public metadata.
+The current v3 `legacy_credential_metadata` table can retain imported
+historical rows, but a reviewed versioned credential-scope model must also
+classify post-cutover credentials as wallet-key-scoped or owner-wide. A
+wallet-key revoke-all may change only credentials mapped to that key; an
+owner-wide recovery credential must remain outside that route. Before such a
+model exists, the current internal mutation rejects an ambiguous revoke-all
+when it sees a live unmapped owner credential. That conservative rejection is
+not completion of the route.
+
+A previously unseen wallet storage key cannot be assigned to a random owner
+from `walletId`, account name, Google identity or a completion body's
+credential ID. Its creation needs a separate verified wallet-possession and
+owner-binding ceremony. For a proven key, unknown or already-revoked
+credential IDs may retain the old route's idempotent no-op behavior without a
+final-route confirmation. Any live removal still requires explicit true
+confirmation. An unbound storage key must fail closed until a reviewed
+authorization and tombstone policy defines its behavior.
+
 ## Current protocol fence
 
 The owner core's `consumeGrant` now returns
