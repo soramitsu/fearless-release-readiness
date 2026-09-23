@@ -119,7 +119,7 @@ The first exact-head CI runs exposed a missing iOS signing-test fixture dSYM han
 
 The source-publication gate now selects the consolidated Android/iOS checkout paths and iOS PR #1304. Its 84 adversarial fixtures passed after the checkout selection change. A real remote audit at `build/reports/source-publication-current-20260923.json` confirmed the new paths and PRs, then correctly failed on open reviews, root/unrelated dirty repositories and generated outputs. The aggregate audit's execution roots and preflight/postflight path classifier now select the same production candidates; the rest of the full-live gate remains blocked. A single final release manifest binding all source, dependency, route, artifact and evidence digests still has to be completed.
 
-The release-bundle exporter and verifier now bind the same consolidated mobile source/PR identities. Their Iroha source-publication row still points to a historical review branch; it must be replaced with an `optimizations`-only source contract before a production audit can pass. The root PR's exact-head review pin also cannot be embedded in its own final commit without a detached, reviewed manifest. Both are fail-closed manifest-design work, not grounds to accept a stale pin.
+The release-bundle exporter and verifier now bind the same consolidated mobile source/PR identities. Their Iroha source-publication row selects only the existing `optimizations` branch and rejects historical topic PRs. The exact-commit reviewed/protected policy for that branch is still unavailable, so the gate deliberately fails. The root PR's exact-head review pin also cannot be embedded in its own final commit without a detached, reviewed manifest. Both are fail-closed manifest-design work, not grounds to accept a stale pin.
 
 ## Earlier candidate and enabled-feature checkpoint — 2026-09-23
 
@@ -325,6 +325,18 @@ pass bundled SwiftFormat and strict SwiftLint. Receipt:
 SHA-256 `366a545acd27e95a7324a093a2c6ee8600586307698f5569abf5c910045012ec`.
 Hosted CI and independent review are pending for this exact head. The verifier
 remains a test fixture, and portable recovery remains disabled.
+
+Android source `97bf278870b77a37697965d946a664427d310d3f` is now pushed on
+the same production candidate branch. The preceding full hosted run reached
+Android 11 migration setup, then rejected the emulator process group before
+running migration tests. Its archived log shows the captured emulator process
+had started and initialized; a one-shot PGID sample may have raced `setsid`.
+The launcher now waits at most ten seconds for the captured PID to become its
+own group leader, fails if it exits or stays in the wrong group, and records
+the observed PID/PGID. The CI gate's one positive and 106 negative/adversarial
+local fixtures pass, as do shell syntax and the direct gate verifier. The
+exact-head hosted emulator run is still in progress, so this does not yet
+establish Android 11/12/16 migration evidence or a distributed build.
 
 ## Owner backup-head authorization — 2026-09-23
 
