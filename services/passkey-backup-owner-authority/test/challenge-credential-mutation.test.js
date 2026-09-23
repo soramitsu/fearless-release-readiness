@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
+import { readOwnerCredentialSnapshot } from '../src/store.js';
 import { hash } from '../src/validation.js';
 import { assertion, audience, b64, downgradeStoreFixture, register, setup } from './fixtures.js';
 
@@ -17,12 +18,31 @@ const scope = {
   revoke: 'passkey.credentials.revoke',
   revokeAll: 'passkey.credentials.revoke-all',
 };
+const readRoute = {
+  assertionChallenge: '/api/passkey-backup/v1/assertion/challenge',
+  list: '/api/passkey-backup/v1/credentials/list',
+  registrationChallenge: '/api/passkey-backup/v1/registration/challenge',
+};
+const readScope = {
+  assertionChallenge: 'passkey.assertion.challenge',
+  list: 'passkey.credentials.list',
+  registrationChallenge: 'passkey.registration.challenge',
+};
 const denied = (fn, code) => assert.throws(fn, (error) => error?.code === code);
 
 function bound(kind, body) {
   const bytes = Buffer.from(JSON.stringify(body));
   return { bytes, request: { schemaVersion: 1, audience, method: 'POST', path: route[kind],
     bodySha256: hash(bytes), scope: scope[kind] } };
+}
+function boundRead(kind, body) {
+  const bytes = Buffer.from(JSON.stringify(body));
+  return { bytes, request: { schemaVersion: 1, audience, method: 'POST', path: readRoute[kind],
+    bodySha256: hash(bytes), scope: readScope[kind] } };
+}
+function readBody(storageKey = 'storage:wallet-test', credentialId) {
+  return { storageKey, rpId: 'fearlesswallet.io', schemaVersion: 1,
+    ...(credentialId === undefined ? {} : { credentialId }) };
 }
 function registration(id, challengeId = 'reg:test') {
   return bound('registration', { registrationId: challengeId, rpId: 'fearlesswallet.io', credential: register(id) });
@@ -41,7 +61,8 @@ function revokeAll(storageKey = 'storage:wallet-test', confirm = true) {
     rpId: 'fearlesswallet.io', schemaVersion: 1,
     ...(confirm === null ? {} : { confirmFinalRecoveryRemoval: confirm }) });
 }
-function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1) {
+function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1,
+  { transports = null, registrationPlatform = 'android' } = {}) {
   const db = new DatabaseSync(path);
   try {
     db.exec('PRAGMA foreign_keys=ON');
@@ -50,15 +71,16 @@ function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1) {
       storageKey, owner.subject, b64(seed), Buffer.alloc(32, seed).toString('hex'),
       Buffer.alloc(32, seed + 20).toString('hex'), 1);
     db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
-      credentialId, storageKey, '00000000-0000-0000-0000-000000000000', null, 'android');
+      credentialId, storageKey, '00000000-0000-0000-0000-000000000000',
+      transports === null ? null : JSON.stringify(transports), registrationPlatform);
   } finally { db.close(); }
 }
-function bindStorageKey(path, owner, storageKey = 'storage:wallet-test') {
+function bindStorageKey(path, owner, storageKey = 'storage:wallet-test', seed = 1) {
   const db = new DatabaseSync(path);
   try {
     db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(storageKey,
-      owner.subject, b64(1), Buffer.alloc(32, 1).toString('hex'),
-      Buffer.alloc(32, 21).toString('hex'), 1);
+      owner.subject, b64(seed), Buffer.alloc(32, seed).toString('hex'),
+      Buffer.alloc(32, seed + 20).toString('hex'), 1);
   } finally { db.close(); }
 }
 function claimedRegistration(core, owner, id, storageKey = 'storage:wallet-test') {
@@ -640,6 +662,148 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   assert.equal(row(path, id).counter, 2);
   const restarted = open();
   denied(() => restarted.consumeGrant(second.token, secondAttempt.body.request), 'authorization_failed');
+});
+
+test('internal grant-bound credential list preserves exact v4 public metadata after explicit v5 migration', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id, 1,
+    { transports: ['internal', 'hybrid'], registrationPlatform: 'ios' });
+  const ownerWide = b64(57);
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+      ownerWide, owner.subject, b64(31), b64(58), 0, 'multiDevice', 1);
+  } finally { db.close(); }
+  core.close();
+  downgradeStoreFixture(path, 4);
+  const before = readOwnerCredentialSnapshot(path);
+  const migrated = open({ migrate: true });
+  const after = readOwnerCredentialSnapshot(path);
+  assert.deepEqual(after.credentials, before.credentials);
+  assert.deepEqual(after.legacyCredentialMetadata, before.legacyCredentialMetadata);
+  assert.deepEqual(after.storageBindings, before.storageBindings);
+  assert.deepEqual(after.credentialScopes, before.credentialScopes);
+  const body = boundRead('list', readBody());
+  const grant = migrated.issueGrant(owner.sessionToken, body.request);
+  assert.deepEqual(migrated.commitChallengeReadRoute(owner.sessionToken, grant.token, body.request, body.bytes), {
+    storageKey: 'storage:wallet-test',
+    credentials: [{ id, aaguid: '00000000-0000-0000-0000-000000000000',
+      registrationPlatform: 'ios', deviceType: 'multiDevice', backedUp: true,
+      transports: ['internal', 'hybrid'] }],
+    rpId: 'fearlesswallet.io', schemaVersion: 1,
+  });
+  denied(() => migrated.commitChallengeReadRoute(owner.sessionToken, grant.token, body.request, body.bytes),
+    'authorization_failed');
+  assert.deepEqual(readOwnerCredentialSnapshot(path).credentials, before.credentials);
+});
+
+test('internal assertion challenge consumes its grant with durable pending issuance and exact credential scope', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const body = boundRead('assertionChallenge', readBody('storage:wallet-test', id));
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  const issued = core.commitChallengeReadRoute(owner.sessionToken, grant.token, body.request, body.bytes);
+  assert.equal(issued.storageKey, 'storage:wallet-test');
+  assert.equal(issued.credentialId, id);
+  assert.equal(issued.rpId, 'fearlesswallet.io');
+  assert.equal(issued.schemaVersion, 1);
+  assert.equal(issued.assertionId.startsWith('pending.'), true);
+  denied(() => core.commitChallengeReadRoute(owner.sessionToken, grant.token, body.request, body.bytes),
+    'authorization_failed');
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    assert.deepEqual({ ...db.prepare('SELECT storage_key,owner,nonce,directed_credential_id,claimed FROM pending_challenges WHERE id=?')
+      .get(issued.assertionId) }, {
+      storage_key: 'storage:wallet-test', owner: owner.subject, nonce: issued.challenge,
+      directed_credential_id: id, claimed: 0,
+    });
+  } finally { db.close(); }
+  core.close();
+  const restarted = open();
+  const completion = assertionRequest(id, null, issued.assertionId);
+  restarted.claimChallengeCredentialMutation(owner.sessionToken, completion.request, completion.bytes);
+  const completeGrant = restarted.issueGrant(owner.sessionToken, completion.request);
+  assert.equal(restarted.commitChallengeCredentialMutation(completeGrant.token, completion.request, completion.bytes, {
+    challengeNonce: issued.challenge, platform: 'android', expectedCounter: 0,
+    newCounter: 1, deviceType: 'multiDevice', backedUp: true,
+  }).counter, 1);
+  assert.equal(row(path, id).counter, 1);
+});
+
+test('credential list refuses missing historical public metadata without spending its grant', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const body = boundRead('list', readBody());
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  const db = new DatabaseSync(path);
+  try {
+    // A damaged store cannot silently degrade the historical credential list.
+    db.exec('DROP TRIGGER legacy_credential_metadata_no_delete');
+    db.prepare('DELETE FROM legacy_credential_metadata WHERE credential_id=?').run(b64(2));
+  } finally { db.close(); }
+  denied(() => core.commitChallengeReadRoute(owner.sessionToken, grant.token,
+    body.request, body.bytes), 'store_invalid');
+  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
+});
+
+test('read-route grants reject wrong body, owner session, wallet key and unavailable registration admission', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const first = (await bootstrap()).owner;
+  const second = (await bootstrap(core, b64(3), b64(5))).owner;
+  bindLegacyCredential(path, first, 'storage:wallet-test', b64(2));
+  bindStorageKey(path, first, 'storage:empty-tombstone', 2);
+  const listed = boundRead('list', readBody());
+  const listGrant = core.issueGrant(first.sessionToken, listed.request);
+  const substituted = boundRead('list', readBody('storage:empty-tombstone'));
+  denied(() => core.commitChallengeReadRoute(first.sessionToken, listGrant.token,
+    listed.request, substituted.bytes), 'invalid_request');
+  denied(() => core.commitChallengeReadRoute(second.sessionToken, listGrant.token,
+    listed.request, listed.bytes), 'authorization_failed');
+  assert.equal(core.commitChallengeReadRoute(first.sessionToken, listGrant.token,
+    listed.request, listed.bytes).credentials.length, 1);
+  const tombstone = boundRead('list', readBody('storage:empty-tombstone'));
+  const tombstoneGrant = core.issueGrant(first.sessionToken, tombstone.request);
+  assert.deepEqual(core.commitChallengeReadRoute(first.sessionToken, tombstoneGrant.token,
+    tombstone.request, tombstone.bytes).credentials, []);
+  const missing = boundRead('assertionChallenge', readBody('storage:empty-tombstone'));
+  const missingGrant = core.issueGrant(first.sessionToken, missing.request);
+  denied(() => core.commitChallengeReadRoute(first.sessionToken, missingGrant.token,
+    missing.request, missing.bytes), 'credential_not_registered');
+  assert.equal(core.consumeGrant(missingGrant.token, missing.request).active, true);
+  const unknown = boundRead('list', readBody('storage:unproven-wallet'));
+  const unknownGrant = core.issueGrant(first.sessionToken, unknown.request);
+  denied(() => core.commitChallengeReadRoute(first.sessionToken, unknownGrant.token,
+    unknown.request, unknown.bytes), 'authorization_failed');
+  assert.equal(core.consumeGrant(unknownGrant.token, unknown.request).active, true);
+  const registration = boundRead('registrationChallenge', {
+    walletId: 'wallet:test', accountName: 'user@example.org', displayName: 'Test',
+    rpId: 'fearlesswallet.io', schemaVersion: 1,
+  });
+  const registrationGrant = core.issueGrant(first.sessionToken, registration.request);
+  denied(() => core.commitChallengeReadRoute(first.sessionToken, registrationGrant.token,
+    registration.request, registration.bytes), 'invalid_request');
+  assert.equal(core.consumeGrant(registrationGrant.token, registration.request).active, true);
+});
+
+test('separate SQLite writers cannot issue two assertion challenges from one grant', async (t) => {
+  const { core, path, clock, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const body = boundRead('assertionChallenge', readBody());
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  const jobs = await Promise.all([0, 1].map(() => child({ action: 'commit-read-route',
+    path, audience, wall: clock.wall, sessionToken: owner.sessionToken, grantToken: grant.token,
+    request: body.request, mutationBody: body.bytes.toString('base64') })));
+  assert.equal(jobs.every((job) => job.code === 0), true, JSON.stringify(jobs));
+  assert.equal(jobs.filter((job) => job.result.accepted).length, 1, JSON.stringify(jobs));
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { assert.equal(db.prepare('SELECT count(*) AS n FROM pending_challenges').get().n, 1); }
+  finally { db.close(); }
 });
 
 test('explicit v1-to-v5 owner migration retains existing credential and permits atomic counter commit', async (t) => {

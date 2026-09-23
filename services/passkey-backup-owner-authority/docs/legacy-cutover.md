@@ -102,6 +102,18 @@ typed public evidence. The live JSON HTTP routes do not call this path, and
 the all-seven-route one-writer composition and independently proven legacy
 owner admission are still required before cutover.
 
+The same non-deployed SQLite core now consumes an exact-body owner grant and
+issues the `assertion/challenge` pending row in one writer transaction for an
+already proven storage key. Its `credentials/list` projection consumes a grant
+in that transaction and returns only live credentials scoped to the key with
+preserved public historical metadata; a bound empty tombstone lists empty.
+The route tests compare explicit v4→v5 metadata preservation and serialize a
+two-process grant race. They use manually seeded proof commitments and do not
+prove any JSON credential was safely assigned to a random owner. The current
+`registration/challenge` body has wallet/account names but no proven owner/key
+link, so this internal route adapter rejects it. All seven live HTTP routes
+still use the JSON service; mixed-mode cutover remains forbidden.
+
 The current HTTP registration challenge derives its user handle by hashing
 the UTF-8 bytes `user`, one NUL byte, then the storage key. Owner-native
 enrollment instead uses a random owner handle. A proven legacy-key

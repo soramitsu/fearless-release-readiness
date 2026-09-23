@@ -204,6 +204,83 @@ function challengeMutationRequest(request, rawBody) {
   }
   deny('invalid_request');
 }
+function challengeReadRequest(request, rawBody) {
+  if (!(rawBody instanceof Uint8Array) || rawBody.byteLength === 0 || rawBody.byteLength > 64 * 1024) deny('invalid_request');
+  const bytes = Buffer.from(rawBody);
+  if (hash(bytes) !== request.bodySha256) deny('invalid_request');
+  let body;
+  try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+  catch { deny('invalid_request'); }
+  const assertion = '/api/passkey-backup/v1/assertion/challenge';
+  const list = '/api/passkey-backup/v1/credentials/list';
+  if (request.path === assertion) {
+    exact(body, Object.hasOwn(body ?? {}, 'credentialId')
+      ? ['storageKey', 'rpId', 'schemaVersion', 'credentialId']
+      : ['storageKey', 'rpId', 'schemaVersion']);
+    if (body.credentialId !== undefined) base64(body.credentialId, 1, 384);
+  } else if (request.path === list) {
+    exact(body, ['storageKey', 'rpId', 'schemaVersion']);
+  } else deny('invalid_request');
+  if (body.rpId !== RP_ID || body.schemaVersion !== 1 ||
+      typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
+  return { kind: request.path === assertion ? 'assertion' : 'list',
+    storageKey: body.storageKey, directedCredentialId: body.credentialId };
+}
+function issuePendingChallenge(tx, current, { kind, storageKey, directedCredentialId }) {
+  boundLegacyStorage(tx, storageKey, current.owner);
+  const owner = activeOwner(tx, current.owner, current.generation);
+  const userHandle = hash(Buffer.from(`user\0${storageKey}`, 'utf8'));
+  if (directedCredentialId) {
+    const credential = activeCredential(tx, directedCredentialId, owner.subject);
+    if (credential.user_handle !== userHandle || !tx.query(
+      "SELECT 1 FROM credential_scopes WHERE credential_id=? AND owner=? AND scope='storage' AND storage_key=?",
+      credential.id, owner.subject, storageKey)) deny();
+  }
+  if (kind === 'assertion' && !tx.query(`SELECT 1 FROM credentials c JOIN credential_scopes s ON s.credential_id=c.id
+    WHERE c.owner=? AND c.revoked=0 AND c.user_handle=? AND s.scope='storage' AND s.storage_key=? LIMIT 1`,
+  owner.subject, userHandle, storageKey)) deny('credential_not_registered');
+  prune(tx);
+  if (tx.query('SELECT count(*) AS n FROM pending_challenges').n >= 256 ||
+      tx.query('SELECT count(*) AS n FROM pending_challenges WHERE owner=?', owner.subject).n >= 8) deny('rate_limited');
+  const id = random('pending.');
+  const nonce = random();
+  const expires = Math.floor(Math.min(current.expires, tx.now + CEREMONY_MS) / 1000) * 1000;
+  if (expires <= tx.now) deny();
+  tx.run('INSERT INTO pending_challenges VALUES(?,1,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL)',
+    id, kind, storageKey, owner.subject, owner.generation,
+    current.digest, current.platform, nonce, expires, userHandle,
+    directedCredentialId ?? null);
+  return { challengeId: id, kind, challenge: nonce, rpId: RP_ID,
+    platform: current.platform, userHandle, directedCredentialId: directedCredentialId ?? null,
+    expiresAt: expires / 1000 };
+}
+function scopedCredentialList(tx, owner, storageKey) {
+  boundLegacyStorage(tx, storageKey, owner);
+  const rows = tx.all(`SELECT c.id,c.device_type,c.backed_up,c.user_handle,
+    m.storage_key AS metadata_storage_key,m.aaguid,m.transports_json,m.registration_platform
+    FROM credentials c JOIN credential_scopes s ON s.credential_id=c.id
+    LEFT JOIN legacy_credential_metadata m ON m.credential_id=c.id
+    WHERE c.owner=? AND c.revoked=0 AND s.scope='storage' AND s.storage_key=? ORDER BY c.id`, owner, storageKey);
+  const expectedHandle = hash(Buffer.from(`user\0${storageKey}`, 'utf8'));
+  return rows.map((row) => {
+    try { base64(row.id, 1, 384); }
+    catch { deny('store_invalid'); }
+    if (row.user_handle !== expectedHandle || row.metadata_storage_key !== storageKey ||
+        typeof row.aaguid !== 'string' ||
+        !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(row.aaguid) ||
+        !['android', 'ios'].includes(row.registration_platform)) deny('store_invalid');
+    let transports;
+    try { transports = row.transports_json === null ? undefined : JSON.parse(row.transports_json); }
+    catch { deny('store_invalid'); }
+    if (transports !== undefined && (!Array.isArray(transports) || transports.length > 7 ||
+        new Set(transports).size !== transports.length ||
+        transports.some((value) => !['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'].includes(value)) ||
+        JSON.stringify(transports) !== row.transports_json)) deny('store_invalid');
+    return { id: row.id, aaguid: row.aaguid, registrationPlatform: row.registration_platform,
+      deviceType: row.device_type, backedUp: row.backed_up === 1,
+      ...(transports === undefined ? {} : { transports }) };
+  });
+}
 function verifiedMutationEvidence(kind, evidence, credentialId, pending, userHandle) {
   if (kind === 'registration') {
     exact(evidence, ['challengeNonce', 'platform', 'credential', 'aaguid', 'transportsJson']);
@@ -352,30 +429,35 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       if (input.kind === 'registration' && input.directedCredentialId !== undefined) deny('invalid_request');
       return store.transaction((tx) => {
         const current = session(tx, sessionToken);
-        boundLegacyStorage(tx, input.storageKey, current.owner);
-        const owner = activeOwner(tx, current.owner, current.generation);
-        const userHandle = hash(Buffer.from(`user\0${input.storageKey}`, 'utf8'));
-        if (input.directedCredentialId) {
-          const credential = activeCredential(tx, input.directedCredentialId, owner.subject);
-          if (credential.user_handle !== userHandle || !tx.query(
-            "SELECT 1 FROM credential_scopes WHERE credential_id=? AND owner=? AND scope='storage' AND storage_key=?",
-            credential.id, owner.subject, input.storageKey)) deny();
-        }
-        prune(tx);
-        if (tx.query('SELECT count(*) AS n FROM pending_challenges').n >= 256 ||
-            tx.query('SELECT count(*) AS n FROM pending_challenges WHERE owner=?', owner.subject).n >= 8) deny('rate_limited');
-        const id = random('pending.');
-        const nonce = random();
-        const expires = Math.floor(Math.min(current.expires, tx.now + CEREMONY_MS) / 1000) * 1000;
-        if (expires <= tx.now) deny();
-        tx.run('INSERT INTO pending_challenges VALUES(?,1,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL)',
-          id, input.kind, input.storageKey, owner.subject, owner.generation,
-          current.digest, current.platform, nonce, expires, userHandle,
-          input.directedCredentialId ?? null);
-        return { challengeId: id, kind: input.kind, challenge: nonce, rpId: RP_ID,
-          platform: current.platform, userHandle, directedCredentialId: input.directedCredentialId ?? null,
-          expiresAt: expires / 1000 };
+        return issuePendingChallenge(tx, current, input);
       });
+    },
+    // Internal candidate for two of the three existing read/challenge routes.
+    // The legacy JSON HTTP service cannot accept this core's grants. A live
+    // composition must cut all seven routes over together after proven import.
+    commitChallengeReadRoute(sessionToken, grantToken, request, rawBody) {
+      const binding = requestBinding(request, audience);
+      const target = challengeReadRequest(binding, rawBody);
+      const committed = store.transaction((tx) => {
+        const { grant, current, owner } = liveGrant(tx, grantToken, binding);
+        if (session(tx, sessionToken).digest !== grant.session) deny();
+        boundLegacyStorage(tx, target.storageKey, owner.subject);
+        let result;
+        if (target.kind === 'assertion') {
+          const pending = issuePendingChallenge(tx, current, target);
+          result = { assertionId: pending.challengeId, challenge: pending.challenge,
+            storageKey: target.storageKey,
+            ...(target.directedCredentialId === undefined ? {} : { credentialId: target.directedCredentialId }),
+            rpId: RP_ID, schemaVersion: 1 };
+        } else {
+          result = { storageKey: target.storageKey,
+            credentials: scopedCredentialList(tx, owner.subject, target.storageKey),
+            rpId: RP_ID, schemaVersion: 1 };
+        }
+        tx.run('DELETE FROM grants WHERE digest=?', grant.digest);
+        return { result, expiresAt: grant.expires / 1000 };
+      });
+      return committed.result;
     },
     // This durable claim must precede asynchronous WebAuthn verification.
     // A failed verification leaves the row claimed; it cannot be retried.

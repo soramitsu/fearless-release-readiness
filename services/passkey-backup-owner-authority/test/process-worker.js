@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createOwnerAuthority } from '../src/authority.js';
 // Only receives synthetic test tokens over private IPC. Never writes tokens.
 process.once('message', ({ path, audience, token, request, generationRequest, action, wall, revoke,
-  mutationBody, mutationEvidence, credentialId }) => {
+  mutationBody, mutationEvidence, credentialId, sessionToken, grantToken }) => {
   let core;
   if (action === 'hold-lock') {
     const db = new DatabaseSync(path); db.exec('BEGIN IMMEDIATE');
@@ -23,6 +23,9 @@ process.once('message', ({ path, audience, token, request, generationRequest, ac
     }
     else if (action === 'commit-credential-mutation') {
       core.commitChallengeCredentialMutation(token, request, Buffer.from(mutationBody, 'base64'), mutationEvidence);
+    }
+    else if (action === 'commit-read-route') {
+      core.commitChallengeReadRoute(sessionToken, grantToken, request, Buffer.from(mutationBody, 'base64'));
     }
     else if (revoke) core.revokeAll(token, true);
     else if (generationRequest) core.commitGenerationMetadata(token, generationRequest);
