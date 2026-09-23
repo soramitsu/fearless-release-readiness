@@ -160,10 +160,18 @@ tests pass; the [shared format](passkey-credential-wrapper-v1.md) is published
 for iOS parity. Public PRF salts can now be requested during registration, or
 evaluated by a fresh assertion restricted to one known credential when creation
 omits output. The native result rejects mismatched or noncanonical IDs before
-exposing local PRF output. These changes are pushed at
-`b322702b00cc0ad2b6f19ce24c28e41225674f24` on the existing Android review
-branch; its exact-head full CI and IAS are in progress. The preceding full CI
-was canceled when this newer source was pushed, so it is not passing evidence.
+exposing local PRF output. Those PRF changes were pushed at
+`b322702b00cc0ad2b6f19ce24c28e41225674f24`; its exact-head full CI and IAS
+passed, including API 30/31/36 migration, startup instrumentation and
+source-bound complete AAB/native payload checks. Two subsequent commits pin
+Drive requests to a verified stable Google subject and add canonical immutable
+FPBKGEN1 generations with append-only Drive create/read primitives. Android
+head `828994258a37acfeeb9a0623169fcc14baf0757f` passes 181 strict offline
+backup tests and Detekt; its exact-head CI and IAS are running. The generation
+format permits 512 KiB while retaining the legacy 256 KiB envelope/default
+transport bound. Its 785-byte cross-platform vector has SHA-256
+`1c92b544dc25c687c202317d0e5747b5690a1056cf72e61d1dfab84c07c057a4`.
+Upload acknowledgment is not decrypted-wallet verification.
 
 iOS native Google Drive appData access is pushed on the existing iOS review
 branch. It uses explicit
@@ -174,16 +182,22 @@ wrapper and exact cross-platform vector are pushed on the same review branch;
 its exact-head Release Safety CI passed at `0feef6db19b1b020ad8e1ae6e071587ec87e2ccf`.
 A separate iOS 18+ native PRF ceremony path is now pushed at
 `f9d25054e8cc4da30286ecad9fe8c881cc8c5ed2`; 117 focused Release tests
-passed with zero failures/skips, targeted lint is clean, and Branch Flow and
-Release Safety passed at that exact head. Codecov remains in progress. Typed local
+passed with zero failures/skips, targeted lint is clean, and Branch Flow,
+Release Safety and Codecov passed at that exact head. Typed local
 PRF results require an exact server-verification receipt; the production adapter
 is unavailable because the service does not yet return one. The iOS 15 minimum
-and legacy executor remain unchanged. Both Drive adapters remain disabled; neither implements
-immutable generations, verified decryption-before-complete, owner lifecycle or
-replacement-device restoration yet. The iOS Drive adapter accepts a stable
-Google subject across email changes, while the interim Android adapter still
-requires metadata email equality; this must be reconciled before a cross-platform
-restore can qualify. No server or app has been enabled.
+and legacy executor remain unchanged. Both Drive adapters remain disabled.
+Android now has a verified-subject, append-only generation primitive, while
+iOS has a separately pushed FPBKGEN1 codec at
+`7d0844c4310d5d0e90f0b858e3f3cd74f21c80e6`; all 16 focused arm64 Release
+wrapper/generation simulator tests pass, including the exact Android vector.
+Its Branch Flow and Release Safety jobs pass, with Codecov still running.
+Security and Fearless team reviews are requested. iOS generation storage,
+qualification and the durable journal, verified
+decryption-before-complete, owner lifecycle and replacement-device restoration
+remain. Both clients accept a stable Google subject across email changes, but
+real same-app-data access still requires a cross-platform provider test. No
+server or app has been enabled.
 
 The full-live root audit now invokes a detached canonical shipping-manifest
 validator before enabled passkey acceptance. Its synthetic fixture accepts one
@@ -200,14 +214,16 @@ the same exact raw evidence rows for the seven enabled-recovery categories and
 reject reuse of one retained file for multiple artifact/evidence kinds. The
 five shipping-manifest synthetic tests and 23 enabled-acceptance cases pass.
 Root head `5721ecfad30c2ce3c1a74bf92428c4d9d9833da4` passed all three hosted
-jobs; the follow-up evidence-binding commit `8a2653cee70368c5b2f5720d21ce43f9ee1ee9d1`
-is pushed, with exact-head CI in progress. The 88-case source-publication suite
+jobs; subsequent heads were superseded by new pushes. Owner-head commit
+`901895c` passed all three exact-head hosted jobs, including the release audit
+validation job. The 88-case source-publication suite
 and both release-bundle export/verification suites passed locally before the
 new authority increment below.
 
 The non-deployed owner core now has schema-v2 backup-head metadata and an
 explicit transactional v1→v2 migration preserving owner/credential state.
-Authenticated reads expose current and retained previous descriptors; an exact
+Authenticated reads expose current and retained previous descriptors, including
+each generation's parent revision/digest; an exact
 operation ID reconciles ambiguous commits. The SQLite transaction compares the
 expected head revision/digest, keeps the storage-account binding fixed, rejects
 unreviewed backup-key epoch changes and duplicate generation/Drive IDs, then
