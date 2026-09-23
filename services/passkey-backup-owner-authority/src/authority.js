@@ -15,6 +15,8 @@ const MAX_BACKUP_GENERATIONS = 256;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 const LEGACY_STORAGE_KEY = /^[A-Za-z0-9._:-]{8,128}$/;
+const LEGACY_WALLET_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+const LEGACY_ACCOUNT_NAME = /^[^\s@]+@[^\s@]+$/;
 const DECIMAL = /^(0|[1-9][0-9]{0,15})$/;
 const unavailableVerifier = Object.freeze({
   async bootstrap() { deny('verifier_unavailable'); },
@@ -213,7 +215,16 @@ function challengeReadRequest(request, rawBody) {
   catch { deny('invalid_request'); }
   const assertion = '/api/passkey-backup/v1/assertion/challenge';
   const list = '/api/passkey-backup/v1/credentials/list';
-  if (request.path === assertion) {
+  const registration = '/api/passkey-backup/v1/registration/challenge';
+  if (request.path === registration) {
+    exact(body, ['walletId', 'accountName', 'displayName', 'rpId', 'schemaVersion']);
+    if (typeof body.walletId !== 'string' || !LEGACY_WALLET_ID.test(body.walletId) ||
+        typeof body.accountName !== 'string' || body.accountName !== body.accountName.trim() ||
+        body.accountName.length < 3 || body.accountName.length > 320 ||
+        !LEGACY_ACCOUNT_NAME.test(body.accountName) ||
+        typeof body.displayName !== 'string' ||
+        body.displayName.trim().length < 1 || body.displayName.trim().length > 128) deny('invalid_request');
+  } else if (request.path === assertion) {
     exact(body, Object.hasOwn(body ?? {}, 'credentialId')
       ? ['storageKey', 'rpId', 'schemaVersion', 'credentialId']
       : ['storageKey', 'rpId', 'schemaVersion']);
@@ -221,8 +232,15 @@ function challengeReadRequest(request, rawBody) {
   } else if (request.path === list) {
     exact(body, ['storageKey', 'rpId', 'schemaVersion']);
   } else deny('invalid_request');
-  if (body.rpId !== RP_ID || body.schemaVersion !== 1 ||
-      typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
+  if (body.rpId !== RP_ID || body.schemaVersion !== 1) deny('invalid_request');
+  if (request.path === registration) {
+    // Match the legacy challenge service's storage-key derivation exactly.
+    // The resulting key still requires an independently proven owner binding.
+    return { kind: 'registration',
+      storageKey: `storage:${hash(`${body.walletId}\0${body.accountName.toLowerCase()}`)}`,
+      userName: body.accountName, displayName: body.displayName.trim() };
+  }
+  if (typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
   return { kind: request.path === assertion ? 'assertion' : 'list',
     storageKey: body.storageKey, directedCredentialId: body.credentialId };
 }
@@ -432,7 +450,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         return issuePendingChallenge(tx, current, input);
       });
     },
-    // Internal candidate for two of the three existing read/challenge routes.
+    // Internal candidate for all three existing read/challenge routes.
     // The legacy JSON HTTP service cannot accept this core's grants. A live
     // composition must cut all seven routes over together after proven import.
     commitChallengeReadRoute(sessionToken, grantToken, request, rawBody) {
@@ -443,7 +461,13 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         if (session(tx, sessionToken).digest !== grant.session) deny();
         boundLegacyStorage(tx, target.storageKey, owner.subject);
         let result;
-        if (target.kind === 'assertion') {
+        if (target.kind === 'registration') {
+          const pending = issuePendingChallenge(tx, current, target);
+          result = { registrationId: pending.challengeId, challenge: pending.challenge,
+            userId: pending.userHandle, userName: target.userName,
+            displayName: target.displayName, storageKey: target.storageKey,
+            rpId: RP_ID, schemaVersion: 1 };
+        } else if (target.kind === 'assertion') {
           const pending = issuePendingChallenge(tx, current, target);
           result = { assertionId: pending.challengeId, challenge: pending.challenge,
             storageKey: target.storageKey,

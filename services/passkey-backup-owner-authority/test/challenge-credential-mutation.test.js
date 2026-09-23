@@ -44,6 +44,10 @@ function readBody(storageKey = 'storage:wallet-test', credentialId) {
   return { storageKey, rpId: 'fearlesswallet.io', schemaVersion: 1,
     ...(credentialId === undefined ? {} : { credentialId }) };
 }
+function registrationReadBody(accountName = 'ALICE@Example.COM') {
+  return { walletId: 'wallet-123456', accountName, displayName: ' Alice ',
+    rpId: 'fearlesswallet.io', schemaVersion: 1 };
+}
 function registration(id, challengeId = 'reg:test') {
   return bound('registration', { registrationId: challengeId, rpId: 'fearlesswallet.io', credential: register(id) });
 }
@@ -751,7 +755,7 @@ test('credential list refuses missing historical public metadata without spendin
   assert.equal(core.consumeGrant(grant.token, body.request).active, true);
 });
 
-test('read-route grants reject wrong body, owner session, wallet key and unavailable registration admission', async (t) => {
+test('read-route grants reject wrong body, owner session and unproven wallet key', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const first = (await bootstrap()).owner;
   const second = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -780,14 +784,50 @@ test('read-route grants reject wrong body, owner session, wallet key and unavail
   denied(() => core.commitChallengeReadRoute(first.sessionToken, unknownGrant.token,
     unknown.request, unknown.bytes), 'authorization_failed');
   assert.equal(core.consumeGrant(unknownGrant.token, unknown.request).active, true);
-  const registration = boundRead('registrationChallenge', {
-    walletId: 'wallet:test', accountName: 'user@example.org', displayName: 'Test',
-    rpId: 'fearlesswallet.io', schemaVersion: 1,
-  });
+  const registration = boundRead('registrationChallenge', registrationReadBody());
   const registrationGrant = core.issueGrant(first.sessionToken, registration.request);
   denied(() => core.commitChallengeReadRoute(first.sessionToken, registrationGrant.token,
-    registration.request, registration.bytes), 'invalid_request');
+    registration.request, registration.bytes), 'authorization_failed');
   assert.equal(core.consumeGrant(registrationGrant.token, registration.request).active, true);
+});
+
+test('proven legacy wallet key admits exact registration challenge and atomic completion', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  // Frozen legacy challenge-service vector: walletId + NUL + lowercased account name.
+  const storageKey = 'storage:UomOL69zIgGTGAZa-7E9Wsyf1-ELzo2cg7lN6P07LJk';
+  bindStorageKey(path, owner, storageKey);
+  const wrongAccount = boundRead('registrationChallenge', registrationReadBody('bob@example.com'));
+  const wrongAccountGrant = core.issueGrant(owner.sessionToken, wrongAccount.request);
+  denied(() => core.commitChallengeReadRoute(owner.sessionToken, wrongAccountGrant.token,
+    wrongAccount.request, wrongAccount.bytes), 'authorization_failed');
+  assert.equal(core.consumeGrant(wrongAccountGrant.token, wrongAccount.request).active, true);
+  const body = boundRead('registrationChallenge', registrationReadBody());
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  const substituted = boundRead('registrationChallenge', registrationReadBody('bob@example.com'));
+  denied(() => core.commitChallengeReadRoute(owner.sessionToken, grant.token,
+    body.request, substituted.bytes), 'invalid_request');
+  const issued = core.commitChallengeReadRoute(owner.sessionToken, grant.token,
+    body.request, body.bytes);
+  assert.deepEqual({ ...issued, registrationId: '<random>', challenge: '<random>' }, {
+    registrationId: '<random>', challenge: '<random>', userId: legacyHandle(storageKey),
+    userName: 'ALICE@Example.COM', displayName: 'Alice', storageKey,
+    rpId: 'fearlesswallet.io', schemaVersion: 1,
+  });
+  assert.equal(issued.userId, 'TU0Uh1EMlYe31daAhPiGnJySOriqE0XIOdEJQuS4BpY');
+  denied(() => core.commitChallengeReadRoute(owner.sessionToken, grant.token,
+    body.request, body.bytes), 'authorization_failed');
+  const id = b64(99);
+  const completion = registration(id, issued.registrationId);
+  core.claimChallengeCredentialMutation(owner.sessionToken, completion.request, completion.bytes);
+  const completionGrant = core.issueGrant(owner.sessionToken, completion.request);
+  const evidence = { challengeNonce: issued.challenge, platform: owner.platform,
+    credential: record(id, issued.userId),
+    aaguid: '00000000-0000-0000-0000-000000000000', transportsJson: null };
+  assert.deepEqual(core.commitChallengeCredentialMutation(completionGrant.token,
+    completion.request, completion.bytes, evidence),
+  { status: 'registered', credentialId: id, generation: 1 });
+  assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
 });
 
 test('separate SQLite writers cannot issue two assertion challenges from one grant', async (t) => {

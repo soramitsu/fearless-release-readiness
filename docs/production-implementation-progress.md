@@ -870,25 +870,30 @@ deployment evidence remain absent; the Google Drive recovery feature stays
 disabled. The selected website source still differs from the live association
 files as recorded above.
 
-## SQLite assertion and list route candidates — 2026-09-24
+## SQLite challenge and list route candidates — 2026-09-24
 
 The non-deployed owner authority now has an internal exact-body, grant-bound
-candidate for two more existing challenge-service routes. For an already
-proven wallet storage key, assertion challenge issuance consumes its owner
-grant and inserts a single-use SQLite pending row in one writer transaction.
+candidate for all three existing read/challenge-service routes. For an already
+proven wallet storage key, registration and assertion challenge issuance consume
+their owner grants and insert single-use SQLite pending rows in one writer transaction.
+Registration derives the same storage key and user handle as the legacy
+service from its wallet ID and account name, then requires that key to have an
+independently proven immutable owner binding. A different account name does
+not establish ownership or spend the grant.
 Credential listing consumes its grant in that transaction and projects only
 live credentials scoped to that key, preserving historical public AAGUID,
 registration platform, device type, backup flag and transports. Owner-wide
 recovery credentials are excluded; empty bound tombstones list empty. Wrong
 session/key/body, replay, absent credential and a two-process same-grant race
 fail closed. An explicit v4→v5 fixture compares public credential, scope,
-binding and metadata rows before/after migration. All 106 owner tests, syntax
+binding and metadata rows before/after migration. A frozen legacy key/handle
+vector and an internal registration completion also pass. All 107 owner tests, syntax
 checks and dependency audit pass locally, with zero audit vulnerabilities.
 
 These are internal source candidates, not a service cutover. The existing
-registration-challenge body cannot establish a random owner or proven wallet
-storage-key binding from wallet/account names, so this adapter rejects it.
-Tests seed proof commitments and do not verify JSON-to-owner admission or
+registration-challenge body still cannot establish a random owner or proven wallet
+storage-key binding from wallet/account names alone; the internal adapter accepts
+only a previously proven binding. Tests seed proof commitments and do not verify JSON-to-owner admission or
 historical JSON import. The seven live HTTP routes still use the JSON writer;
 one-writer switchover, independent review, provider/device qualification and
 cross-platform recovery remain open. Portable recovery stays disabled.
