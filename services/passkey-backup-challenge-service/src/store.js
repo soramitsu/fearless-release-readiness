@@ -658,10 +658,15 @@ export class InMemoryPasskeyChallengeStore {
     newCounter,
     deviceType,
     backedUp,
-  }) {
+  }, expectedMutationVersion) {
     const current = this.credentialsByStorageKey.get(storageKey)?.get(credentialId);
     if (!current) {
       throw serviceError(403, 'credential_not_registered', 'Credential is not registered for this storageKey');
+    }
+    const ownerSubjectHash = this.ownersByStorageKey.get(storageKey);
+    if (!Number.isSafeInteger(expectedMutationVersion) || expectedMutationVersion < 0 ||
+        expectedMutationVersion !== this.storageMutationVersion(storageKey, ownerSubjectHash)) {
+      throw serviceError(409, 'credential_lifecycle_conflict', 'Credential lifecycle changed during assertion');
     }
     normalizeCounter(newCounter, 'newCounter');
     if ((current.counter !== 0 || newCounter !== 0) && newCounter <= current.counter) {

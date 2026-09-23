@@ -306,6 +306,13 @@ export function createPasskeyBackupChallengeService({
           credential.response.userHandle !== registeredCredential.userId) {
         throw serviceError(403, 'credential_user_mismatch', 'Credential userHandle does not match this storageKey');
       }
+      // Snapshot the credential lifecycle before asynchronous verification.
+      // A revoke followed by re-registration of the same ID must not let this
+      // assertion commit against the replacement credential.
+      const credentialMutationVersion = store.storageMutationVersion(
+        pending.storageKey,
+        authorization.subjectHash,
+      );
 
       validateClientDataJSON(
         credential.response.clientDataJSON,
@@ -336,7 +343,7 @@ export function createPasskeyBackupChallengeService({
         newCounter: authenticationInfo.newCounter,
         deviceType: authenticationInfo.credentialDeviceType,
         backedUp: authenticationInfo.credentialBackedUp,
-      });
+      }, credentialMutationVersion);
 
       return {
         storageKey: pending.storageKey,

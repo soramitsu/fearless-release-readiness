@@ -563,6 +563,32 @@ test('revocation wins safely against pending assertion and in-flight registratio
   assert.deepEqual(service.listCredentials(lifecycleRequest, owner).credentials, []);
 });
 
+test('in-flight assertion cannot commit after revoke and re-registration of the same credential ID', async () => {
+  const store = new InMemoryPasskeyChallengeStore();
+  const service = makeService({ store });
+  const owner = authorization('fearless-wallet-owner:assertion-lifecycle');
+  const registered = await registerCredentialAs(
+    service, owner, createAuthenticator('assertion-lifecycle'),
+  );
+  const storageKey = registered.result.storageKey;
+  const credentialId = base64UrlEncode(registered.authenticator.credentialId);
+  const original = store.getCredential(storageKey, credentialId);
+  const request = { storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION };
+  const assertion = service.createAssertionChallenge(request, owner);
+  const completing = service.completeAssertion(assertionCompletion(
+    assertion, registered.authenticator, registered.registration.userId, { counter: 8 },
+  ), owner);
+
+  assert.equal(service.revokeCredential({
+    ...request, credentialId, confirmFinalRecoveryRemoval: true,
+  }, owner).remainingCredentials, 0);
+  // Recreate the credential synchronously at the storage boundary so the
+  // verification promise cannot finish before the replacement is installed.
+  store.registerCredential(storageKey, { ...original, ownerSubjectHash: owner.subjectHash });
+  await assertServiceRejects(completing, 'credential_lifecycle_conflict', 409);
+  assert.equal(store.getCredential(storageKey, credentialId).counter, original.counter);
+});
+
 test('production authorization must carry a live expiry and is rechecked before registration commit', async () => {
   let clock = 1_700_000_000_000;
   const expiresAt = Math.floor(clock / 1000) + 60;

@@ -43,7 +43,7 @@ The core does not remove or bypass any current challenge/lifecycle protection. `
 
 Each returned `grant.` bearer token has 256 random bits, is stored only as SHA-256, expires in at most 60 seconds (never beyond its session), and authorizes one request. `consumeGrant(token, request)` rechecks owner generation, live session, and unrevoked session credential **in the same transaction** as removal. Wrong bindings do not consume the token. Consumption commits before returning the existing exact introspection response `{schemaVersion, active, subject, audience, method, path, bodySha256, scope, platform, expiresAt}`. Loss of the response does not restore the grant: obtain a new one. The current challenge adapter hashes this stable subject with its existing domain separation. Tests import that adapter unchanged and exercise the response and replay contract for all seven routes.
 
-An introspection call already committed before revocation may return success. It is not retroactively recalled. The existing separate challenge store must recheck a lifecycle generation at its own final credential mutation; that integration is not in this core.
+An introspection call already committed before revocation may return success. It is not retroactively recalled. The separate challenge store rejects an assertion if its own credential lifecycle changed during verification, including revoke/re-registration of the same ID. It cannot observe this authority's independent generation at that commit; shared transactional lifecycle integration remains required.
 
 ## Concrete integration gates (not implemented)
 
