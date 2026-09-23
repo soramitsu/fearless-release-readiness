@@ -57,9 +57,11 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-owner-authority/src/store.js',
   'services/passkey-backup-owner-authority/src/validation.js',
   'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/src/webauthn-verifier.js',
   'services/passkey-backup-owner-authority/test/authority.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
+  'services/passkey-backup-owner-authority/test/webauthn-verifier.test.js',
 ];
 // A branch tip is publication evidence, never an exact-SHA review attestation.
 const CANONICAL_BRANCH_REVIEW_BLOCKER = 'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy';

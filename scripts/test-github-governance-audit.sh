@@ -400,7 +400,7 @@ contexts_for_repo() {
       printf '["validate","build"]\n'
       ;;
     soramitsu/fearless-release-readiness)
-      printf '["validate","verify"]\n'
+      printf '["validate","verify","verify-owner"]\n'
       ;;
     tonswap-org/ton-indexer|solswap-io/solswap-indexer)
       printf '["validate","verify"]\n'
@@ -492,7 +492,7 @@ if [[ "$path" == */protection ]]; then
       ;;
     root-missing-status-check)
       if [[ "$repo" == "soramitsu/fearless-release-readiness" && "$branch" == "main" ]]; then
-        contexts_json='["validate"]'
+        contexts_json='["validate","verify"]'
       fi
       ;;
   esac
@@ -681,7 +681,7 @@ expect_failure "root-missing-main fixture" "soramitsu/fearless-release-readiness
 expect_failure "unprotected fixture" "branch 'master' is not protected" run_audit unprotected
 expect_failure "polkaswap-unprotected fixture" "sora-xor/polkaswap-indexer: branch 'develop' is not protected" run_audit polkaswap-unprotected
 expect_failure "missing-status-check fixture" "branch 'master' missing required status checks: build-and-test" run_audit missing-status-check
-expect_failure "root-missing-status-check fixture" "soramitsu/fearless-release-readiness: branch 'main' missing required status checks: verify" run_audit root-missing-status-check
+expect_failure "root-missing-status-check fixture" "soramitsu/fearless-release-readiness: branch 'main' missing required status checks: verify-owner" run_audit root-missing-status-check
 expect_failure "polkaswap-missing-branch-flow fixture" "sora-xor/polkaswap-indexer: branch 'master' missing required status checks: branch-flow" run_audit polkaswap-missing-branch-flow
 expect_failure "weak classic policy fixture" "missing strict no-bypass classic protection: strict_required_status_checks enforce_admins required_conversation_resolution disallow_force_pushes disallow_deletions" run_audit weak-classic-policy
 expect_failure "classic bypass fixture" "missing strict no-bypass classic protection: disallow_pull_request_bypass" run_audit classic-bypass-policy

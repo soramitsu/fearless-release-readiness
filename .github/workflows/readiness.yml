@@ -69,3 +69,25 @@ jobs:
           npm run test:deployment-evidence-audit
           npm run test:deployment-evidence-template
           npm audit --omit=dev
+
+  verify-owner:
+    name: verify-owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/passkey-backup-owner-authority
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+          cache-dependency-path: services/passkey-backup-owner-authority/package-lock.json
+      - name: Install exact dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify owner authority and WebAuthn adapter
+        run: |
+          npm run lint:syntax
+          npm test
+          npm audit --omit=dev

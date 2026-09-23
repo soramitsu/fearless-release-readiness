@@ -1459,9 +1459,11 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'services/passkey-backup-owner-authority/src/store.js',
   'services/passkey-backup-owner-authority/src/validation.js',
   'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/src/webauthn-verifier.js',
   'services/passkey-backup-owner-authority/test/authority.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
+  'services/passkey-backup-owner-authority/test/webauthn-verifier.test.js',
 ]
 
 function repositoryFromCredentialFreeGitHubOrigin(value) {

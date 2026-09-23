@@ -167,7 +167,8 @@ sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	maste
 # reviewed_pr_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	1	318f58d7a8c5e688d551e00ebc81fdd80473f8f6
 # required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	validate	github-actions	15368	github-actions	324977531	.github/workflows/readiness.yml
 # required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	verify	github-actions	15368	github-actions	324977531	.github/workflows/readiness.yml
-soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	merged	validate,verify
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	verify-owner	github-actions	15368	github-actions	324977531	.github/workflows/readiness.yml
+soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	merged	validate,verify,verify-owner
 
 # Exact Starscream guarded-write candidate; publication is not review approval.
 # reviewed_pr_pin	soramitsu/fearless-starscream	codex/authorized-transport-write	feature/without-origin	5	c26d9665fc44fd55aa1170427b1aef007a944fd7

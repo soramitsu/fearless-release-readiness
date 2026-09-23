@@ -7014,7 +7014,7 @@ root_release_readiness_checks() {
   require_pattern "$governance_audit" '"sora-xor/polkaswap-indexer"' "root GitHub governance Polkaswap indexer policy"
   require_pattern "$governance_audit" '"soramitsu/fearless-release-readiness"' "root GitHub governance release-readiness repository policy"
   require_pattern_multiline "$governance_audit" 'soramitsu/fearless-release-readiness\)[[:space:]]*echo "main"' "root GitHub governance release-readiness main default"
-  require_pattern_multiline "$governance_audit" 'soramitsu/fearless-release-readiness\)[[:space:]]*printf[^\n]*validate[[:space:]]+verify' "root GitHub governance release-readiness status policy"
+  require_pattern_multiline "$governance_audit" 'soramitsu/fearless-release-readiness\)[[:space:]]*printf[^\n]*validate[[:space:]]+verify[[:space:]]+verify-owner' "root GitHub governance release-readiness status policy"
   require_pattern "$governance_audit" 'expected_protected_branches' "root GitHub governance maintained-branch inventory"
   require_pattern_multiline "$governance_audit" 'sora-xor/polkaswap-indexer\)[[:space:]]*printf[^\n]*branch-flow[[:space:]]+validate[[:space:]]+verify' "root GitHub governance Polkaswap branch-flow status policy"
   require_pattern "$governance_audit" 'echo "master"' "root GitHub governance indexer master default"

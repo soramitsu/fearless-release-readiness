@@ -501,7 +501,7 @@ expected_status_contexts() {
       printf '%s\n' validate build
       ;;
     soramitsu/fearless-release-readiness)
-      printf '%s\n' validate verify
+      printf '%s\n' validate verify verify-owner
       ;;
     tonswap-org/ton-indexer|\
     solswap-io/solswap-indexer)
