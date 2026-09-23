@@ -24,7 +24,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. The current Android candidate passes 221 scoped backup JVM tests and Detekt locally; its exact-head hosted build-and-test job passes. The current iOS disabled-path PRF verifier passes 24 focused Release simulator tests; its hosted build remains in progress. Earlier iOS key/sign/send qualification passed **463** Release tests on a different source head. Both app trees are committed and pushed on review branches, but independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. The current Android candidate passes 221 scoped backup JVM tests and Detekt locally; its exact-head hosted build-and-test job passes. The current iOS disabled-path PRF verifier passes 24 focused Release simulator tests; its hosted build, Jenkins merge check, Codecov and release-safety checks pass. Earlier iOS key/sign/send qualification passed **463** Release tests on a different source head. Both app trees are committed and pushed on review branches, but independent security review, protected qualification and distribution acceptance remain outstanding.
 
 The metadata-only owner/grant authority passes 75 local tests; the challenge service passes 112. They still have separate credential writers. First-owner wallet proof, verified legacy migration, one-writer live HTTP cutover, deployment and native Drive/PRF recovery remain unintegrated. The root source gate now selects the consolidated mobile worktrees and site-association PR #49. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
@@ -639,12 +639,13 @@ by an exact-source audit before publication.
 On the combined root source, the worktree quarantine adversarial suite,
 shipping manifest 8/8, workflow action pins, unblock command contracts,
 source-publication 88 negative cases, and both release-bundle fixture suites
-pass. The synthetic plan-readiness "complete fixture" still fails on many
-stale source/fixture expectations, including web and service contracts. That
-failure remains an open gate; an isolated fixture reconciliation is in progress
-without weakening the production audit. The root PR is open and requires
-review and final exact-head CI. Neither mobile app has passed store-delivered
-upgrade acceptance or cross-platform replacement-device recovery.
+pass. The plan-readiness synthetic complete fixture and its first three
+action-pin negative controls now pass after fixture reconciliation; the full
+4,211-case mutation catalog has not been run on this head. The production audit
+still fails on dirty and unqualified sources, as intended. The root PR is open
+and requires review and final exact-head CI. Neither mobile app has passed
+store-delivered upgrade acceptance or cross-platform replacement-device
+recovery.
 
 ## Completion record
 
