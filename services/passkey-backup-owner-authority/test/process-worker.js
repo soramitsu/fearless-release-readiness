@@ -16,7 +16,7 @@ process.once('message', ({ path, audience, token, request, generationRequest, ac
         if (action === 'crash-after' && stage === 'afterCommit') process.exit(82);
       },
     });
-    if (revoke) core.revokeAll(token);
+    if (revoke) core.revokeAll(token, true);
     else if (generationRequest) core.commitGenerationMetadata(token, generationRequest);
     else core.consumeGrant(token, request);
     process.send({ accepted: true });

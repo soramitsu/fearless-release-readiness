@@ -156,14 +156,17 @@ test('revocation atomically invalidates outstanding grants, sessions, and active
   const { core } = fixture; const { owner, challenge } = await fixture.bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request()); const pending = core.beginAuthentication('ios');
   const auth = core.completeAuthentication({ ceremonyId: pending.ceremonyId, credential: assertion(challenge.userHandle) });
-  assert.equal(core.revokeCredential(owner.sessionToken, b64(2)).generation, 1); release();
+  denies(() => core.revokeCredential(owner.sessionToken, b64(2)), 'final_recovery_route_confirmation_required');
+  assert.equal(core.revokeCredential(owner.sessionToken, b64(2), true).generation, 1); release();
   await rejects(auth);
   denies(() => core.consumeGrant(grant.token, request()));
   denies(() => core.issueGrant(owner.sessionToken, request()));
   const retry = core.beginAuthentication('ios'); await rejects(core.completeAuthentication({ ceremonyId: retry.ceremonyId, credential: assertion(challenge.userHandle) }));
 });
 test('revoke-all tombstone prevents Google or new-wallet bootstrap from replacing existing owner', async (t) => {
-  const { core, bootstrap } = setup(t); const { owner } = await bootstrap(); core.revokeAll(owner.sessionToken);
+  const { core, bootstrap } = setup(t); const { owner } = await bootstrap();
+  denies(() => core.revokeAll(owner.sessionToken), 'final_recovery_route_confirmation_required');
+  core.revokeAll(owner.sessionToken, true);
   const pending = core.beginBootstrap('ios');
   await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(b64(6)), walletProof: proof }), 'owner_already_exists');
   const google = core.beginBootstrap('ios');
@@ -224,7 +227,7 @@ test('revocation during enrollment prevents credential resurrection', async (t) 
   }) }) });
   const { core } = fixture; const { owner } = await fixture.bootstrap(); const enrollment = core.beginEnrollment(owner.sessionToken);
   const completion = core.completeEnrollment({ ceremonyId: enrollment.ceremonyId, sessionToken: owner.sessionToken, credential: register(b64(6)) });
-  core.revokeAll(owner.sessionToken); release(); await rejects(completion);
+  core.revokeAll(owner.sessionToken, true); release(); await rejects(completion);
 });
 test('cross-owner session cannot claim another enrollment or revoke another credential', async (t) => {
   const { core, bootstrap } = setup(t); const { owner: first } = await bootstrap(); const { owner: second } = await bootstrap(core, b64(6), b64(10));
@@ -235,7 +238,7 @@ test('cross-owner session cannot claim another enrollment or revoke another cred
   assert.equal(enrolled.subject, first.subject);
 });
 test('credential IDs cannot move between owners, including after revocation', async (t) => {
-  const { core, bootstrap } = setup(t); const { owner } = await bootstrap(); core.revokeAll(owner.sessionToken);
+  const { core, bootstrap } = setup(t); const { owner } = await bootstrap(); core.revokeAll(owner.sessionToken, true);
   await rejects(bootstrap(core, b64(2), b64(10)), 'credential_already_linked');
 });
 test('session revocation changes generation, retaining credential for a fresh authentication', async (t) => {

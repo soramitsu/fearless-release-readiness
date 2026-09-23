@@ -322,6 +322,7 @@ test('credential lifecycle lists only bounded public descriptors and supports a 
   assert.equal(service.revokeCredential({
     storageKey: result.storageKey,
     credentialId: base64UrlEncode(authenticator.credentialId),
+    confirmFinalRecoveryRemoval: true,
     rpId: RP_ID,
     schemaVersion: SCHEMA_VERSION,
   }, ownerIos).remainingCredentials, 0);
@@ -381,7 +382,10 @@ test('credential revocation is idempotent for unknown IDs and retains a final-ow
     rpId: RP_ID,
     schemaVersion: SCHEMA_VERSION,
   };
-  assert.equal(service.revokeCredential(request, owner).remainingCredentials, 0);
+  assertServiceError(() => service.revokeCredential(request, owner), 'final_recovery_route_confirmation_required', 409);
+  assertServiceError(() => service.revokeCredential({ ...request, confirmFinalRecoveryRemoval: false }, owner), 'invalid_request', 400);
+  assert.equal(service.listCredentials({ storageKey: result.storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION }, owner).credentials.length, 1);
+  assert.equal(service.revokeCredential({ ...request, confirmFinalRecoveryRemoval: true }, owner).remainingCredentials, 0);
   assert.equal(service.revokeCredential(request, owner).remainingCredentials, 0);
   assert.deepEqual(service.listCredentials({
     storageKey: result.storageKey,
@@ -410,7 +414,8 @@ test('revoke-all tombstone survives restart, denies takeover, and permits same-o
     rpId: RP_ID,
     schemaVersion: SCHEMA_VERSION,
   };
-  assert.equal(service.revokeAllCredentials(lifecycleRequest, owner).remainingCredentials, 0);
+  assertServiceError(() => service.revokeAllCredentials(lifecycleRequest, owner), 'final_recovery_route_confirmation_required', 409);
+  assert.equal(service.revokeAllCredentials({ ...lifecycleRequest, confirmFinalRecoveryRemoval: true }, owner).remainingCredentials, 0);
 
   const persisted = JSON.parse(readFileSync(credentialStoreFile, 'utf8'));
   assert.equal(persisted.schemaVersion, 4);
@@ -476,9 +481,14 @@ test('single revoke handles the last of multiple credentials and leaves the rema
     schemaVersion: SCHEMA_VERSION,
   };
   assert.equal(service.listCredentials(baseRequest, owner).credentials.length, 2);
+  assertServiceError(() => service.revokeCredential({
+    ...baseRequest,
+    credentialId: base64UrlEncode(first.authenticator.credentialId),
+  }, owner), 'final_recovery_route_confirmation_required', 409);
   assert.equal(service.revokeCredential({
     ...baseRequest,
     credentialId: base64UrlEncode(first.authenticator.credentialId),
+    confirmFinalRecoveryRemoval: true,
   }, owner).remainingCredentials, 1);
 
   const assertion = service.createAssertionChallenge(baseRequest, owner);
@@ -489,6 +499,7 @@ test('single revoke handles the last of multiple credentials and leaves the rema
   assert.equal(service.revokeCredential({
     ...baseRequest,
     credentialId: base64UrlEncode(second.authenticator.credentialId),
+    confirmFinalRecoveryRemoval: true,
   }, owner).remainingCredentials, 0);
   assertServiceError(
     () => service.createAssertionChallenge(baseRequest, owner),
@@ -512,7 +523,7 @@ test('revocation wins safely against pending assertion and in-flight registratio
     assertionCompletion(assertion, first.authenticator, first.registration.userId, { counter: 1 }),
     owner,
   );
-  assert.equal(service.revokeAllCredentials(lifecycleRequest, owner).remainingCredentials, 0);
+  assert.equal(service.revokeAllCredentials({ ...lifecycleRequest, confirmFinalRecoveryRemoval: true }, owner).remainingCredentials, 0);
   await assertServiceRejects(completingAssertion, 'credential_not_registered', 403);
 
   const restored = await registerCredentialAs(
@@ -521,7 +532,7 @@ test('revocation wins safely against pending assertion and in-flight registratio
     createAuthenticator('lifecycle-race-restored'),
   );
   const stalePending = service.createRegistrationChallenge(registrationRequest(), owner);
-  assert.equal(service.revokeAllCredentials(lifecycleRequest, owner).remainingCredentials, 0);
+  assert.equal(service.revokeAllCredentials({ ...lifecycleRequest, confirmFinalRecoveryRemoval: true }, owner).remainingCredentials, 0);
   await assertServiceRejects(
     service.completeRegistration(
       registrationCompletion(stalePending, createAuthenticator('lifecycle-race-stale')),
@@ -541,7 +552,7 @@ test('revocation wins safely against pending assertion and in-flight registratio
     registrationCompletion(inFlight, createAuthenticator('lifecycle-race-inflight')),
     owner,
   );
-  assert.equal(service.revokeAllCredentials(lifecycleRequest, owner).remainingCredentials, 0);
+  assert.equal(service.revokeAllCredentials({ ...lifecycleRequest, confirmFinalRecoveryRemoval: true }, owner).remainingCredentials, 0);
   await assertServiceRejects(
     completingRegistration,
     'credential_lifecycle_conflict',
@@ -665,6 +676,7 @@ test('failed durable revocation does not mutate the in-memory credential state',
   assertServiceError(
     () => service.revokeAllCredentials({
       storageKey: result.storageKey,
+      confirmFinalRecoveryRemoval: true,
       rpId: RP_ID,
       schemaVersion: SCHEMA_VERSION,
     }, owner),
@@ -759,6 +771,7 @@ test('post-rename failures keep durable state aligned and lifecycle guards activ
     assertServiceError(
       () => service.revokeAllCredentials({
         storageKey: registration.storageKey,
+        confirmFinalRecoveryRemoval: true,
         rpId: RP_ID,
         schemaVersion: SCHEMA_VERSION,
       }, owner),
@@ -1371,9 +1384,18 @@ test('HTTP server completes cryptographic ceremony and emits hardened response h
     });
     assert.equal(credentials.response.status, 200);
     assert.equal(credentials.body.credentials.length, 1);
+    const unconfirmed = await postJson(baseUrl, '/api/passkey-backup/v1/credentials/revoke', {
+      storageKey: completed.body.storageKey,
+      credentialId: credentials.body.credentials[0].id,
+      rpId: RP_ID,
+      schemaVersion: SCHEMA_VERSION,
+    });
+    assert.equal(unconfirmed.response.status, 409);
+    assert.equal(unconfirmed.body.error, 'final_recovery_route_confirmation_required');
     const revoked = await postJson(baseUrl, '/api/passkey-backup/v1/credentials/revoke', {
       storageKey: completed.body.storageKey,
       credentialId: credentials.body.credentials[0].id,
+      confirmFinalRecoveryRemoval: true,
       rpId: RP_ID,
       schemaVersion: SCHEMA_VERSION,
     });

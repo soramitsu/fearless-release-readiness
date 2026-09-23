@@ -352,14 +352,18 @@ export function createPasskeyBackupChallengeService({
       validateExactObject(
         request,
         ['storageKey', 'credentialId', 'rpId', 'schemaVersion'],
-        [],
+        ['confirmFinalRecoveryRemoval'],
         'credential revoke request',
       );
+      if (request.confirmFinalRecoveryRemoval !== undefined && request.confirmFinalRecoveryRemoval !== true) {
+        throw serviceError(400, 'invalid_request', 'Final recovery route confirmation must be true');
+      }
       const storageKey = validateIdentifier(request.storageKey, 'storageKey');
       const credentialId = validateCredentialId(request.credentialId);
       validateRpId(request.rpId);
       validateSchemaVersion(request.schemaVersion);
-      const result = store.revokeCredential(storageKey, credentialId, authorization.subjectHash);
+      const result = store.revokeCredential(storageKey, credentialId, authorization.subjectHash,
+        request.confirmFinalRecoveryRemoval === true);
 
       return {
         storageKey,
@@ -375,11 +379,15 @@ export function createPasskeyBackupChallengeService({
         authorizationContext,
         allowInsecureTestAuthorization,
       );
-      validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], [], 'credential revoke-all request');
+      validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], ['confirmFinalRecoveryRemoval'], 'credential revoke-all request');
+      if (request.confirmFinalRecoveryRemoval !== undefined && request.confirmFinalRecoveryRemoval !== true) {
+        throw serviceError(400, 'invalid_request', 'Final recovery route confirmation must be true');
+      }
       const storageKey = validateIdentifier(request.storageKey, 'storageKey');
       validateRpId(request.rpId);
       validateSchemaVersion(request.schemaVersion);
-      const result = store.revokeAllCredentials(storageKey, authorization.subjectHash);
+      const result = store.revokeAllCredentials(storageKey, authorization.subjectHash,
+        request.confirmFinalRecoveryRemoval === true);
 
       return {
         storageKey,

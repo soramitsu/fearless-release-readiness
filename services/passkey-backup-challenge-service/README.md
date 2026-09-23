@@ -106,7 +106,15 @@ production unauthenticated fallback.
 
 Credential listing returns at most 32 non-secret descriptors and never returns
 the stored public key, user handle, signature counter, or wallet-owner hash.
-Single-credential and storage-owner revoke-all requests are idempotent. After
+Single-credential and storage-owner revoke-all requests are idempotent. A request
+that removes any live credential, or removes all live credentials, requires
+`confirmFinalRecoveryRemoval: true` in the exact body covered by its one-time
+owner grant. Another credential record is not proof of a surviving decryptable
+backup. Without the field, the service returns HTTP 409 and leaves credentials
+intact. The client must obtain explicit user confirmation before submitting that
+field, except when rolling back enrollment that never established a usable
+backup. The service cannot attest the UI, rollback state or client-side backup-key rotation.
+After
 the final revocation, schema-v4 storage retains a bounded zero-credential owner
 tombstone: this prevents a different subject that derives the deterministic
 storage key from taking it over, while the original stable owner can register a

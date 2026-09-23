@@ -314,20 +314,28 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           platform: current.platform, expiresAt: grant.expires / 1000 };
       });
     },
-    revokeCredential(token, credentialId) {
+    revokeCredential(token, credentialId, confirmFinalRecoveryRemoval = false) {
       base64(credentialId, 1, 384);
+      if (typeof confirmFinalRecoveryRemoval !== 'boolean') deny('invalid_request');
       return store.transaction((tx) => {
         const current = session(tx, token);
         activeCredential(tx, credentialId, current.owner);
         const owner = activeOwner(tx, current.owner, current.generation);
+        // An enrolled credential is not proof that its client ever verified a
+        // decryptable backup. Any other record may be unusable, so every live
+        // credential removal can be the final recovery route.
+        if (!confirmFinalRecoveryRemoval) deny('final_recovery_route_confirmation_required');
         tx.run('UPDATE credentials SET revoked=1 WHERE id=?', credentialId);
         return { generation: bumpGeneration(tx, owner).generation };
       });
     },
-    revokeAll(token) {
+    revokeAll(token, confirmFinalRecoveryRemoval = false) {
+      if (typeof confirmFinalRecoveryRemoval !== 'boolean') deny('invalid_request');
       return store.transaction((tx) => {
         const current = session(tx, token);
         const owner = activeOwner(tx, current.owner, current.generation);
+        const remaining = tx.query('SELECT count(*) AS n FROM credentials WHERE owner=? AND revoked=0', owner.subject).n;
+        if (remaining > 0 && !confirmFinalRecoveryRemoval) deny('final_recovery_route_confirmation_required');
         tx.run('UPDATE credentials SET revoked=1 WHERE owner=?', owner.subject);
         return { generation: bumpGeneration(tx, owner).generation };
       });

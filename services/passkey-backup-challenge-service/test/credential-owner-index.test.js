@@ -119,7 +119,7 @@ test('single and all-credential revocation remove lookup authority immediately a
   const store = new FileBackedPasskeyChallengeStore({ credentialStoreFile: file });
   const second = credential(createAuthenticator('second-credential'));
   store.registerCredential(storageKey, second);
-  store.revokeCredential(storageKey, stored.id, owner);
+  store.revokeCredential(storageKey, stored.id, owner, true);
   rejectsLookup(store, stored.id);
   assert.equal(store.findCredentialOwner(second.id).storageKey, storageKey);
   assert.throws(() => store.updateCredentialAfterAuthentication(storageKey, stored.id, {
@@ -127,7 +127,7 @@ test('single and all-credential revocation remove lookup authority immediately a
   }), { code: 'credential_not_registered' });
   const restarted = new FileBackedPasskeyChallengeStore({ credentialStoreFile: file });
   rejectsLookup(restarted, stored.id);
-  restarted.revokeAllCredentials(storageKey, owner);
+  restarted.revokeAllCredentials(storageKey, owner, true);
   rejectsLookup(restarted, second.id);
   const final = new FileBackedPasskeyChallengeStore({ credentialStoreFile: file });
   rejectsLookup(final, second.id);
@@ -192,7 +192,7 @@ test('revocation index follows the committed file even when directory fsync repo
     if (++syncs === 2) throw new Error('synthetic revocation directory sync failure');
     fsyncSync(fd);
   };
-  assert.throws(() => store.revokeCredential(storageKey, stored.id, owner), { code: 'credential_store_unavailable' });
+  assert.throws(() => store.revokeCredential(storageKey, stored.id, owner, true), { code: 'credential_store_unavailable' });
   rejectsLookup(store, stored.id);
   rejectsLookup(new FileBackedPasskeyChallengeStore({ credentialStoreFile: file }), stored.id);
 });

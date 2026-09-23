@@ -13,8 +13,8 @@ const matrices = {
   '/api/passkey-backup/v1/assertion/challenge': ['200', '400', '401', '403', '404', '413', '415', '429', '500', '503'],
   '/api/passkey-backup/v1/assertion/complete': ['200', '400', '401', '403', '404', '409', '413', '415', '429', '500', '503'],
   '/api/passkey-backup/v1/credentials/list': ['200', '400', '401', '403', '404', '413', '415', '429', '500', '503'],
-  '/api/passkey-backup/v1/credentials/revoke': ['200', '400', '401', '403', '413', '415', '429', '500', '503'],
-  '/api/passkey-backup/v1/credentials/revoke-all': ['200', '400', '401', '403', '413', '415', '429', '500', '503'],
+  '/api/passkey-backup/v1/credentials/revoke': ['200', '400', '401', '403', '409', '413', '415', '429', '500', '503'],
+  '/api/passkey-backup/v1/credentials/revoke-all': ['200', '400', '401', '403', '409', '413', '415', '429', '500', '503'],
 };
 
 test('OpenAPI requires one-time Bearer grants and exact hardened POST response matrices', () => {
@@ -66,6 +66,10 @@ test('OpenAPI credential lifecycle is bounded, non-secret, and documents the own
   assert.deepEqual(spec.components.schemas.CredentialRevokeAllResponse.properties.remainingCredentials, {
     const: 0,
   });
+  assert.deepEqual(spec.components.schemas.CredentialRevokeRequest.properties.confirmFinalRecoveryRemoval.const, true);
+  assert.deepEqual(spec.components.schemas.CredentialRevokeAllRequest.properties.confirmFinalRecoveryRemoval.const, true);
+  assert.equal(spec.paths['/api/passkey-backup/v1/credentials/revoke-all'].post.requestBody.content['application/json'].schema.$ref,
+    '#/components/schemas/CredentialRevokeAllRequest');
   const descriptor = spec.components.schemas.CredentialDescriptor;
   assert.equal(descriptor.additionalProperties, false);
   assert.deepEqual(Object.keys(descriptor.properties).sort(), [

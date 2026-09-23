@@ -426,6 +426,43 @@ CI must complete it. The self-pin validator must run from a clean checkout of
 `codex/release-readiness-root-owner` at the reviewed PR head even after merge;
 the detached manifest then binds that exact source commit.
 
+## Directed recovery assertions and revocation boundary — 2026-09-23
+
+The current pushed Android candidate on `codex/android-production-consolidated-20260731`
+is `ea271c827574a70cce988747edf1e7a8f1093519`. Its credential-directed
+PRF assertion client and native result parser bind the exact selected credential
+and accept a null WebAuthn user handle only for that directed ceremony. Android
+also distinguishes rollback of an enrollment that never verified its backup
+from ordinary credential removal. Only that rollback sends the new exact-body
+confirmation flag. Detekt and all 210 backup-module tests pass locally; exact-head
+CI and IAS validation are queued. Ordinary live-route deletion remains blocked
+until confirmed UX, backup-key rotation and coordinated service revocation exist.
+
+The iOS candidate on `codex/testflight-redesign-2026.8.17` is pushed at
+`2ca7389faceb1d1713d5234bcddf0c4c6fcd1916`. It binds directed PRF
+assertions to the challenged credential and keeps discoverable assertions strict.
+The prior head's targeted simulator suites passed 81 tests and Release Safety
+passed. The current head adds a dedicated incomplete-registration rollback
+body; its focused iOS 18.1 simulator suite passed 60 tests. Current exact-head
+CI is queued. Native Google Password Manager PRF
+interoperability on iOS 18+ is unproved by these simulator tests.
+
+The root challenge service now binds a directed assertion to its exact
+credential and accepts a null user handle only on that path. Its prior pushed
+head `edd7c08aaf4289ce1228a498cbdab20fcded75cf` passed all three
+exact-head hosted jobs. New local changes require an explicit, authorization-bound
+`confirmFinalRecoveryRemoval: true` before revoking any live credential, since
+another stored credential does not prove a decryptable surviving backup. The
+non-deployed owner authority applies the same guard. The Android/iOS clients
+reserve this field for incomplete-enrollment compensation; ordinary removal
+stays blocked until explicit user confirmation is implemented. The full local
+challenge and owner suites pass 106 and 55 tests, respectively. This guard does
+not prove that the client displayed confirmation or rotated the backup key.
+Revocation is not yet atomic across the challenge and owner stores, so a
+partially revoked identity remains a production blocker. No recovery capability
+was enabled or deployed by this increment. The root source-publication fixture
+passed all 88 adversarial cases locally before this new root source is pushed.
+
 ## Current local access check
 
 Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. Apple device records exist, but none had an active tunnel (81 disconnected, one unavailable). The configured Android SDK's `adb` is available and reported zero connected devices. Receipt: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish local inventory only; store access, provisioning, private-key use and actual device qualification remain unverified. No device was reset or uninstalled.

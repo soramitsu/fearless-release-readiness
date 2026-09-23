@@ -212,12 +212,13 @@
         },
         "responses": {
           "200": {
-            "description": "Idempotent credential revocation result. Unknown credentials do not create owner records.",
+            "description": "Idempotent credential revocation result. Removing any live credential requires a confirmation-bound grant because another credential record does not prove a recoverable backup; unknown credentials do not create owner records. The client must provide actual user confirmation or a verified incomplete-enrollment rollback.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeResponse" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AuthorizationFailed" },
           "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
           "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
           "429": { "$ref": "#/components/responses/RateLimited" },
@@ -232,16 +233,17 @@
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialListRequest" } } }
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeAllRequest" } } }
         },
         "responses": {
           "200": {
-            "description": "Idempotent storage-owner credential revocation result; the owner tombstone remains after the last credential.",
+            "description": "Idempotent storage-owner credential revocation result. Removing live recovery credentials requires explicit confirmed loss of recovery; the owner tombstone remains.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CredentialRevokeAllResponse" } } }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/AuthorizationFailed" },
           "403": { "$ref": "#/components/responses/AuthorizationForbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
           "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
           "429": { "$ref": "#/components/responses/RateLimited" },
@@ -281,7 +283,7 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       },
       "Conflict": {
-        "description": "Credential uniqueness, capacity, backup-eligibility, or signature-counter state conflicted.",
+        "description": "Credential uniqueness, capacity, backup-eligibility, signature-counter, or final-recovery-route confirmation state conflicted.",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
       },
       "PayloadTooLarge": {
@@ -438,6 +440,18 @@
         "properties": {
           "storageKey": { "$ref": "#/components/schemas/StorageKey" },
           "credentialId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
+          "confirmFinalRecoveryRemoval": { "const": true, "description": "Required when revoking any live credential because another record does not prove a surviving recoverable backup; set only after explicit user confirmation, or for a verified incomplete-enrollment rollback." },
+          "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
+          "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
+        }
+      },
+      "CredentialRevokeAllRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storageKey", "rpId", "schemaVersion"],
+        "properties": {
+          "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "confirmFinalRecoveryRemoval": { "const": true, "description": "Required when live credentials exist, after explicit user confirmation or a verified incomplete-enrollment rollback." },
           "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
           "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
         }

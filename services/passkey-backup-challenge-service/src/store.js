@@ -523,7 +523,7 @@ export class InMemoryPasskeyChallengeStore {
       }));
   }
 
-  revokeCredential(storageKey, credentialId, ownerSubjectHash) {
+  revokeCredential(storageKey, credentialId, ownerSubjectHash, confirmFinalRecoveryRemoval = false) {
     const normalizedStorageKey = validateStorageKey(storageKey);
     const normalizedOwner = normalizeOwnerSubjectHash(ownerSubjectHash);
     const existingOwner = this.ownersByStorageKey.get(normalizedStorageKey);
@@ -536,6 +536,11 @@ export class InMemoryPasskeyChallengeStore {
     const currentCredentials = this.credentialsByStorageKey.get(normalizedStorageKey) ?? new Map();
     if (!currentCredentials.has(credentialId)) {
       return { remainingCredentials: currentCredentials.size };
+    }
+    // Other records are not evidence of independently decryptable backups.
+    // Treat every live credential removal as potentially final.
+    if (!confirmFinalRecoveryRemoval) {
+      throw serviceError(409, 'final_recovery_route_confirmation_required', 'Final recovery route requires explicit confirmation');
     }
 
     const nextCredentials = cloneCredentials(this.credentialsByStorageKey);
@@ -554,7 +559,7 @@ export class InMemoryPasskeyChallengeStore {
     return { remainingCredentials: nextCredentials.get(normalizedStorageKey).size };
   }
 
-  revokeAllCredentials(storageKey, ownerSubjectHash) {
+  revokeAllCredentials(storageKey, ownerSubjectHash, confirmFinalRecoveryRemoval = false) {
     const normalizedStorageKey = validateStorageKey(storageKey);
     const normalizedOwner = normalizeOwnerSubjectHash(ownerSubjectHash);
     const existingOwner = this.ownersByStorageKey.get(normalizedStorageKey);
@@ -579,6 +584,9 @@ export class InMemoryPasskeyChallengeStore {
       throw serviceError(403, 'request_authorization_failed', 'Request authorization failed');
     }
     const currentCredentials = this.credentialsByStorageKey.get(normalizedStorageKey) ?? new Map();
+    if (currentCredentials.size > 0 && !confirmFinalRecoveryRemoval) {
+      throw serviceError(409, 'final_recovery_route_confirmation_required', 'Final recovery route requires explicit confirmation');
+    }
     const applyLifecycleEffects = () => {
       this.bumpStorageMutationVersion(normalizedStorageKey, normalizedOwner);
       this.invalidateAssertionsForStorageKey(normalizedStorageKey);
