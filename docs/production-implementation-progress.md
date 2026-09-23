@@ -90,7 +90,7 @@ XCM execution remains disabled. The local envelope is not a cross-platform
 serializer, installer or enabled Drive backup.
 
 The latest pushed iOS candidate is
-`adc462dbb33117eb1d1e80c8b91967a0f9b3adcf` on
+`aee2792a001645708012fe8778c254984cfe8129` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its in-memory
 draft captures every known V2 root and chain-account Keychain slot, plus wallet
 identities, selection/order and the two historical Core Data display
@@ -107,11 +107,22 @@ head accepts a standalone EVM wallet only with a matching public key/address,
 quarantines partial TON and mismatched public records, and requires the
 original EVM private key during backup preflight. Root-mnemonic and
 stored-seed adoption skip wallets without a Substrate root. The focused
-workspace simulator suite passed 34/34 mapper/preflight tests; both
-`git diff --check` and project `plutil` lint passed. Exact-head hosted checks are
+workspace simulator suite passed 34/34 mapper/preflight tests on the preceding
+code head; both `git diff --check` and project `plutil` lint passed. The
+current documentation-only commit corrects the material inventory's EVM-only
+description. Exact-head hosted checks are
 pending. A shared Core Data/Keychain writer lock,
 account-level export/reimport proof, specialized chain derivation proof and
 the shared serializer/installer remain required before backup completion.
+
+The next cross-platform material step must assign a portable wallet identity
+instead of copying Android's numeric database ID or iOS's string meta ID.
+The current `FPWMLE01` grammar shares only its header; Android's payload is an
+Android draft, while the iOS inventory source has no serializer. A bounded
+semantic record must preserve the original independent keys and derivation
+provenance, then each receiving app must independently derive public identity,
+prove original-key signing and export, and install the whole wallet snapshot
+through a durable, idempotent journal. Neither platform has that installer.
 
 The non-deployed SQLite owner authority's one-writer HTTP candidate covers all
 seven protected route contracts in local tests (111/111). Its root source at
