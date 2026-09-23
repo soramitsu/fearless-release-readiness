@@ -42,6 +42,39 @@ general TON sends, production-service repairs and store/device acceptance
 remain open. No local or CI result substitutes for independent review,
 replacement-device recovery or capped funded evidence.
 
+## Current source checkpoint — 2026-09-24
+
+The latest pushed Android candidate is
+`c705fe7baf216dc89fdc8947d1da856661b20997` on
+[PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). Its
+Android-local draft captures validated V3 Substrate/EVM/TON and V2 chain-account
+bytes across multiple wallets. Account JVM tests passed 186/186, the focused
+material tests passed 18/18, and Detekt passed locally. Exact-head Android CI
+and IAS validation are still running. This is not a cross-platform format,
+installer or enabled Drive backup.
+
+The latest pushed iOS candidate is
+`1d1c99d6a256fe5866f4d60bf3d71ccb47750ad3` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its in-memory
+draft captures every known V2 root and chain-account Keychain slot, plus wallet
+identities, selection/order and the two historical Core Data display
+preferences that the ordinary wallet model omits. Signing preflight runs after
+capture and a final present/absent-slot reread detects stable substitutions;
+reflection is redacted. The focused iOS 18.1 simulator suite passed 21/21,
+SwiftFormat and diff checks passed. Exact-head hosted checks are pending.
+An independent read-only review found that a shared Core Data/Keychain writer
+lock and proof that every optional phrase/seed/path reproduces the original
+identity are still required before backup completion. The draft has no
+serializer, uploader or restore installer.
+
+The non-deployed SQLite owner authority's one-writer HTTP candidate covers all
+seven protected route contracts in local tests (111/111). Its root source at
+`617475d16e772d2f657e72c5f2bb1055582fde1b` passed all three hosted CI jobs.
+The deployed JSON challenge service remains the live writer; verified legacy
+migration, first-owner wallet proof, production startup admission and live
+cutover have not occurred. The Iroha `optimizations` checkout remains with its
+repository owner; no other Iroha branch is authorized.
+
 ## Candidate update — 2026-09-24
 
 The non-deployed owner authority now has SQLite schema v5: an explicit v4→v5
@@ -64,11 +97,11 @@ provider qualification or owner admission.
 The protocol fence still rejects owner grants at the JSON writer; portable
 recovery remains disabled.
 
-The current pushed Android candidate is
+At the preceding checkpoint, the pushed Android candidate was
 `93b58fc593d70e70628fb1eb2be44eab122e6a2c`, including exact amount-property
 integrity and confirmation/submission parity checks for XCM; its focused tests
 and Detekt pass locally. The
-current pushed iOS candidate is `c29acdf15781574ae566aa50d676ca632dd6b4cd`;
+then-pushed iOS candidate was `c29acdf15781574ae566aa50d676ca632dd6b4cd`;
 102 impacted tests passed locally at the earlier accessibility checkpoint.
 At the current iOS head, a focused iOS 18.1 simulator preflight suite passes
 14/14: it locally signs and verifies SR25519/ED25519/ECDSA Substrate, EVM and
