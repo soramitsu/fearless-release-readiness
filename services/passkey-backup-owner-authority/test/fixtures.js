@@ -15,13 +15,21 @@ export const assertion = (userHandle, id = b64(2)) => ({ id, rawId: id, type: 'p
 export const request = (path = Object.keys(SCOPES)[0], body = '{}') => ({ schemaVersion: 1, audience,
   method: 'POST', path, bodySha256: hash(body), scope: SCOPES[path] });
 
-// Test-only reconstruction of a pre-v3 file. No production downgrade exists.
+// Test-only reconstruction of a previous schema. No production downgrade exists.
 export function downgradeStoreFixture(path, version) {
-  if (version !== 1 && version !== 2) throw new Error('unsupported fixture version');
+  if (![1, 2, 3].includes(version)) throw new Error('unsupported fixture version');
   const db = new DatabaseSync(path);
   try {
     db.exec(`
       BEGIN IMMEDIATE;
+      DROP TRIGGER credential_identity_no_update;
+      DROP TRIGGER legacy_credential_scope_insert;
+      DROP TRIGGER credential_scope_no_delete;
+      DROP TRIGGER credential_scope_validate_update;
+      DROP TRIGGER credential_scope_validate_insert;
+      DROP TRIGGER credential_scope_insert;
+      DROP TABLE credential_scopes;
+      ${version < 3 ? `
       DROP TRIGGER legacy_credential_identity_no_update;
       DROP TRIGGER legacy_credential_metadata_no_delete;
       DROP TRIGGER legacy_credential_metadata_no_update;
@@ -30,6 +38,7 @@ export function downgradeStoreFixture(path, version) {
       DROP TRIGGER storage_bindings_no_update;
       DROP TABLE legacy_credential_metadata;
       DROP TABLE storage_bindings;
+      ` : ''}
       ${version === 1 ? 'DROP TABLE backup_heads; DROP TABLE backup_operations;' : ''}
       CREATE TABLE meta_previous (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=${version})) STRICT;
       INSERT INTO meta_previous SELECT id,wall,observed,${version} FROM meta;

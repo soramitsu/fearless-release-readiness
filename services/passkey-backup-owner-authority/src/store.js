@@ -3,7 +3,7 @@ import { constants, closeSync, fsyncSync, lstatSync, openSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, deny } from './validation.js';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
  operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
@@ -65,9 +65,58 @@ const REQUIRED_LEGACY_TRIGGERS = [
   'legacy_credential_metadata_owner_insert', 'legacy_credential_metadata_no_update',
   'legacy_credential_metadata_no_delete', 'legacy_credential_identity_no_update',
 ];
+// Every credential has exactly one explicit scope. The owner-wide scope is
+// assigned on insertion; a proven legacy-key metadata insert narrows it to
+// that immutable storage binding in the same writer transaction.
+const CREDENTIAL_SCOPE_TABLE = `
+CREATE TABLE credential_scopes (
+ credential_id TEXT PRIMARY KEY REFERENCES credentials(id) ON DELETE RESTRICT,
+ owner TEXT NOT NULL REFERENCES owners(subject),
+ scope TEXT NOT NULL CHECK(scope IN ('owner','storage')),
+ storage_key TEXT REFERENCES storage_bindings(storage_key) ON DELETE RESTRICT,
+ CHECK((scope='owner' AND storage_key IS NULL) OR (scope='storage' AND storage_key IS NOT NULL))
+) STRICT;
+CREATE INDEX credential_scopes_storage ON credential_scopes(storage_key);
+`;
+const CREDENTIAL_SCOPE_TRIGGERS = `
+CREATE TRIGGER credential_identity_no_update BEFORE UPDATE OF id,owner ON credentials
+BEGIN SELECT RAISE(ABORT,'immutable credential identity'); END;
+CREATE TRIGGER credential_scope_insert AFTER INSERT ON credentials
+BEGIN INSERT INTO credential_scopes VALUES(NEW.id,NEW.owner,'owner',NULL); END;
+CREATE TRIGGER credential_scope_validate_insert BEFORE INSERT ON credential_scopes
+BEGIN
+ SELECT RAISE(ABORT,'credential scope owner mismatch') WHERE NOT EXISTS (
+  SELECT 1 FROM credentials c WHERE c.id=NEW.credential_id AND c.owner=NEW.owner
+ );
+ SELECT RAISE(ABORT,'credential scope storage owner mismatch') WHERE NEW.scope='storage' AND NOT EXISTS (
+  SELECT 1 FROM storage_bindings b WHERE b.storage_key=NEW.storage_key AND b.owner=NEW.owner
+ );
+END;
+CREATE TRIGGER credential_scope_validate_update BEFORE UPDATE ON credential_scopes
+BEGIN
+ SELECT RAISE(ABORT,'immutable credential scope') WHERE OLD.scope!='owner' OR NEW.scope!='storage' OR
+  OLD.credential_id!=NEW.credential_id OR OLD.owner!=NEW.owner OR NOT EXISTS (
+   SELECT 1 FROM legacy_credential_metadata m JOIN storage_bindings b ON b.storage_key=m.storage_key
+   WHERE m.credential_id=OLD.credential_id AND m.storage_key=NEW.storage_key AND b.owner=OLD.owner
+  );
+END;
+CREATE TRIGGER credential_scope_no_delete BEFORE DELETE ON credential_scopes
+BEGIN SELECT RAISE(ABORT,'immutable credential scope'); END;
+CREATE TRIGGER legacy_credential_scope_insert AFTER INSERT ON legacy_credential_metadata
+BEGIN
+ UPDATE credential_scopes SET scope='storage',storage_key=NEW.storage_key
+ WHERE credential_id=NEW.credential_id AND scope='owner';
+ SELECT RAISE(ABORT,'credential scope missing') WHERE changes()!=1;
+END;
+`;
+const REQUIRED_SCOPE_TRIGGERS = [
+  'credential_identity_no_update', 'credential_scope_insert', 'credential_scope_validate_insert',
+  'credential_scope_validate_update', 'credential_scope_no_delete',
+  'legacy_credential_scope_insert',
+];
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=3)) STRICT;
-INSERT INTO meta VALUES(1,0,0,3);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=4)) STRICT;
+INSERT INTO meta VALUES(1,0,0,4);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -101,7 +150,9 @@ CREATE INDEX grants_session ON grants(session);
 CREATE INDEX ceremonies_expiry ON ceremonies(expires);
 ${BACKUP_HEAD_SCHEMA}
 ${LEGACY_COHORT_SCHEMA}
-PRAGMA user_version=3;
+${CREDENTIAL_SCOPE_TABLE}
+${CREDENTIAL_SCOPE_TRIGGERS}
+PRAGMA user_version=4;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -119,6 +170,18 @@ DROP TABLE meta;
 ALTER TABLE meta_v3 RENAME TO meta;
 PRAGMA user_version=3;
 `;
+const MIGRATE_V3_TO_V4 = `
+${CREDENTIAL_SCOPE_TABLE}
+INSERT INTO credential_scopes
+ SELECT c.id,c.owner,CASE WHEN m.credential_id IS NULL THEN 'owner' ELSE 'storage' END,m.storage_key
+ FROM credentials c LEFT JOIN legacy_credential_metadata m ON m.credential_id=c.id;
+${CREDENTIAL_SCOPE_TRIGGERS}
+CREATE TABLE meta_v4 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=4)) STRICT;
+INSERT INTO meta_v4 SELECT id,wall,observed,4 FROM meta WHERE id=1 AND version=3;
+DROP TABLE meta;
+ALTER TABLE meta_v4 RENAME TO meta;
+PRAGMA user_version=4;
+`;
 
 function validateLegacyCohortSchema(db) {
   db.prepare('SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256,created FROM storage_bindings LIMIT 0').all();
@@ -126,6 +189,21 @@ function validateLegacyCohortSchema(db) {
   for (const name of REQUIRED_LEGACY_TRIGGERS) {
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?").get(name)) deny('store_invalid');
   }
+}
+
+function validateCredentialScopeSchema(db) {
+  db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes LIMIT 0').all();
+  for (const name of REQUIRED_SCOPE_TRIGGERS) {
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?").get(name)) deny('store_invalid');
+  }
+  if (db.prepare(`SELECT 1 FROM credentials c LEFT JOIN credential_scopes s ON s.credential_id=c.id
+    WHERE s.credential_id IS NULL OR s.owner!=c.owner LIMIT 1`).get() ||
+      db.prepare(`SELECT 1 FROM credential_scopes s
+      LEFT JOIN legacy_credential_metadata m ON m.credential_id=s.credential_id
+      LEFT JOIN storage_bindings b ON b.storage_key=s.storage_key
+    WHERE (s.scope='storage' AND (m.storage_key IS NULL OR m.storage_key!=s.storage_key)) OR
+      (s.scope='storage' AND (b.owner IS NULL OR b.owner!=s.owner)) OR
+      (s.scope='owner' AND m.credential_id IS NOT NULL) LIMIT 1`).get()) deny('store_invalid');
 }
 
 function privateFile(path, directory = false) {
@@ -176,6 +254,11 @@ export class AuthorityStore {
         if (!create && migrate && oldVersion === 2 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 2) {
           this.#db.exec(MIGRATE_V2_TO_V3);
+          oldVersion = 3;
+        }
+        if (!create && migrate && oldVersion === 3 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 3) {
+          this.#db.exec(MIGRATE_V3_TO_V4);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -184,6 +267,7 @@ export class AuthorityStore {
         this.#db.prepare('SELECT owner, revision, operation_id FROM backup_heads LIMIT 0').all();
         this.#db.prepare('SELECT owner, revision, operation_id FROM backup_operations LIMIT 0').all();
         validateLegacyCohortSchema(this.#db);
+        validateCredentialScopeSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -264,26 +348,31 @@ export function readOwnerCredentialSnapshot(path) {
     db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF;');
     db.exec('BEGIN');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-    if (![2, SCHEMA_VERSION].includes(schemaVersion) ||
+    if (![2, 3, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
-    if (schemaVersion === SCHEMA_VERSION) validateLegacyCohortSchema(db);
+    if (schemaVersion >= 3) validateLegacyCohortSchema(db);
+    if (schemaVersion === SCHEMA_VERSION) validateCredentialScopeSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()
       .map((row) => Object.freeze({ ...row }));
-    const storageBindings = schemaVersion === SCHEMA_VERSION
+    const storageBindings = schemaVersion >= 3
       ? db.prepare('SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256,created FROM storage_bindings ORDER BY storage_key').all()
         .map((row) => Object.freeze({ ...row })) : [];
-    const legacyCredentialMetadata = schemaVersion === SCHEMA_VERSION
+    const legacyCredentialMetadata = schemaVersion >= 3
       ? db.prepare('SELECT credential_id,storage_key,aaguid,transports_json,registration_platform FROM legacy_credential_metadata ORDER BY credential_id').all()
+        .map((row) => Object.freeze({ ...row })) : [];
+    const credentialScopes = schemaVersion === SCHEMA_VERSION
+      ? db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
     return Object.freeze({ schemaVersion,
       owners: Object.freeze(owners), credentials: Object.freeze(credentials),
       storageBindings: Object.freeze(storageBindings),
-      legacyCredentialMetadata: Object.freeze(legacyCredentialMetadata) });
+      legacyCredentialMetadata: Object.freeze(legacyCredentialMetadata),
+      credentialScopes: Object.freeze(credentialScopes) });
   } catch {
     try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
     deny('store_unavailable');

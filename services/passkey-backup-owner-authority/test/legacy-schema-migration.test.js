@@ -10,7 +10,7 @@ const digest = (value) => createHash('sha256').update(value).digest('hex');
 const denied = (action, code = 'store_unavailable') =>
   assert.throws(action, (error) => error?.code === code);
 
-test('explicit v2-to-v3 migration preserves credentials, grants, counters and backup head', async (t) => {
+test('explicit v2-to-v4 migration preserves credentials, grants, counters and backup head', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -37,18 +37,19 @@ test('explicit v2-to-v3 migration preserves credentials, grants, counters and ba
   assert.deepEqual(migrated.readBackupHead(owner.sessionToken), originalHead);
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
   denied(() => migrated.consumeGrant(grant.token, request()), 'authorization_failed');
-  const v3 = readOwnerCredentialSnapshot(path);
-  assert.equal(v3.schemaVersion, 3);
-  assert.deepEqual(v3.owners, v2.owners);
-  assert.deepEqual(v3.credentials, v2.credentials);
-  assert.deepEqual(v3.storageBindings, []);
-  assert.deepEqual(v3.legacyCredentialMetadata, []);
+  const v4 = readOwnerCredentialSnapshot(path);
+  assert.equal(v4.schemaVersion, 4);
+  assert.deepEqual(v4.owners, v2.owners);
+  assert.deepEqual(v4.credentials, v2.credentials);
+  assert.deepEqual(v4.storageBindings, []);
+  assert.deepEqual(v4.legacyCredentialMetadata, []);
+  assert.deepEqual(v4.credentialScopes, [{ credential_id: b64(2), owner: owner.subject, scope: 'owner', storage_key: null }]);
   const db = new DatabaseSync(path, { readOnly: true });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
   db.close();
 });
 
-test('v3 stores exact historical public metadata, per-credential handles and empty owner tombstones', async (t) => {
+test('v4 stores exact historical public metadata, scoped credentials and empty owner tombstones', async (t) => {
   const { core, path, bootstrap, open } = setup(t);
   const first = (await bootstrap()).owner;
   const second = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -70,29 +71,67 @@ test('v3 stores exact historical public metadata, per-credential handles and emp
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 3);
+  assert.equal(snapshot.schemaVersion, 4);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).user_handle, historicalHandle);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).counter, 7);
   assert.deepEqual(snapshot.storageBindings.map((row) => row.storage_key), [tombstone, storage]);
   assert.equal(snapshot.legacyCredentialMetadata[0].transports_json, '["internal","hybrid"]');
   assert.equal(snapshot.legacyCredentialMetadata[0].registration_platform, 'ios');
   assert.equal(snapshot.legacyCredentialMetadata.some((row) => row.storage_key === tombstone), false);
+  assert.deepEqual(snapshot.credentialScopes.find((row) => row.credential_id === b64(2)),
+    { credential_id: b64(2), owner: first.subject, scope: 'storage', storage_key: storage });
+  assert.deepEqual(snapshot.credentialScopes.find((row) => row.credential_id === b64(3)),
+    { credential_id: b64(3), owner: second.subject, scope: 'owner', storage_key: null });
 
   assert.throws(() => db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
     b64(3), storage, '00000000-0000-0000-0000-000000000000', null, 'android'), /owner mismatch/);
   assert.throws(() => db.prepare('UPDATE storage_bindings SET owner=? WHERE storage_key=?').run(second.subject, storage), /immutable storage binding/);
   assert.throws(() => db.prepare('DELETE FROM storage_bindings WHERE storage_key=?').run(tombstone), /immutable storage binding/);
   assert.throws(() => db.prepare('UPDATE legacy_credential_metadata SET registration_platform=? WHERE credential_id=?').run('android', b64(2)), /immutable legacy credential metadata/);
-  assert.throws(() => db.prepare('UPDATE credentials SET owner=? WHERE id=?').run(second.subject, b64(2)), /immutable legacy credential identity/);
+  assert.throws(() => db.prepare('UPDATE credentials SET owner=? WHERE id=?').run(second.subject, b64(2)), /immutable credential identity/);
   assert.throws(() => db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(b64(9), b64(2)), /immutable legacy credential identity/);
   assert.throws(() => db.prepare('DELETE FROM credentials WHERE id=?').run(b64(2)), /FOREIGN KEY constraint failed/);
   db.prepare('UPDATE credentials SET counter=8, revoked=1 WHERE id=?').run(b64(2));
   assert.equal(db.prepare('SELECT counter,revoked FROM credentials WHERE id=?').get(b64(2)).counter, 8);
   db.close();
-  open(); // The persisted tombstone and metadata are valid for the v3 reader.
+  open(); // The persisted tombstone and scope are valid for the v4 reader.
 });
 
-test('failed v2-to-v3 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
+test('explicit v3-to-v4 migration retains legacy wallet scope and owner-wide recovery scope', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const historical = (await bootstrap()).owner;
+  const ownerWide = (await bootstrap(core, b64(3), b64(5))).owner;
+  const storage = 'storage:historical-wallet';
+  core.close();
+  const db = new DatabaseSync(path);
+  try {
+    db.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE');
+    db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+      storage, historical.subject, authorizationSubjectHash(historical.subject),
+      digest('source'), digest('proof'), 123);
+    db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+      b64(2), storage, '00000000-0000-0000-0000-000000000000', null, 'android');
+    db.exec('COMMIT');
+  } finally { db.close(); }
+  downgradeStoreFixture(path, 3);
+  const previous = readOwnerCredentialSnapshot(path);
+  assert.equal(previous.schemaVersion, 3);
+  assert.deepEqual(previous.credentialScopes, []);
+  denied(() => open());
+  const migrated = open({ migrate: true });
+  const snapshot = readOwnerCredentialSnapshot(path);
+  assert.equal(snapshot.schemaVersion, 4);
+  assert.deepEqual(snapshot.credentials, previous.credentials);
+  assert.deepEqual(snapshot.storageBindings, previous.storageBindings);
+  assert.deepEqual(snapshot.legacyCredentialMetadata, previous.legacyCredentialMetadata);
+  assert.deepEqual(snapshot.credentialScopes, [
+    { credential_id: b64(2), owner: historical.subject, scope: 'storage', storage_key: storage },
+    { credential_id: b64(3), owner: ownerWide.subject, scope: 'owner', storage_key: null },
+  ]);
+  assert.equal(migrated.readBackupHead(historical.sessionToken).ownerSubject, historical.subject);
+});
+
+test('failed v2-to-v4 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -109,14 +148,26 @@ test('failed v2-to-v3 migration rolls back all schema changes and remains explic
   db.close();
   const migrated = open({ migrate: true });
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
-  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 3);
+  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 4);
 });
 
-test('missing v3 immutability trigger rejects opening rather than silently running weaker schema', (t) => {
+test('missing v4 immutability trigger rejects opening rather than silently running weaker schema', (t) => {
   const { core, open, path } = setup(t);
   core.close();
   const db = new DatabaseSync(path);
   db.exec('DROP TRIGGER legacy_credential_identity_no_update');
+  db.close();
+  denied(() => open());
+  denied(() => readOwnerCredentialSnapshot(path));
+});
+
+test('missing scope row or scope trigger rejects opening a v4 store', async (t) => {
+  const { core, open, path, bootstrap } = setup(t);
+  await bootstrap();
+  core.close();
+  const db = new DatabaseSync(path);
+  db.exec('DROP TRIGGER credential_scope_no_delete');
+  db.prepare('DELETE FROM credential_scopes WHERE credential_id=?').run(b64(2));
   db.close();
   denied(() => open());
   denied(() => readOwnerCredentialSnapshot(path));

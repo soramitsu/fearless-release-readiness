@@ -400,23 +400,25 @@ test('legacy revoke-all rejects an unbound storage key without spending its gran
   assert.equal(core.consumeGrant(grant.token, body.request).active, true);
 });
 
-test('legacy revoke-all refuses success while a live owner credential has no storage mapping', async (t) => {
+test('wallet-key revoke-all preserves an explicitly owner-wide recovery credential', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
   bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
-  const unclassifiedId = b64(54);
+  const ownerWideId = b64(54);
   const db = new DatabaseSync(path);
   try {
     db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
-      unclassifiedId, owner.subject, b64(31), challenge.userHandle, 0, 'multiDevice', 1);
+      ownerWideId, owner.subject, b64(31), challenge.userHandle, 0, 'multiDevice', 1);
+    assert.deepEqual({ ...db.prepare('SELECT scope,storage_key FROM credential_scopes WHERE credential_id=?').get(ownerWideId) },
+      { scope: 'owner', storage_key: null });
   } finally { db.close(); }
   const body = revokeAll();
   const grant = core.issueGrant(owner.sessionToken, body.request);
-  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
-    body.bytes, {}), 'authorization_failed');
-  assert.equal(row(path, b64(2)).revoked, 0);
-  assert.equal(row(path, unclassifiedId).revoked, 0);
-  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
+  assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, {}), { status: 'revoked-all', remainingCredentials: 0, generation: 1 });
+  assert.equal(row(path, b64(2)).revoked, 1);
+  assert.equal(row(path, ownerWideId).revoked, 0);
+  denied(() => core.consumeGrant(grant.token, body.request), 'authorization_failed');
 });
 
 test('an exact grant from one owner cannot mutate another owner credential', async (t) => {
@@ -457,7 +459,7 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   denied(() => restarted.consumeGrant(second.token, body.request), 'authorization_failed');
 });
 
-test('explicit v1-to-v3 owner migration retains existing credential and permits atomic counter commit', async (t) => {
+test('explicit v1-to-v4 owner migration retains existing credential and permits atomic counter commit', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
   const id = b64(2);

@@ -434,27 +434,26 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           const credential = tx.query('SELECT owner,revoked FROM credentials WHERE id=?', target.credentialId);
           if (credential) {
             if (credential.owner !== owner.subject || !tx.query(
-              'SELECT credential_id FROM legacy_credential_metadata WHERE credential_id=? AND storage_key=?',
+              "SELECT credential_id FROM credential_scopes WHERE credential_id=? AND scope='storage' AND storage_key=?",
               target.credentialId, target.storageKey)) deny();
             if (credential.revoked === 0) {
               if (!target.confirmed) deny('final_recovery_route_confirmation_required');
               tx.run('UPDATE credentials SET revoked=1 WHERE id=?', target.credentialId);
             }
           }
-          const remaining = tx.query('SELECT count(*) AS n FROM credentials c JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE m.storage_key=? AND c.revoked=0', target.storageKey).n;
+          const remaining = tx.query("SELECT count(*) AS n FROM credentials c JOIN credential_scopes s ON s.credential_id=c.id WHERE s.scope='storage' AND s.storage_key=? AND c.revoked=0", target.storageKey).n;
           result = { status: 'revoked', credentialId: target.credentialId,
             remainingCredentials: remaining,
             generation: credential?.revoked === 0 ? bumpGeneration(tx, owner).generation : owner.generation };
         } else {
           boundLegacyStorage(tx, target.storageKey, owner.subject);
-          // Legacy revoke-all is scoped to one storageKey, not the entire
-          // random owner. An active credential with no proven key mapping
-          // would make a successful "all" response ambiguous, so deny it.
-          if (tx.query('SELECT 1 FROM credentials c LEFT JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE c.owner=? AND c.revoked=0 AND m.credential_id IS NULL LIMIT 1',
+          // A missing scope makes "all" ambiguous. Explicit owner-wide
+          // recovery credentials are outside this wallet-key route.
+          if (tx.query('SELECT 1 FROM credentials c LEFT JOIN credential_scopes s ON s.credential_id=c.id WHERE c.owner=? AND c.revoked=0 AND s.credential_id IS NULL LIMIT 1',
             owner.subject)) deny();
-          const live = tx.query('SELECT count(*) AS n FROM credentials c JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE m.storage_key=? AND c.revoked=0', target.storageKey).n;
+          const live = tx.query("SELECT count(*) AS n FROM credentials c JOIN credential_scopes s ON s.credential_id=c.id WHERE s.scope='storage' AND s.storage_key=? AND c.revoked=0", target.storageKey).n;
           if (live > 0 && !target.confirmed) deny('final_recovery_route_confirmation_required');
-          tx.run('UPDATE credentials SET revoked=1 WHERE owner=? AND id IN (SELECT credential_id FROM legacy_credential_metadata WHERE storage_key=?)',
+          tx.run("UPDATE credentials SET revoked=1 WHERE owner=? AND id IN (SELECT credential_id FROM credential_scopes WHERE scope='storage' AND storage_key=?)",
             owner.subject, target.storageKey);
           result = { status: 'revoked-all', remainingCredentials: 0,
             generation: bumpGeneration(tx, owner).generation };

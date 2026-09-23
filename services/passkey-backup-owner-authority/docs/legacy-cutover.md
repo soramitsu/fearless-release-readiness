@@ -3,7 +3,7 @@
 This is a design for a future, reviewed migration. **No live credential route is
 converted or admitted by this document.** The current challenge HTTP process
 writes schema-4 JSON after separate grant introspection; the owner authority
-uses schema-3 SQLite and has no HTTP listener. The read-only reconciliation
+uses schema-4 SQLite and has no HTTP listener. The read-only reconciliation
 report always denies migration. Its two file snapshots are sequential and are
 not proof of ownership or an atomic cross-store view.
 
@@ -45,10 +45,11 @@ for one storage key must not authorize another, even if account names match.
    conflicting owner hash, missing proof, changed snapshot or an owner binding
    already claimed by another namespace. Never initialize an empty database to
    bypass failure.
-2. SQLite schema v3 now has storage-key→random-owner binding and capacity for
+2. SQLite schema v4 has storage-key→random-owner binding and capacity for
    complete historical public metadata and zero-credential tombstones. It
    preserves credential-scoped historical user handles in `credentials` rather
-   than replacing them with `owners.user_handle`. No legacy row or owner link
+   than replacing them with `owners.user_handle`, and records explicit owner-wide
+   or wallet-key credential scope. No legacy row or owner link
    has been imported. A future reviewed importer must verify the proof and
    source digest, then import a proven cohort and its proof commitment in one
    durable SQLite transaction with collision and counter checks. Retain an
@@ -99,14 +100,13 @@ the UTF-8 bytes `user`, one NUL byte, then the storage key. Owner-native
 enrollment instead uses a random owner handle. A proven legacy-key
 registration needs the deterministic handle
 and an atomic credential-to-key mapping with its verified public metadata.
-The current v3 `legacy_credential_metadata` table can retain imported
-historical rows, but a reviewed versioned credential-scope model must also
-classify post-cutover credentials as wallet-key-scoped or owner-wide. A
-wallet-key revoke-all may change only credentials mapped to that key; an
-owner-wide recovery credential must remain outside that route. Before such a
-model exists, the current internal mutation rejects an ambiguous revoke-all
-when it sees a live unmapped owner credential. That conservative rejection is
-not completion of the route.
+The v4 `credential_scopes` table classifies each credential as owner-wide or
+wallet-key-scoped. A historical metadata insert narrows its credential to the
+proven wallet key in the same SQLite transaction; the internal wallet-key
+revoke-all leaves owner-wide recovery credentials alone. Missing scope rows
+invalidate the store. This still does not authorize a live registration: its
+pending challenge and verified public metadata must bind the exact storage
+key before a new wallet-key credential can be inserted.
 
 A previously unseen wallet storage key cannot be assigned to a random owner
 from `walletId`, account name, Google identity or a completion body's
@@ -124,7 +124,7 @@ The owner core's `consumeGrant` now returns
 closed schema-1 response rejects that extra field before calling any of its
 four HTTP mutation handlers. This prevents this non-deployed owner core from
 being accidentally wired as a grant source for the JSON writer. The marker
-names the protocol fence, not the database schema version; v3 retains it.
+names the protocol fence, not the database schema version; v4 retains it.
 It does not convert a route, prove a legacy owner, or make two stores atomic; a future
 integrated HTTP service needs a new reviewed, explicit owner-authority contract.
 The trusted introspection endpoint must preserve the marker; a proxy or
