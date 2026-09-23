@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { base64UrlEncode } from '../src/base64url.js';
-import { authorizationSubjectHash, sha256Base64Url } from '../src/authorization.js';
+import { authorizationSubjectHash, createIntrospectionRequestAuthorizer, sha256Base64Url } from '../src/authorization.js';
 import { createServer, parseTrustedProxyCidrs } from '../src/server.js';
 import { createPasskeyBackupChallengeService } from '../src/service.js';
 import { serviceError } from '../src/errors.js';
@@ -312,6 +312,38 @@ test('HTTP authorization binds the exact transmitted body and rejects header amb
     }
     assert.equal(calls.length, 1, 'malformed Authorization headers must not reach introspection');
   }, { service, requestAuthorizer });
+});
+
+test('legacy HTTP refuses SQLite-owner introspection before a credential mutation', async (t) => {
+  let calls = 0;
+  const requestAuthorizer = createIntrospectionRequestAuthorizer({
+    introspectionUrl: 'https://authority.example.test/introspect',
+    audience: 'fearless.passkey-backup',
+    now: () => 1_800_000_000_000,
+    fetchImpl: async (_url, init) => {
+      const binding = JSON.parse(init.body);
+      return new Response(JSON.stringify({ ...binding, active: true,
+        subject: `owner:${base64UrlEncode(Buffer.alloc(32, 7))}`,
+        platform: 'android', expiresAt: 1_800_000_030,
+        credentialAuthority: 'owner-sqlite-v2',
+      }), { headers: { 'content-type': 'application/json' } });
+    },
+  });
+  await withServer(t, async (baseUrl) => {
+    for (const path of ['/api/passkey-backup/v1/registration/complete',
+      '/api/passkey-backup/v1/assertion/complete', '/api/passkey-backup/v1/credentials/revoke',
+      '/api/passkey-backup/v1/credentials/revoke-all']) {
+      const response = await rawPost(baseUrl, path);
+      assert.equal(response.status, 401, path);
+      assert.equal(response.body.error, 'request_authorization_failed');
+    }
+    assert.equal(calls, 0);
+  }, { service: { health: () => ({ ok: true }),
+    completeRegistration: () => { calls += 1; return {}; },
+    completeAssertion: () => { calls += 1; return {}; },
+    revokeCredential: () => { calls += 1; return {}; },
+    revokeAllCredentials: () => { calls += 1; return {}; } },
+    requestAuthorizer });
 });
 
 test('HTTP server rejects duplicate routing and body headers before authorization', async (t) => {

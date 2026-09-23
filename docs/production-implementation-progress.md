@@ -539,15 +539,14 @@ its store factory rejects a recovery-enabled setting or an owner SQLite path
 beside the JSON writer. This is a configuration guard, not a lifecycle
 transaction bridge; existing legacy HTTP credential routes remain available.
 
-Current-source local checks: owner authority **70/70**, challenge service
+For root commit `001a6c9439879d33ba70e72f416f8c5ad01828a3`, local checks were owner authority **70/70**, challenge service
 **111/111**, both syntax suites and diff check pass. The source-publication
 and release-bundle required-file inventories include the new reconciliation
 tool and adversarial tests. The source-publication fixture passed all 88
 negative cases, and both release-bundle export and verifier fixture suites
 passed. These checks validate source/evidence contracts, not deployed
-recovery. The preceding root commit `d8ad4eec06ed418f934fe61a8a883bc0b4fa1716`
-passed exact-head CI at [run 35864031123](https://github.com/soramitsu/fearless-release-readiness/actions/runs/35864031123);
-that run predates this increment. Recovery remains disabled until one
+recovery. That commit passed exact-head CI at [run 35867210624](https://github.com/soramitsu/fearless-release-readiness/actions/runs/35867210624).
+Recovery remains disabled until one
 reviewed authority owns all seven live routes, verified historical migration
 preserves every credential/tombstone, and device/cloud acceptance passes.
 
@@ -555,8 +554,41 @@ Android's subsequent disabled-path verifier candidate is pushed at
 `64ce2dd96` with 221/221 backup-module tests and strict Detekt passing
 locally. It verifies local PRF unwrap, authenticated decryption and
 wallet-owned signing/export evidence, but has no production wallet callback
-or native replacement-device recovery. The iOS reference above remains
-`613affcdd018b14623d85602cf7d33b2f0fc3ab0` pending its next candidate.
+or native replacement-device recovery. The subsequent iOS disabled-path PRF
+verifier candidate is pushed at `5f0adf0a814a9a030bbef8e6d3bb0950380cd3c0`;
+24/24 focused Release simulator verifier tests pass locally. It remains short
+of native replacement-device recovery and distribution acceptance.
+
+## Owner-authority protocol fence and cutover admission — 2026-09-23
+
+The random-owner SQLite core and the legacy JSON HTTP service must not be
+composed through grant introspection while they have separate credential
+writers. The owner core now marks its consumed-grant response with
+`credentialAuthority: "owner-sqlite-v2"`; the JSON service's strict response
+validator rejects that extra field before any of its four HTTP mutation
+handlers. Tests cover all seven owner grant bindings and adversarial HTTP
+calls to registration completion, assertion completion, single revoke and
+revoke-all. The marker prevents accidental composition of these two source
+implementations; it is not a cryptographic defense against a trusted proxy
+stripping it and does not make two stores atomic.
+
+The [legacy cutover admission contract](../services/passkey-backup-owner-authority/docs/legacy-cutover.md)
+now requires a fresh historical-credential WebAuthn assertion and a separately
+authenticated random-owner session, both bound to an immutable source digest,
+storage key and owner; first-owner creation additionally needs original-wallet
+proof and app attestation. The cutover must drain JSON writes, preserve every
+credential field and tombstone in a versioned SQLite schema, then switch all
+seven routes together to one grant/credential transaction. No verified link,
+full-field schema, transactional import or integrated HTTP service exists yet.
+Therefore no live route was converted, and portable recovery remains disabled.
+Neither mobile platform yet serializes and restores every historical wallet
+secret. iOS `MetaAccountModel` and Keychain tags for entropy, Substrate/EVM
+keys, seeds, derivations and TON roots still need an explicit inventory and
+cross-platform original-key signing/export proof.
+Local checks on this source passed: owner authority 70/70 tests, challenge
+service 112/112 tests, both syntax suites, diff check, source-publication 88
+negative cases, and both release-bundle fixture suites. These are blocked-path
+checks, not production recovery or transaction acceptance.
 
 ## Completion record
 

@@ -172,6 +172,10 @@ routes still use JSON after separate grant introspection. They do not enable
 portable recovery or make owner revocation atomic with JSON writes. Keep the
 owner SQLite authority out of this deployment until a reviewed migration and
 one authoritative lifecycle transaction are in place.
+The owner authority's `credentialAuthority: "owner-sqlite-v2"` introspection
+response is intentionally outside this JSON service's closed response schema;
+its grants are rejected before any credential mutation handler runs. See the
+[legacy cutover admission contract](../passkey-backup-owner-authority/docs/legacy-cutover.md).
 It also requires the introspection endpoint, pins its audience, and enables a
 single-hop forwarded-client contract. The TLS proxy must overwrite or append a
 single canonical client IP and must block direct public access; missing,

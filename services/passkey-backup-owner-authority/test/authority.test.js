@@ -52,12 +52,13 @@ test('seven protected routes match existing challenge contract and issue distinc
     assert.equal(tokens.has(grant.token), false); tokens.add(grant.token);
     denies(() => core.consumeGrant(grant.token, request(path, '{ "a": 1 }')));
     const result = core.consumeGrant(grant.token, binding);
-    assert.deepEqual(result, { ...binding, active: true, subject: owner.subject, platform: 'android', expiresAt: grant.expiresAt });
+    assert.deepEqual(result, { ...binding, credentialAuthority: 'owner-sqlite-v2', active: true,
+      subject: owner.subject, platform: 'android', expiresAt: grant.expiresAt });
     denies(() => core.consumeGrant(grant.token, binding));
   }
 });
-test('existing introspection authorizer accepts the exact core response and rejects replay', async (t) => {
-  const { createIntrospectionRequestAuthorizer, authorizationSubjectHash } = await import('../../passkey-backup-challenge-service/src/authorization.js');
+test('legacy JSON introspector rejects SQLite-owner grants after one-use consumption', async (t) => {
+  const { createIntrospectionRequestAuthorizer } = await import('../../passkey-backup-challenge-service/src/authorization.js');
   const { core, bootstrap, clock } = setup(t);
   const { owner } = await bootstrap(); const binding = request(); const grant = core.issueGrant(owner.sessionToken, binding);
   const adapter = createIntrospectionRequestAuthorizer({ introspectionUrl: 'https://authority.example/introspect', audience, now: () => clock.wall,
@@ -66,9 +67,8 @@ test('existing introspection authorizer accepts the exact core response and reje
       catch { return new Response('{}', { status: 401 }); }
     },
   });
-  const result = await adapter.authorize({ token: grant.token, method: binding.method, path: binding.path, bodySha256: binding.bodySha256 });
-  assert.equal(result.subjectHash, authorizationSubjectHash(owner.subject));
-  assert.equal(result.platform, 'android');
+  await rejects(adapter.authorize({ token: grant.token, method: binding.method, path: binding.path,
+    bodySha256: binding.bodySha256 }), 'request_authorization_failed');
   await rejects(adapter.authorize({ token: grant.token, method: binding.method, path: binding.path, bodySha256: binding.bodySha256 }), 'request_authorization_failed');
 });
 test('wrong audience, method, scope, path, noncanonical digest and extra fields cannot mint or consume authority', async (t) => {

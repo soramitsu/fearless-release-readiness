@@ -152,6 +152,7 @@ for file in \
   services/passkey-backup-challenge-service/package.json \
   services/passkey-backup-challenge-service/src/server.js \
   services/passkey-backup-owner-authority/README.md \
+  services/passkey-backup-owner-authority/docs/legacy-cutover.md \
   services/passkey-backup-owner-authority/package.json \
   services/passkey-backup-owner-authority/package-lock.json \
   services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs \

@@ -369,7 +369,11 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       return store.transaction((tx) => {
         const { grant, current } = liveGrant(tx, token, binding);
         tx.run('DELETE FROM grants WHERE digest=?', grant.digest); // Consumption committed before response; never restored on disconnect.
-        return { schemaVersion: 1, active: true, subject: grant.owner, audience: binding.audience,
+        // This response must not be accepted by the legacy JSON challenge
+        // service. Its strict v1 introspector rejects the extra authority
+        // marker until all seven routes share this SQLite lifecycle writer.
+        return { schemaVersion: 1, credentialAuthority: 'owner-sqlite-v2', active: true,
+          subject: grant.owner, audience: binding.audience,
           method: binding.method, path: binding.path, bodySha256: binding.bodySha256, scope: binding.scope,
           platform: current.platform, expiresAt: grant.expires / 1000 };
       });

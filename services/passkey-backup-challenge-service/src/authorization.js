@@ -192,6 +192,9 @@ export function createIntrospectionRequestAuthorizer({
           'platform',
           'expiresAt',
         ];
+        // Keep this response closed. The owner SQLite core marks its grants
+        // with credentialAuthority; accepting that marker here would let its
+        // consumed grant authorize an independent JSON credential write.
         if (!exactObject(authorization, required) || authorization.schemaVersion !== 1 ||
             authorization.active !== true ||
             !SUBJECT_RE.test(authorization.subject) ||
