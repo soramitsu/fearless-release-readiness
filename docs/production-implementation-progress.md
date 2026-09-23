@@ -64,7 +64,7 @@ The protocol fence still rejects owner grants at the JSON writer; portable
 recovery remains disabled.
 
 The current pushed Android candidate is
-`7fbee1db9b00dcdf28c14385304c230e2b9f7971`, including exact amount-property
+`93b58fc593d70e70628fb1eb2be44eab122e6a2c`, including exact amount-property
 integrity and confirmation/submission parity checks for XCM; its focused tests
 and Detekt pass locally. The
 current pushed iOS candidate is `d4e60ce4a1124a60787cfb7a1de5004b5e9c8dcc`;
