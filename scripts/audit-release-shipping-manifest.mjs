@@ -24,6 +24,10 @@ const DEPENDENCIES = new Map([
 const FILES = new Map([
   ['passkey-policy', 'config/passkey-backup-production.json'],
   ['android-route-manifest', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_route_manifest.json'],
+  ['android-approved-routes', 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv'],
+  ['android-required-routes', 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv'],
+  ['android-discovery-gaps', 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv'],
+  ['android-local-chains', 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json'],
   ['android-mutation-policy', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_policy.json'],
   ['android-mutation-trust', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_trust.json'],
   ['android-dependency-verification', 'fearless-Android-production-consolidated-20260731/gradle/verification-metadata.xml'],
@@ -48,6 +52,7 @@ const EVIDENCE = new Set([
   'ios-compiled-route-inventory', 'ios-compiled-feature-policy',
 ]);
 const SIBLING_SOURCES = new Set(['../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha']);
+const ROUTE = /^[a-f0-9]{64} [a-f0-9]{64} [A-Z][A-Z0-9_-]*$/u;
 
 function keys(value, expected, label) {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`);
@@ -131,6 +136,33 @@ function sha256(file) {
   } finally { closeSync(fd); }
   return digest.digest('hex');
 }
+function routeRows(bytes, label) {
+  const rows = bytes.toString('utf8').split('\n')
+    .map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  assert.ok(rows.length > 0, `${label} must contain routes`);
+  assert.ok(rows.every((line) => ROUTE.test(line)), `${label} has an invalid route`);
+  assert.equal(new Set(rows).size, rows.length, `${label} has duplicate routes`);
+  return rows.sort();
+}
+function validateAndroidRoutes(root, files) {
+  const file = (kind) => regularFile(root, files.find((row) => row.kind === kind).path, kind);
+  const approved = routeRows(readFile(file('android-approved-routes')), 'Android approved routes');
+  const required = routeRows(readFile(file('android-required-routes')), 'Android required routes');
+  assert.deepEqual(required, approved, 'Android required and approved routes differ');
+  const gaps = readFile(file('android-discovery-gaps')).toString('utf8')
+    .split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  assert.equal(gaps.length, 0, 'Android discovery-only routes remain');
+  const routeManifest = JSON.parse(readFile(file('android-route-manifest')).toString('utf8'));
+  keys(routeManifest, ['schema', 'files'], 'Android route manifest');
+  assert.equal(routeManifest.schema, '1', 'Android route manifest schema mismatch');
+  keys(routeManifest.files, ['approved_xcm_routes.tsv', 'local_chains.json'], 'Android route manifest files');
+  assert.equal(routeManifest.files['approved_xcm_routes.tsv'],
+    files.find((row) => row.kind === 'android-approved-routes').sha256,
+    'Android compiled approved-route digest mismatch');
+  assert.equal(routeManifest.files['local_chains.json'],
+    files.find((row) => row.kind === 'android-local-chains').sha256,
+    'Android compiled local-chain digest mismatch');
+}
 function git(directory, ...args) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
   const result = spawnSync('/usr/bin/git', ['-C', directory, ...args], {
@@ -203,12 +235,25 @@ export function validateShippingManifestShape(manifest, sourceRows) {
     assert.ok(!retainedPaths.has(row.path), 'artifact/evidence path is reused');
     retainedPaths.add(row.path);
   }
-  keys(manifest.routeInventories, ['androidSha256', 'iosSha256'], 'route inventories');
+  keys(manifest.routeInventories, [
+    'androidSha256', 'androidApprovedSha256', 'androidRequiredSha256',
+    'androidDiscoveryGapsSha256', 'androidLocalChainsSha256', 'iosSha256',
+  ], 'route inventories');
   matches(manifest.routeInventories.androidSha256, DIGEST, 'Android route digest');
   matches(manifest.routeInventories.iosSha256, DIGEST, 'iOS route digest');
   assert.equal(manifest.routeInventories.androidSha256,
     manifest.files.find((row) => row.kind === 'android-route-manifest').sha256,
     'Android route inventory binding mismatch');
+  for (const [field, kind] of [
+    ['androidApprovedSha256', 'android-approved-routes'],
+    ['androidRequiredSha256', 'android-required-routes'],
+    ['androidDiscoveryGapsSha256', 'android-discovery-gaps'],
+    ['androidLocalChainsSha256', 'android-local-chains'],
+  ]) {
+    matches(manifest.routeInventories[field], DIGEST, `${field} digest`);
+    assert.equal(manifest.routeInventories[field], manifest.files.find((row) => row.kind === kind).sha256,
+      `${field} binding mismatch`);
+  }
   assert.equal(manifest.routeInventories.iosSha256,
     manifest.evidence.find((row) => row.kind === 'ios-compiled-route-inventory').sha256,
     'iOS route inventory binding mismatch');
@@ -281,6 +326,7 @@ export function auditReleaseShippingManifest(root = ROOT) {
   for (const row of [...manifest.files, ...manifest.artifacts, ...manifest.evidence]) {
     assert.equal(sha256(regularFile(root, row.path, row.kind)), row.sha256, `${row.kind} digest mismatch`);
   }
+  validateAndroidRoutes(root, manifest.files);
   return { releaseId: manifest.releaseId, manifestSha256: createHash('sha256').update(manifestBytes).digest('hex') };
 }
 

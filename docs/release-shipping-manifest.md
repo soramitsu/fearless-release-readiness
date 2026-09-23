@@ -27,8 +27,8 @@ the audit script:
 | `root` | Repository, selected branch and exact clean root source commit from the root-owner contract. |
 | `repositories` | Every selected source-publication row in order, including Android, iOS, web, site, TI, SI, PI and Iroha; each row has its own exact clean HEAD. |
 | `dependencies` | Clean, exact source commits for Android Utils/WebSocket and iOS shared-features/Starscream. |
-| `files` | Digests for passkey policy, Android mutation policy/trust/route manifest and dependency lock/verification files, plus iOS package/pod locks. |
-| `routeInventories`, `featurePolicies` | Android source-route/policy digests and iOS compiled-route/policy extraction digests, bound to the corresponding file or raw evidence row. |
+| `files` | Digests for passkey policy, Android mutation policy/trust/route manifest, approved/required/discovery-gap routes, local chains and dependency lock/verification files, plus iOS package/pod locks. |
+| `routeInventories`, `featurePolicies` | Android route-manifest, approved, required, discovery-gap and local-chain digests plus policy digests; iOS compiled-route/policy extraction digests, bound to the corresponding file or raw evidence row. |
 | `android`, `ios` | Exact mobile source commits, distribution artifact SHA-256 values and compiled passkey-recovery approval. |
 | `distribution` | Android package, Play signing-certificate SHA-256, Apple bundle ID and team ID. |
 | `artifacts` | Exact hashes, retained paths and source commits for Android AAB, Play-distributed APK, Apple-delivered IPA and new Android/iOS Iroha SDK packages. |
@@ -43,6 +43,14 @@ named builds came from those commits and that the compiled-route/policy files
 were actually extracted from the exact distributed artifacts. This validator
 binds the inputs; it does not manufacture a store signature, route receipt,
 provider ceremony, review approval or deployment proof.
+
+The Android route check reads the frozen route inputs from the exact clean
+Android checkout. Required routes must equal the compiled approved routes,
+the compiled route manifest must bind the approved routes and local chains by
+hash, and the discovery-gap file must have no active entries. Any remaining
+discovery-only route blocks this final shipping manifest. The current Android
+candidate still has such gaps, so this check is expected to fail until their
+reviewed execution semantics and independently verified transfers are complete.
 
 No shipping manifest has been generated for the current disabled candidates.
 Its required enabled policy, actual distribution artifacts, Iroha signed source,

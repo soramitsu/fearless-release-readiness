@@ -29,6 +29,10 @@ const dependencyPaths = {
 const filePaths = {
   'passkey-policy': 'config/passkey-backup-production.json',
   'android-route-manifest': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_route_manifest.json',
+  'android-approved-routes': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv',
+  'android-required-routes': 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv',
+  'android-discovery-gaps': 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv',
+  'android-local-chains': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json',
   'android-mutation-policy': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_policy.json',
   'android-mutation-trust': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_trust.json',
   'android-dependency-verification': 'fearless-Android-production-consolidated-20260731/gradle/verification-metadata.xml',
@@ -40,6 +44,8 @@ const filePaths = {
   'ios-project-packages': 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
   'ios-dependency-packages': 'fearless-iOS-production-consolidated-20260731/Packages/FearlessDependencies/Package.resolved',
 };
+const ROUTE_ROW = `${'a'.repeat(64)} ${'b'.repeat(64)} DOT\n`;
+const LOCAL_CHAINS = '{}\n';
 const artifactKinds = [
   'android-aab', 'play-distributed-apk', 'apple-delivered-ipa',
   'iroha-android-sdk', 'iroha-ios-sdk',
@@ -102,7 +108,18 @@ function fixture() {
     role, path: relative, sourceCommit: repository(path.resolve(root, relative), 'main'),
   }));
   const files = Object.entries(filePaths).map(([kind, relative]) => {
-    const bytes = kind === 'passkey-policy' ? '{"releaseEnabled":true}\n' : `${kind}\n`;
+    let bytes;
+    if (kind === 'passkey-policy') bytes = '{"releaseEnabled":true}\n';
+    else if (kind === 'android-approved-routes' || kind === 'android-required-routes') bytes = ROUTE_ROW;
+    else if (kind === 'android-discovery-gaps') bytes = '# no remaining discovery-only routes\n';
+    else if (kind === 'android-local-chains') bytes = LOCAL_CHAINS;
+    else if (kind === 'android-route-manifest') bytes = `${JSON.stringify({
+      schema: '1', files: {
+        'approved_xcm_routes.tsv': digest(ROUTE_ROW),
+        'local_chains.json': digest(LOCAL_CHAINS),
+      },
+    })}\n`;
+    else bytes = `${kind}\n`;
     write(root, relative, bytes);
     return { kind, path: relative, sha256: digest(bytes) };
   });
@@ -130,6 +147,10 @@ function fixture() {
     repositories, dependencies, files, artifacts, evidence,
     routeInventories: {
       androidSha256: files.find((row) => row.kind === 'android-route-manifest').sha256,
+      androidApprovedSha256: files.find((row) => row.kind === 'android-approved-routes').sha256,
+      androidRequiredSha256: files.find((row) => row.kind === 'android-required-routes').sha256,
+      androidDiscoveryGapsSha256: files.find((row) => row.kind === 'android-discovery-gaps').sha256,
+      androidLocalChainsSha256: files.find((row) => row.kind === 'android-local-chains').sha256,
       iosSha256: evidence.find((row) => row.kind === 'ios-compiled-route-inventory').sha256,
     },
     featurePolicies: {
@@ -152,6 +173,14 @@ function fixture() {
   const save = () => writeFileSync(manifestFile, `${JSON.stringify(canonical(manifest), null, 2)}\n`);
   save();
   return { sandbox, root, manifest, save };
+}
+function repinAndroidSource(f) {
+  f.manifest.repositories[0].sourceCommit = commit(path.join(f.root, sourceRows[0][0]));
+  f.manifest.android.sourceCommit = f.manifest.repositories[0].sourceCommit;
+  for (const row of f.manifest.artifacts.filter((item) =>
+    !item.kind.startsWith('iroha-') && item.kind !== 'apple-delivered-ipa')) {
+    row.sourceCommit = f.manifest.android.sourceCommit;
+  }
 }
 
 test('detached manifest binds clean exact source, dependency, file, artifact and evidence identities', () => {
@@ -217,5 +246,52 @@ test('one retained file cannot stand in for two independent evidence kinds', () 
     f.manifest.evidence[1].sha256 = f.manifest.evidence[0].sha256;
     f.save();
     assert.throws(() => auditReleaseShippingManifest(f.root), /artifact\/evidence path is reused/u);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});
+
+test('remaining Android discovery-only routes block shipping even with re-pinned exact source', () => {
+  const f = fixture();
+  try {
+    const bytes = `${'a'.repeat(64)} ${'c'.repeat(64)} USDT non-native-asset -\n`;
+    write(f.root, filePaths['android-discovery-gaps'], bytes);
+    repinAndroidSource(f);
+    const digestRow = f.manifest.files.find((row) => row.kind === 'android-discovery-gaps');
+    digestRow.sha256 = digest(bytes);
+    f.manifest.routeInventories.androidDiscoveryGapsSha256 = digestRow.sha256;
+    f.save();
+    assert.throws(() => auditReleaseShippingManifest(f.root), /Android discovery-only routes remain/u);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});
+
+test('required Android routes must equal compiled approved routes, even with matching hashes', () => {
+  const f = fixture();
+  try {
+    const bytes = `${'a'.repeat(64)} ${'b'.repeat(64)} KSM\n`;
+    write(f.root, filePaths['android-required-routes'], bytes);
+    repinAndroidSource(f);
+    const digestRow = f.manifest.files.find((row) => row.kind === 'android-required-routes');
+    digestRow.sha256 = digest(bytes);
+    f.manifest.routeInventories.androidRequiredSha256 = digestRow.sha256;
+    f.save();
+    assert.throws(() => auditReleaseShippingManifest(f.root), /Android required and approved routes differ/u);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});
+
+test('compiled Android route manifest must bind approved routes and local chains', () => {
+  const f = fixture();
+  try {
+    const bytes = `${JSON.stringify({
+      schema: '1', files: {
+        'approved_xcm_routes.tsv': HEX64,
+        'local_chains.json': digest(LOCAL_CHAINS),
+      },
+    })}\n`;
+    write(f.root, filePaths['android-route-manifest'], bytes);
+    repinAndroidSource(f);
+    const digestRow = f.manifest.files.find((row) => row.kind === 'android-route-manifest');
+    digestRow.sha256 = digest(bytes);
+    f.manifest.routeInventories.androidSha256 = digestRow.sha256;
+    f.save();
+    assert.throws(() => auditReleaseShippingManifest(f.root), /Android compiled approved-route digest mismatch/u);
   } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });

@@ -272,6 +272,17 @@ coordinator, local decrypt-before-complete or real replacement-device proof;
 recovery remains disabled. These local journals are not a portable backup
 format, while their FPBKGEN1 ciphertext is shared.
 
+## Final route inventory binding — 2026-09-23
+
+The detached final shipping-manifest gate now binds the Android approved,
+required and discovery-gap route files and the bundled local-chain registry in
+addition to its compiled route manifest. It compares required routes with the
+compiled allowlist, checks the compiled manifest's raw input hashes and refuses
+any remaining discovery-only route. Eight synthetic exact-source/tamper cases
+pass. This deliberately keeps the current candidate unshippable while the
+frozen discovery gaps and their funded transaction receipts are outstanding;
+it does not qualify or enable an XCM route.
+
 ## Current local access check
 
 Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. Apple device records exist, but none had an active tunnel (81 disconnected, one unavailable). The configured Android SDK's `adb` is available and reported zero connected devices. Receipt: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish local inventory only; store access, provisioning, private-key use and actual device qualification remain unverified. No device was reset or uninstalled.
