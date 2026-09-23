@@ -24,7 +24,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. Android's latest scoped backup run passes 205 JVM tests; its preceding journal head passed two API 36 emulator filesystem cases. iOS's latest Drive coordinator passes 51 selected Release simulator tests, while an earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. The current Android candidate passes 210 scoped backup JVM tests and Detekt locally; the current iOS candidate passes 60 focused iOS 18.1 simulator tests. Earlier iOS Drive and key/sign/send candidates passed 51 and **463** Release tests, respectively. These are development checks at different source heads. Both app trees are committed and pushed on review branches; current exact-head hosted checks, independent security review, protected qualification and distribution acceptance remain outstanding.
 
 The owner/grant authority core and its optional existing-owner WebAuthn verifier now pass 55 local tests; an earlier 52-test revision passed on each of two Node runtimes. First-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
@@ -465,7 +465,7 @@ passed all 88 adversarial cases locally before this new root source is pushed.
 
 ## Current local access check
 
-Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. Apple device records exist, but none had an active tunnel (81 disconnected, one unavailable). The configured Android SDK's `adb` is available and reported zero connected devices. Receipt: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish local inventory only; store access, provisioning, private-key use and actual device qualification remain unverified. No device was reset or uninstalled.
+Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. A 2026-09-23 recheck still finds both identities and zero connected Android devices; the sole listed physical iPhone is unavailable, while one simulator is connected. The visible GitHub repository and `android-play-testing` environment secret inventories are empty, though organization or external operator credentials may exist. That protected Android environment has a required reviewer and prevents self-review; its approval path must be verified with an actual candidate. Receipt for the earlier inventory: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish access inventory only; store publication, provisioning, private-key use and device qualification remain unverified. No device was reset or uninstalled.
 
 ## Completion record
 
