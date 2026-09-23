@@ -42,6 +42,11 @@ field: u8 ID, u16 valueLength, value[valueLength]
 
 The portable ID groups a wallet's roots; it is not a replacement for any
 chain-specific address. Record order and `selectedIndex` are authoritative.
+Each source app derives a stable 16-byte portable ID from its durable local
+wallet ID with an app-specific SHA-256 domain. A receiving installer must
+persist and reuse that portable ID for subsequent backup generations instead
+of deriving a fresh one from its newly assigned local database ID. It must
+still verify every public address against the original signing material.
 Each wallet needs at least one root or explicitly non-signable watch identity;
 an auxiliary source alone does not count. Root slots use the empty key. Chain
 and favorite slots use a nonempty chain ID. Auxiliary and watch keys are
@@ -114,11 +119,21 @@ kind `2, 2, 3, 4, 5` and format `2, 4, 4, 4, 3`. iOS source-slot roles `1...9`
 are respectively Substrate secret, Ethereum secret, TON secret, entropy,
 Substrate seed, Ethereum seed, Substrate derivation, Ethereum derivation and
 universal wallet source. They require format 1 and a compatible wallet/root/
-chain binding. Account binding requires both fields 18 and 21, which must
-match a role 5 slot; root binding requires a matching root. Wallet binding
-attaches to the containing portable wallet. These opaque bytes preserve
-historical source material, including iOS incidental Keychain tags, without
-granting them signing authority.
+chain binding. TON secret also permits an account binding because the released
+capture scans account-scoped TON Keychain tags. Account binding requires both
+fields 18 and 21, which must match a role 5 slot; root binding requires a
+matching root. Wallet binding attaches to the containing portable wallet.
+These opaque bytes preserve historical source material, including incidental
+Keychain tags, without granting them signing authority.
+
+For named root-derived chain accounts, field 2 is a checked derived key for
+the recorded public account, not a substitute for the original root recipe.
+In particular, an iOS Bitcoin field-2 key is the first receive key, not the
+account master key. A receiving installer must rederive the named account
+from preserved root material, verify its public identity and derivation path,
+and prove the complete released signing/export behavior before marking the
+wallet restored. It must not promote an auxiliary Keychain slot to signing
+authority merely because that slot is present.
 
 Role 8 cannot carry a private key or seed. Substrate and chain watch identities
 need fields 1 and 8; chain additionally needs 23. TON watch identities need

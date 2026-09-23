@@ -65,7 +65,7 @@ The real audit still reports 332 warnings across IAS, migration/Play, route
 qualification, Iroha readiness, native passkey ceremonies and other release
 requirements; that result is not a production pass.
 
-The latest pushed Android candidate is
+At that checkpoint, the pushed Android candidate was
 `3c43d9bb75f907ef25778adf0e4efd83e0df246f` on
 [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). Its
 Android-local draft captures validated V3 Substrate/EVM/TON, V2 chain-account
@@ -89,7 +89,7 @@ the preceding head; the current head passes its 5/5 mutation guard tests and
 XCM execution remains disabled. The local envelope is not a cross-platform
 serializer, installer or enabled Drive backup.
 
-The latest pushed iOS candidate is
+At that checkpoint, the pushed iOS candidate was
 `aee2792a001645708012fe8778c254984cfe8129` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its in-memory
 draft captures every known V2 root and chain-account Keychain slot, plus wallet
@@ -115,10 +115,10 @@ pending. A shared Core Data/Keychain writer lock,
 account-level export/reimport proof, specialized chain derivation proof and
 the shared serializer/installer remain required before backup completion.
 
-The next cross-platform material step must assign a portable wallet identity
+At that checkpoint, the next cross-platform material step was to assign a portable wallet identity
 instead of copying Android's numeric database ID or iOS's string meta ID.
-The current `FPWMLE01` grammar shares only its header; Android's payload is an
-Android draft, while the iOS inventory source has no serializer. A bounded
+The then-current `FPWMLE01` grammar shared only its header; Android's payload was an
+Android draft, while the iOS inventory source had no serializer. A bounded
 semantic record must preserve the original independent keys and derivation
 provenance, then each receiving app must independently derive public identity,
 prove original-key signing and export, and install the whole wallet snapshot
@@ -1089,6 +1089,47 @@ This is still an unwired structural parser, not an original-key verifier or
 restore installer. Neither platform has replacement-device recovery evidence
 or an enabled portable backup path. The exact Android and iOS heads still need
 hosted CI completion and independent review.
+
+## Guarded draft-to-semantic projection — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+now points to pushed `ca12af94f4b381efbb331bfdc337b4474665067c`.
+A pure converter projects the validated local draft into `FPWMSM01`, retaining
+independent V3 Substrate/EVM/TON roots, V2 chain keys, V1 derivation/source
+details, wallet order/selection, favorites and exact V3/V2 SCALE bytes in
+bound auxiliary slots. Its portable ID is deterministic from the durable
+Android wallet ID. It derives the released V4R2 TON workchain-zero address.
+The Android decoder also accepts an iOS account-scoped TON Keychain source
+only with an exact chain-account binding. Six focused material/preflight/
+codec/transcoder JVM classes pass 43/43 against clean pinned Utils and
+WebSocket checkouts. Forced scoped Detekt over the seven semantic source/test
+files reports zero findings. Current Android `validate` CI passes;
+`build-and-test` and IAS validation remain pending at this head.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+now points to pushed `e1702861b9f5096b9989f9d1d49b8c321474ca07`.
+Its guarded converter maps a freshly captured iOS draft into the same bytes:
+separate signed roots and chain accounts, original selection/order, display
+metadata and every scanned Keychain slot verbatim as a bound auxiliary
+record. Native TON phrase-only material yields a key checked against the
+released V4R2 public identity. Named Bitcoin and Taira accounts take their
+root-derived signer; incidental scoped Keychain bytes remain historical only.
+An iPhone 15 simulator run passes 40/40 focused capture/adapter/codec tests;
+scoped SwiftFormat, strict SwiftLint and project-file lint pass. Current iOS
+`validate`, `release-contracts` and `ios-release-safety` CI pass; hosted
+`build` remains pending at this head.
+
+These adapters are isolated from backup completion, Drive upload, restore and
+wallet installation. iOS capture still lacks a cross-store writer lock and
+Android capture still rejects watch-only wallets. A receiving installer must
+derive and verify every original identity and sign/export path, preserve the
+portable ID across generations, and atomically install the full snapshot.
+The iOS Bitcoin field-2 key identifies the first receive path, not an
+account-wide signing master; root material and named derivation must be
+rechecked during installation. A read-only peer comparison found no concrete
+codec mismatch for captured cohorts, but it is not the independent security
+review required by the release plan. Neither platform has real
+replacement-device recovery or distribution-signed upgrade evidence.
 
 ## Completion record
 
