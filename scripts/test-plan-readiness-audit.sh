@@ -1871,7 +1871,7 @@ write_android_repo() {
 write_ios_repo() {
   local repo="$1"
   local source_ios="$SCRIPT_DIR/../fearless-iOS"
-  local source_testflight="${FEARLESS_IOS_TESTFLIGHT_SOURCE:-$source_ios}"
+  local source_testflight="${FEARLESS_IOS_TESTFLIGHT_SOURCE:-$SCRIPT_DIR/../fearless-iOS-production-consolidated-20260731}"
   if [[ ! -d "$source_testflight" || -L "$source_testflight" || \
         (! -f "$source_testflight/.git" && ! -d "$source_testflight/.git") ]]; then
     fail "iOS TestFlight fixture source must be a non-symlink Git checkout: $source_testflight"

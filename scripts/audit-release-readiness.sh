@@ -777,84 +777,37 @@ const hasUnmergedIndex = iroha.unmergedCount > 0 &&
   report.totals && Number.isSafeInteger(report.totals.unmerged) &&
   report.totals.unmerged >= iroha.unmergedCount && iroha.failures.includes(unmergedFailure)
 const canonicalSha = (value) => typeof value === 'string' && /^[0-9a-f]{40}$/u.test(value)
-const expectedHead = 'codex/kagemusha-selector-hardening'
-const expectedBase = 'optimizations'
-const expectedPrNumber = 5612
-const expectedPrUrl = 'https://github.com/hyperledger-iroha/iroha/pull/5612'
-const expectedUpstream = `origin/${expectedHead}`
-const expectedCurrentBranchUpstream = `origin/${expectedBase}`
-const hasCanonicalReviewedSourceIdentity =
+const hasCanonicalBranchSourceIdentity =
+  report.schemaVersion === 3 &&
+  report.phase === 'postflight' &&
+  typeof report.preflightReportSha256 === 'string' &&
+  /^[0-9a-f]{64}$/u.test(report.preflightReportSha256) &&
   iroha.repository === 'hyperledger-iroha/iroha' &&
   iroha.originRepository === 'hyperledger-iroha/iroha' &&
-  iroha.head === expectedHead &&
-  iroha.base === expectedBase &&
-  iroha.prNumber === expectedPrNumber &&
-  iroha.prUrl === expectedPrUrl &&
-  iroha.prState === 'merged' &&
-  iroha.branch === expectedBase &&
-  iroha.upstream === expectedCurrentBranchUpstream
-const branchMismatchFailure = hasCanonicalReviewedSourceIdentity
-  ? `current branch mismatch: expected ${iroha.head}, received ${iroha.branch}`
-  : null
-const upstreamMismatchFailure = hasCanonicalReviewedSourceIdentity
-  ? `upstream mismatch: expected ${expectedUpstream}, received ${iroha.upstream}`
-  : null
-const pullRequestHeadFailure = hasCanonicalReviewedSourceIdentity && canonicalSha(iroha.headSha) &&
-    canonicalSha(iroha.prHeadSha)
-  ? `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`
-  : null
-const authoritativeCurrentBranchFailure = hasCanonicalReviewedSourceIdentity && canonicalSha(iroha.headSha) &&
-    canonicalSha(iroha.currentBranchRemoteSha)
-  ? `local HEAD ${iroha.headSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`
-  : null
-const cachedUpstreamCurrentBranchFailure = hasCanonicalReviewedSourceIdentity && canonicalSha(iroha.upstreamSha) &&
-    canonicalSha(iroha.currentBranchRemoteSha)
-  ? `cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`
-  : null
-const ignoredOutputFailurePattern = /^worktree contains ignored non-published paths \([1-9][0-9]*\): .+; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts$/u
-const preflightContinuityFailure = 'source publication preflight did not pass before release checks'
-const hasExactOrderedPublicationFailures = (expectedFailures) => {
-  const hasContinuityMarker = iroha.failures.length === expectedFailures.length + 1 &&
-    iroha.failures[expectedFailures.length] === preflightContinuityFailure
-  if (iroha.failures.length !== expectedFailures.length && !hasContinuityMarker) return false
-  return typeof iroha.failures[0] === 'string' && ignoredOutputFailurePattern.test(iroha.failures[0]) &&
-    expectedFailures.slice(1).every((failure, index) => iroha.failures[index + 1] === failure)
+  iroha.head === 'optimizations' && iroha.base === 'optimizations' &&
+  iroha.prNumber === null && iroha.prUrl === null &&
+  iroha.prState === null && iroha.prHeadSha === null &&
+  iroha.branch === 'optimizations' && iroha.upstream === 'origin/optimizations' &&
+  canonicalSha(iroha.headSha) && iroha.upstreamSha === iroha.headSha &&
+  iroha.remoteBranchPresent === true && iroha.currentBranchRemotePresent === true &&
+  canonicalSha(iroha.remoteHeadSha) && iroha.currentBranchRemoteSha === iroha.remoteHeadSha
+const expectedBranchFailures = []
+const ignoredOutputsFailure = iroha.failures[0]
+if (typeof ignoredOutputsFailure === 'string' &&
+    /^worktree contains ignored non-published paths \([1-9][0-9]*\): .+; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts$/u.test(ignoredOutputsFailure)) {
+  expectedBranchFailures.push(ignoredOutputsFailure)
 }
-const hasCanonicalSynchronizedPublicationFailures = hasCanonicalReviewedSourceIdentity &&
-  hasExactOrderedPublicationFailures([
-    null,
-    branchMismatchFailure,
-    pullRequestHeadFailure,
-    upstreamMismatchFailure,
-  ])
-const hasCanonicalDriftPublicationFailures = hasCanonicalReviewedSourceIdentity &&
-  hasExactOrderedPublicationFailures([
-    null,
-    branchMismatchFailure,
-    authoritativeCurrentBranchFailure,
-    pullRequestHeadFailure,
-    upstreamMismatchFailure,
-    cachedUpstreamCurrentBranchFailure,
-  ])
-const hasConfiguredHeadProof =
-  iroha.remoteBranchPresent === false && iroha.remoteHeadSha === null
-const hasCanonicalPublicationShaProof =
-  iroha.currentBranchRemotePresent === true && canonicalSha(iroha.currentBranchRemoteSha) &&
-  canonicalSha(iroha.headSha) && canonicalSha(iroha.upstreamSha) &&
-  canonicalSha(iroha.prHeadSha) && iroha.prHeadSha !== iroha.headSha &&
-  iroha.headSha === iroha.upstreamSha && hasConfiguredHeadProof
-const hasSynchronizedAuthoritativeCurrentBranchProof = hasCanonicalPublicationShaProof &&
-  iroha.currentBranchRemoteSha === iroha.headSha
-const hasDriftedAuthoritativeCurrentBranchProof = hasCanonicalPublicationShaProof &&
-  iroha.currentBranchRemoteSha !== iroha.headSha
-const hasCanonicalPublicationProof =
-  (hasSynchronizedAuthoritativeCurrentBranchProof && hasCanonicalSynchronizedPublicationFailures) ||
-  (hasDriftedAuthoritativeCurrentBranchProof && hasCanonicalDriftPublicationFailures)
-const hasReviewedSourceMismatch = hasCanonicalReviewedSourceIdentity &&
-  iroha.head !== iroha.branch && expectedUpstream !== iroha.upstream &&
-  counts.every((key) => iroha[key] === 0) &&
-  hasCanonicalPublicationProof
-const unsafe = hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch
+if (iroha.headSha !== iroha.remoteHeadSha) {
+  expectedBranchFailures.push(`local HEAD ${iroha.headSha} does not match authoritative remote head ${iroha.remoteHeadSha}`)
+  expectedBranchFailures.push(`cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`)
+}
+expectedBranchFailures.push('canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy')
+const preflightContinuityFailure = 'source publication preflight did not pass before release checks'
+if (iroha.failures.at(-1) === preflightContinuityFailure) expectedBranchFailures.push(preflightContinuityFailure)
+const hasCanonicalBranchReviewBlocker =
+  hasCanonicalBranchSourceIdentity && counts.every((key) => iroha[key] === 0) &&
+  JSON.stringify(iroha.failures) === JSON.stringify(expectedBranchFailures)
+const unsafe = hasOperation || hasUnmergedIndex || hasCanonicalBranchReviewBlocker
 process.exit(unsafe ? 0 : 1)
 NODE
 }
@@ -2388,7 +2341,9 @@ run_passkey_production_smoke() {
     PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 \
     PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=1048576 \
     PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS=2000 \
-    "$NPM_BIN" run smoke:production
+    "$NPM_BIN" run smoke:production || return $?
+  echo "[release-readiness] Require enabled cross-platform passkey acceptance for the exact shipping manifest"
+  "$NODE_BIN" "$ROOT_DIR/scripts/audit-passkey-enabled-acceptance.mjs"
 }
 
 run_iroha_prerequisites() {

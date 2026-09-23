@@ -51,6 +51,85 @@ if (processArg && process.argv.includes(processArg)) {
 }
 NODE
 
+mark_canonical_review_blocked_fixture() {
+  node - "$report_dir/summary.json" "$report_dir/actions.json" "$report_dir/source-publication-readiness.log" <<'NODE'
+const fs = require('fs')
+const [summaryFile, actionsFile, logFile] = process.argv.slice(2)
+const summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8'))
+const actions = JSON.parse(fs.readFileSync(actionsFile, 'utf8'))
+  const sourceCheck = summary.checks.find((item) => item.slug === 'source-publication-readiness')
+  const sourceEvidence = '[source-publication-readiness][error] Source publication readiness failed:'
+  Object.assign(sourceCheck, {
+    status: 'failed',
+    exitCode: 1,
+    logFile: 'source-publication-readiness.log',
+    recommendedAction: "Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout's owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.",
+    requiresExternalAction: true,
+    unblockCategory: 'source-publication',
+    externalPrerequisite: 'Owner-resolved completion of every in-progress Git operation or unmerged index state, removal or quarantine of ignored non-published build outputs, canonical Git ownership for the root release/passkey source, plus reviewed commits, pushes, and protected pull requests for the exact tested HEAD of every source tree.',
+    verificationCommand: 'bash scripts/audit-release-readiness.sh',
+  })
+  actions.blockers.push({
+    name: sourceCheck.name,
+    slug: sourceCheck.slug,
+    exitCode: sourceCheck.exitCode,
+    logFile: sourceCheck.logFile,
+    recommendedAction: sourceCheck.recommendedAction,
+    requiresExternalAction: sourceCheck.requiresExternalAction,
+    unblockCategory: sourceCheck.unblockCategory,
+    externalPrerequisite: sourceCheck.externalPrerequisite,
+    verificationCommand: sourceCheck.verificationCommand,
+    evidencePreview: sourceEvidence,
+  })
+for (const manifest of [summary, actions]) { manifest.totals.passed -= 1; manifest.totals.failed += 1 }
+fs.writeFileSync(summaryFile, `${JSON.stringify(summary, null, 2)}\n`)
+fs.writeFileSync(actionsFile, `${JSON.stringify(actions, null, 2)}\n`)
+fs.writeFileSync(logFile, `${sourceEvidence}\n  - ../iroha: canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy\n`)
+NODE
+}
+
+rewrite_blocker_markdown_from_manifests() {
+  node - "$report_dir/summary.json" "$report_dir/actions.json" "$report_dir/blockers.md" <<'NODE'
+const fs = require('fs')
+const [summaryFile, actionsFile, blockersFile] = process.argv.slice(2)
+const summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8'))
+const actions = JSON.parse(fs.readFileSync(actionsFile, 'utf8'))
+
+function fenceFor(content) {
+  const runs = String(content).match(/`+/g) || []
+  const maxRun = runs.reduce((max, run) => Math.max(max, run.length), 0)
+  return '`'.repeat(Math.max(3, maxRun + 1))
+}
+
+const lines = [
+  '# Release Readiness Blockers',
+  '',
+  `- Generated at: ${summary.generatedAt}`,
+  `- Run live checks: ${summary.runLive}`,
+  `- Totals: ${summary.totals.passed} passed, ${summary.totals.failed} failed, ${summary.totals.skipped} skipped, ${summary.totals.total} total`,
+  '',
+  '## Failed Checks',
+  '',
+]
+for (const blocker of actions.blockers) {
+  lines.push(`### ${blocker.name}`)
+  lines.push('')
+  lines.push(`- Slug: \`${blocker.slug}\``)
+  lines.push(`- Exit code: \`${blocker.exitCode}\``)
+  lines.push(`- Log: \`${blocker.logFile}\``)
+  lines.push(`- Recommended action: ${blocker.recommendedAction}`)
+  lines.push(`- Requires external action: \`${blocker.requiresExternalAction}\``)
+  lines.push(`- Unblock category: \`${blocker.unblockCategory}\``)
+  lines.push(`- External prerequisite: ${blocker.externalPrerequisite}`)
+  lines.push(`- Verification command: \`${blocker.verificationCommand}\``)
+  lines.push('', 'Evidence preview:', '')
+  const fence = fenceFor(blocker.evidencePreview)
+  lines.push(`${fence}text`, blocker.evidencePreview, fence, '')
+}
+fs.writeFileSync(blockersFile, `${lines.join('\n')}\n`)
+NODE
+}
+
 write_fixture() {
   rm -rf "$report_dir" "$bundle_dir" "$workspace_dir"
   mkdir -p "$report_dir" "$workspace_dir/config" "$workspace_dir/scripts" "$workspace_dir/services/passkey-backup-challenge-service" \
@@ -1423,7 +1502,7 @@ fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hard
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
 ../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16
 ../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1
-../iroha	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	5612
+../iroha	hyperledger-iroha/iroha	optimizations	optimizations	-
 TSV
   cat > "$workspace_dir/config/source-publication-root-owner.json" <<'JSON'
 {
@@ -1451,18 +1530,18 @@ const configured = [
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', 16],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', 1],
-  ['../iroha', 'hyperledger-iroha/iroha', 'codex/kagemusha-selector-hardening', 'optimizations', 5612],
+  ['../iroha', 'hyperledger-iroha/iroha', 'optimizations', 'optimizations', null],
 ]
 function source(sourcePath, repository, head, base, prNumber) {
   return {
     path: sourcePath, repository, head, base, prNumber,
-    prUrl: `https://github.com/${repository}/pull/${prNumber}`, prState: 'merged', prHeadSha: sha,
-    repositoryPath: path.resolve(workspace, sourcePath), status: 'passed',
+    prUrl: prNumber === null ? null : `https://github.com/${repository}/pull/${prNumber}`, prState: prNumber === null ? null : 'merged', prHeadSha: prNumber === null ? null : sha,
+    repositoryPath: path.resolve(workspace, sourcePath), status: prNumber === null ? 'failed' : 'passed',
     originUrl: `https://github.com/${repository}.git`, originRepository: repository, branch: head,
     headSha: sha, upstream: `origin/${head}`, upstreamSha: sha, remoteHeadSha: sha,
     remoteBranchPresent: true, currentBranchRemoteSha: sha, currentBranchRemotePresent: true,
     stagedCount: 0, unstagedCount: 0, untrackedCount: 0, unmergedCount: 0,
-    dirtyPaths: [], requiredTrackedFiles: [], failures: [],
+    dirtyPaths: [], requiredTrackedFiles: [], failures: prNumber === null ? ['canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy'] : [],
   }
 }
 const workspaceSource = source('.', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-broadcast-evidence', 'develop', 1061)
@@ -1476,7 +1555,12 @@ workspaceSource.requiredTrackedFiles = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/passkey-enabled-acceptance.md',
   'docs/source-freeze-20260801.md',
+  'scripts/audit-passkey-enabled-acceptance.mjs',
+  'scripts/test-passkey-enabled-acceptance.mjs',
+  'scripts/audit-plan-readiness.sh',
+  'scripts/test-plan-readiness-audit.sh',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
   'scripts/capture-source-freeze.mjs',
@@ -1493,24 +1577,37 @@ workspaceSource.requiredTrackedFiles = [
   'services/passkey-backup-challenge-service/package-lock.json',
   'services/passkey-backup-challenge-service/package.json',
   'services/passkey-backup-challenge-service/src/server.js',
+  'services/passkey-backup-owner-authority/README.md',
+  'services/passkey-backup-owner-authority/package.json',
+  'services/passkey-backup-owner-authority/package-lock.json',
+  'services/passkey-backup-owner-authority/src/authority.js',
+  'services/passkey-backup-owner-authority/src/store.js',
+  'services/passkey-backup-owner-authority/src/validation.js',
+  'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/fixtures.js',
+  'services/passkey-backup-owner-authority/test/process-worker.js',
 ]
 const report = {
   schemaVersion: 3, phase: 'preflight', preflightReportSha256: null,
-  generatedAt: '2026-06-28T00:00:00.000Z', status: 'passed', checkRemote: true,
+  generatedAt: '2026-06-28T00:00:00.000Z', status: 'failed', checkRemote: true,
   workspaceRoot: workspace, workspaceParent: path.dirname(workspace),
   configFile: path.join(workspace, 'config/source-publication-readiness.tsv'),
   rootOwnerConfigFile: path.join(workspace, 'config/source-publication-root-owner.json'),
   releasePrConfigFile: path.join(workspace, 'config/release-readiness-prs.tsv'),
-  totals: {sources: 9, passed: 9, failed: 0, staged: 0, unstaged: 0, untracked: 0, unmerged: 0},
+  totals: {sources: 9, passed: 8, failed: 1, staged: 0, unstaged: 0, untracked: 0, unmerged: 0},
   workspaceSource,
   repositories: configured.map((row) => source(...row)),
 }
 const preflightBytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`)
 fs.writeFileSync(preflightOutput, preflightBytes)
 report.phase = 'postflight'
+report.repositories[7].failures.push('source publication preflight did not pass before release checks')
 report.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`)
 NODE
+  mark_canonical_review_blocked_fixture
+  rewrite_blocker_markdown_from_manifests
 }
 
 write_external_plan_fixture() {
@@ -1566,33 +1663,29 @@ if (!iroha) throw new Error('Iroha source-publication fixture missing')
 iroha.status = 'failed'
 if (sourceVariant === 'reviewed-source') {
   const liveHeadSha = 'e56af586b6d047c361e531d330424fb3067f57b2'
-  const mergedPrHeadSha = 'e7a9e27691d6f34e2737d946af9b7f0768a31136'
+  // Canonical branch has no pull-request identity.
   iroha.branch = 'optimizations'
   iroha.upstream = 'origin/optimizations'
   iroha.headSha = liveHeadSha
   iroha.upstreamSha = liveHeadSha
-  iroha.prHeadSha = mergedPrHeadSha
-  iroha.remoteBranchPresent = false
-  iroha.remoteHeadSha = null
+  iroha.prHeadSha = null
+  iroha.remoteBranchPresent = true
+  iroha.remoteHeadSha = liveHeadSha
   iroha.currentBranchRemotePresent = true
   iroha.currentBranchRemoteSha = liveHeadSha
   iroha.dirtyPaths = ['.cache/', '.codex-target/', '.playwright-cli/', '.pytest_cache/', 'Cargo.lock', 'IrohaSwift/.build/', 'artifacts/js-sdk-bundle-size/', 'artifacts/python_fixture_regen_state.json']
   iroha.failures = [
     'worktree contains ignored non-published paths (154): .cache/, .codex-target/, .playwright-cli/, .pytest_cache/, Cargo.lock, IrohaSwift/.build/, artifacts/js-sdk-bundle-size/, artifacts/python_fixture_regen_state.json; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts',
-    `current branch mismatch: expected ${iroha.head}, received ${iroha.branch}`,
-    `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`,
-    `upstream mismatch: expected origin/${iroha.head}, received ${iroha.upstream}`,
+    'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy',
   ]
 } else if (sourceVariant === 'operation') {
   iroha.stagedCount = 1
   iroha.dirtyPaths = ['crates/iroha_torii/src/offline_v2_issuer.rs']
-  iroha.failures = [operationFailure]
+  iroha.failures = [operationFailure, 'source publication preflight did not pass before release checks']
 } else {
   throw new Error(`unsupported external plan source variant: ${sourceVariant}`)
 }
 sourceReport.status = 'failed'
-sourceReport.totals.passed -= 1
-sourceReport.totals.failed += 1
 if (sourceVariant === 'operation') sourceReport.totals.staged += 1
 if (sourceVariant === 'reviewed-source') {
   const preflightReport = JSON.parse(fs.readFileSync(preflightReportFile, 'utf8'))
@@ -1600,42 +1693,12 @@ if (sourceVariant === 'reviewed-source') {
   if (preflightIndex < 0) throw new Error('Iroha preflight source-publication fixture missing')
   preflightReport.repositories[preflightIndex] = JSON.parse(JSON.stringify(iroha))
   preflightReport.status = 'failed'
-  preflightReport.totals.passed -= 1
-  preflightReport.totals.failed += 1
-  fs.writeFileSync(preflightReportFile, `${JSON.stringify(preflightReport, null, 2)}\n`)
+      fs.writeFileSync(preflightReportFile, `${JSON.stringify(preflightReport, null, 2)}\n`)
   const preflightBytes = fs.readFileSync(preflightReportFile)
   sourceReport.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
   iroha.failures.push('source publication preflight did not pass before release checks')
 }
-const sourceCheck = summary.checks.find((item) => item.slug === 'source-publication-readiness')
-if (!sourceCheck || sourceCheck.status !== 'passed') throw new Error('source-publication fixture must start passed')
 const sourceEvidence = '[source-publication-readiness][error] Source publication readiness failed:'
-Object.assign(sourceCheck, {
-  status: 'failed',
-  exitCode: 1,
-  logFile: sourceLogFile,
-  recommendedAction: "Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout's owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.",
-  requiresExternalAction: true,
-  unblockCategory: 'source-publication',
-  externalPrerequisite: 'Owner-resolved completion of every in-progress Git operation or unmerged index state, removal or quarantine of ignored non-published build outputs, canonical Git ownership for the root release/passkey source, plus reviewed commits, pushes, and protected pull requests for the exact tested HEAD of every source tree.',
-  verificationCommand: 'bash scripts/audit-release-readiness.sh',
-})
-actions.blockers.push({
-  name: sourceCheck.name,
-  slug: sourceCheck.slug,
-  exitCode: sourceCheck.exitCode,
-  logFile: sourceCheck.logFile,
-  recommendedAction: sourceCheck.recommendedAction,
-  requiresExternalAction: sourceCheck.requiresExternalAction,
-  unblockCategory: sourceCheck.unblockCategory,
-  externalPrerequisite: sourceCheck.externalPrerequisite,
-  verificationCommand: sourceCheck.verificationCommand,
-  evidencePreview: sourceEvidence,
-})
-for (const manifest of [summary, actions]) {
-  manifest.totals.passed -= 1
-  manifest.totals.failed += 1
-}
 fs.writeFileSync(sourceReportFile, `${JSON.stringify(sourceReport, null, 2)}\n`)
 fs.writeFileSync(
   sourceLogFile,
@@ -1917,8 +1980,10 @@ NODE
 }
 
 set_reviewed_source_authoritative_current_drift_bundle() {
-  edit_json "handoffs/source-publication-readiness-report.json" "const iroha = data.repositories.find((row) => row.path === '../iroha'); const hasContinuity = iroha.failures.includes('source publication preflight did not pass before release checks'); iroha.currentBranchRemotePresent = true; iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'; for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0; iroha.failures = [iroha.failures[0], 'current branch mismatch: expected ' + iroha.head + ', received ' + iroha.branch, 'local HEAD ' + iroha.headSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha, 'local HEAD ' + iroha.headSha + ' does not match pull request head ' + iroha.prHeadSha, 'upstream mismatch: expected origin/' + iroha.head + ', received ' + iroha.upstream, 'cached upstream ' + iroha.upstream + ' at ' + iroha.upstreamSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha, ...(hasContinuity ? ['source publication preflight did not pass before release checks'] : [])]"
-  edit_json "manifest.json" "const iroha = data.sourcePublicationHandoff.repositories.find((row) => row.path === '../iroha'); iroha.currentBranchRemotePresent = true; iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'; for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0"
+  edit_json "handoffs/source-publication-readiness-report.json" "const iroha = data.repositories.find((row) => row.path === '../iroha'); const hasContinuity = iroha.failures.includes('source publication preflight did not pass before release checks'); iroha.currentBranchRemotePresent = true; iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'
+iroha.remoteHeadSha = iroha.currentBranchRemoteSha; for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0; iroha.failures = [iroha.failures[0], 'local HEAD ' + iroha.headSha + ' does not match authoritative remote head ' + iroha.remoteHeadSha, 'cached upstream ' + iroha.upstream + ' at ' + iroha.upstreamSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha, 'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy', ...(hasContinuity ? ['source publication preflight did not pass before release checks'] : [])]"
+  edit_json "manifest.json" "const iroha = data.sourcePublicationHandoff.repositories.find((row) => row.path === '../iroha'); iroha.currentBranchRemotePresent = true; iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'
+iroha.remoteHeadSha = iroha.currentBranchRemoteSha; for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0"
   refresh_source_publication_report_handoff
 }
 
@@ -2084,7 +2149,7 @@ set_reviewed_source_authoritative_current_drift_bundle
 edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.currentBranchRemoteSha = row.prHeadSha; row.failures[2] = 'local HEAD ' + row.headSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha; row.failures[5] = 'cached upstream ' + row.upstream + ' at ' + row.upstreamSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha"
 edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.currentBranchRemoteSha = row.prHeadSha"
 refresh_source_publication_report_handoff
-expect_success "external reviewed-source authoritative-current equals pull-request head drift fixture"
+expect_failure "external reviewed-source canonical remote cannot use absent PR head fixture" "handoffs/source-publication-readiness-report.json.repositories[7].currentBranchRemoteSha must match remoteHeadSha when branch matches head"
 
 reset_external_plan_bundle reviewed-source
 set_reviewed_source_authoritative_current_drift_bundle
@@ -2099,13 +2164,13 @@ expect_success "external reviewed-source authoritative-current drift postflight 
 
 reset_external_plan_bundle reviewed-source
 set_reviewed_source_authoritative_current_drift_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(2, 1)"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(1, 1)"
 refresh_source_publication_report_handoff
 expect_failure "external reviewed-source authoritative-current drift missing diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
 set_reviewed_source_authoritative_current_drift_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(5, 1)"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(2, 1)"
 refresh_source_publication_report_handoff
 expect_failure "external reviewed-source authoritative-current drift missing cached-upstream diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
@@ -2129,8 +2194,8 @@ expect_failure "external reviewed-source authoritative-current drift forged cach
 
 reset_external_plan_bundle reviewed-source
 set_reviewed_source_authoritative_current_drift_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.currentBranchRemoteSha = row.headSha; row.failures[2] = 'local HEAD ' + row.headSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha; row.failures[5] = 'cached upstream ' + row.upstream + ' at ' + row.upstreamSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha"
-edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.currentBranchRemoteSha = row.headSha"
+edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.currentBranchRemoteSha = row.headSha; row.remoteHeadSha = row.headSha; row.failures[2] = 'local HEAD ' + row.headSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha; row.failures[5] = 'cached upstream ' + row.upstream + ' at ' + row.upstreamSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha"
+edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.currentBranchRemoteSha = row.headSha; row.remoteHeadSha = row.headSha"
 refresh_source_publication_report_handoff
 expect_failure "external reviewed-source synchronized current with full drift diagnostics fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
@@ -2166,7 +2231,7 @@ rewrite_checksums
 expect_failure "external reviewed-source missing exact failed-preflight continuity marker fixture" "manifest.sourcePublicationHandoff.sources[8].failures must contain the exact failed-preflight continuity diagnostic"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "const marker = 'source publication preflight did not pass before release checks'; data.repositories[7].failures.splice(data.repositories[7].failures.indexOf(marker), 1); data.repositories[7].failures.splice(3, 0, marker)"
+edit_json "handoffs/source-publication-readiness-report.json" "const marker = 'source publication preflight did not pass before release checks'; data.repositories[7].failures.splice(data.repositories[7].failures.indexOf(marker), 1); data.repositories[7].failures.splice(1, 0, marker)"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
@@ -2201,12 +2266,12 @@ rewrite_checksums
 expect_failure "external reviewed-source obsolete extra current-branch diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].prHeadSha = null"
-edit_json "manifest.json" "data.sourcePublicationHandoff.repositories[7].prHeadSha = null"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].prState = 'merged'"
+edit_json "manifest.json" "data.sourcePublicationHandoff.repositories[7].prState = 'merged'"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
-expect_failure "external reviewed-source missing pull-request head SHA fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
+expect_failure "external reviewed-source claimed pull-request review fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
 edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].prHeadSha = 'd'.repeat(40)"
@@ -2217,19 +2282,19 @@ rewrite_checksums
 expect_failure "external reviewed-source forged pull-request head SHA fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(2, 1)"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures.splice(1, 1)"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
 expect_failure "external reviewed-source missing pull-request head diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.remoteBranchPresent = true; row.remoteHeadSha = row.headSha"
-edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.remoteBranchPresent = true; row.remoteHeadSha = row.headSha"
+edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.remoteBranchPresent = false; row.remoteHeadSha = null"
+edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.remoteBranchPresent = false; row.remoteHeadSha = null"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
-expect_failure "external reviewed-source invalid configured-ref relation fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
+expect_failure "external reviewed-source invalid configured-ref relation fixture" "handoffs/source-publication-readiness-report.json.repositories[7].currentBranchRemotePresent must match remoteBranchPresent when branch matches head"
 
 reset_external_plan_bundle reviewed-source
 edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].headSha = 'd'.repeat(40)"
@@ -2247,23 +2312,23 @@ rewrite_checksums
 expect_failure "external reviewed-source forged cached upstream SHA fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].currentBranchRemoteSha = 'd'.repeat(40)"
-edit_json "manifest.json" "data.sourcePublicationHandoff.repositories[7].currentBranchRemoteSha = 'd'.repeat(40)"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].currentBranchRemoteSha = 'd'.repeat(40); data.repositories[7].remoteHeadSha = 'd'.repeat(40)"
+edit_json "manifest.json" "data.sourcePublicationHandoff.repositories[7].currentBranchRemoteSha = 'd'.repeat(40); data.sourcePublicationHandoff.repositories[7].remoteHeadSha = 'd'.repeat(40)"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
 expect_failure "external reviewed-source forged authoritative current-branch proof fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.currentBranchRemotePresent = false; row.currentBranchRemoteSha = null"
-edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.currentBranchRemotePresent = false; row.currentBranchRemoteSha = null"
+edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.currentBranchRemotePresent = false; row.currentBranchRemoteSha = null; row.remoteBranchPresent = false; row.remoteHeadSha = null"
+edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.currentBranchRemotePresent = false; row.currentBranchRemoteSha = null; row.remoteBranchPresent = false; row.remoteHeadSha = null"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
 expect_failure "external reviewed-source missing authoritative current-branch proof fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
-edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; const marker = 'source publication preflight did not pass before release checks'; const markerIndex = row.failures.indexOf(marker); row.currentBranchRemoteSha = row.headSha; row.failures.splice(markerIndex, 0, 'local HEAD ' + row.headSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha, 'cached upstream ' + row.upstream + ' at ' + row.upstreamSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha)"
+edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; const marker = 'source publication preflight did not pass before release checks'; const markerIndex = row.failures.indexOf(marker); row.currentBranchRemoteSha = row.headSha; row.remoteHeadSha = row.headSha; row.failures.splice(markerIndex, 0, 'local HEAD ' + row.headSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha, 'cached upstream ' + row.upstream + ' at ' + row.upstreamSha + ' does not match authoritative current branch ' + row.branch + ' at ' + row.currentBranchRemoteSha)"
 edit_json "manifest.json" "data.sourcePublicationHandoff.repositories[7].currentBranchRemoteSha = data.sourcePublicationHandoff.repositories[7].headSha"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
@@ -2302,13 +2367,13 @@ edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.art
 rewrite_checksums
 expect_failure "failed Iroha matching-branch remote proof mismatch fixture" "handoffs/source-publication-readiness-report.json.repositories[7].currentBranchRemotePresent must match remoteBranchPresent when branch matches head"
 
-reset_external_plan_bundle
+reset_external_plan_bundle reviewed-source
 edit_json "handoffs/source-publication-readiness-report.json" "const row = data.repositories[7]; row.remoteHeadSha = null; row.currentBranchRemoteSha = null"
 edit_json "manifest.json" "const row = data.sourcePublicationHandoff.repositories[7]; row.remoteHeadSha = null; row.currentBranchRemoteSha = null"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
-expect_failure "failed Iroha malformed matching-branch remote response fixture" "manifest.sourcePublicationHandoff.sources[8].currentBranchRemoteSha must match across preflight and postflight"
+expect_failure "failed Iroha malformed matching-branch remote response fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle reviewed-source
 edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures[1] = 'upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/forged'"
@@ -2318,14 +2383,14 @@ rewrite_checksums
 expect_failure "external plan metadata with forged reviewed-source mismatch fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures = ['worktree is not clean (staged=1, unstaged=0, untracked=0, unmerged=0)']"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures = ['worktree is not clean (staged=1, unstaged=0, untracked=0, unmerged=0)', 'source publication preflight did not pass before release checks']"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
 expect_failure "external plan metadata without unsafe Iroha operation fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 reset_external_plan_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures = ['repository has an in-progress Git merge operation (FORGED_HEAD); only the repository owner may complete or abort it before source publication']"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].failures = ['repository has an in-progress Git merge operation (FORGED_HEAD); only the repository owner may complete or abort it before source publication', 'source publication preflight did not pass before release checks']"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 edit_json "manifest.json" "data.sourcePublicationHandoff.reportSha256 = data.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-readiness-report.json').sha256"
 rewrite_checksums
@@ -2485,10 +2550,10 @@ rewrite_checksums
 expect_failure "source publication Iroha identity fixture" "handoffs/source-publication-readiness-report.json.repositories[7] identity mismatch"
 
 reset_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].unstagedCount = 1; data.totals.unstaged = 1"
+edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[7].status = 'passed'; data.repositories[7].failures = []; data.repositories[7].unstagedCount = 1; data.totals.unstaged = 1"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 rewrite_checksums
-expect_failure "source publication passed dirty Iroha fixture" "handoffs/source-publication-readiness-report.json.repositories[7].passed source must have zero dirty counts"
+expect_failure "source publication passed dirty Iroha fixture" "handoffs/source-publication-readiness-report.json.repositories[7].canonical branch exact-SHA review is blocked"
 
 reset_bundle
 edit_json "handoffs/source-publication-readiness-report.json" "data.repositories[0].repositoryPath = '/tmp/attacker-controlled-source'"
@@ -2655,7 +2720,7 @@ rewrite_checksums
 expect_failure "source publication post-summary report fixture" "handoffs/source-publication-readiness-report.json.generatedAt must not be later than summary.generatedAt"
 
 reset_bundle
-edit_json "handoffs/source-publication-readiness-report.json" "data.totals.passed = 8; data.totals.failed = 1; data.status = 'failed'"
+edit_json "handoffs/source-publication-readiness-report.json" "data.totals.passed = 7; data.totals.failed = 2; data.status = 'failed'"
 refresh_manifest_artifact "handoffs/source-publication-readiness-report.json"
 rewrite_checksums
 expect_failure "source publication report totals drift fixture" "handoffs/source-publication-readiness-report.json.totals.passed mismatch"
@@ -2696,7 +2761,7 @@ fs.writeFileSync(file, `${lines.join('\n')}\n`)
 NODE
 refresh_manifest_artifact "handoffs/source-publication-readiness.tsv"
 rewrite_checksums
-expect_failure "source publication Iroha config order fixture" "handoffs/source-publication-readiness.tsv row 7 identity mismatch"
+expect_failure "source publication Iroha config order fixture" "handoffs/source-publication-readiness.tsv row 7 pull request must be canonical positive digits"
 
 reset_bundle
 rm "$bundle_dir/handoffs/source-publication-readiness-report.json"
@@ -3129,6 +3194,16 @@ NODE
 refresh_manifest_artifact "handoffs/passkey-backup-production.json"
 rewrite_checksums
 expect_failure "passkey production config artifact drift fixture" "handoffs/passkey-backup-production.json.challengeServiceBaseUrl mismatch"
+
+for spec in 'backupStorage|cloudkit-private-database' 'googleDriveScope|https://www.googleapis.com/auth/drive' 'additionalBackupStorage|none'; do
+  reset_bundle
+  field="${spec%%|*}"
+  value="${spec#*|}"
+  edit_json "handoffs/passkey-backup-production.json" "data.ios['$field'] = '$value'"
+  refresh_manifest_artifact "handoffs/passkey-backup-production.json"
+  rewrite_checksums
+  expect_failure "iOS portable Drive contract $field fixture" "handoffs/passkey-backup-production.json.ios.$field mismatch"
+done
 
 reset_bundle
 node - "$bundle_dir/handoffs/passkey-backup-production.json" <<'NODE'
@@ -5157,7 +5232,7 @@ rewrite_checksums
 expect_failure "secret-like copied log fixture" "contains secret-like token"
 
 reset_bundle
-edit_json "summary.json" "data.totals.failed = 1; data.totals.total = 10"
+edit_json "summary.json" "data.totals.failed = 1; data.totals.total = data.totals.passed + data.totals.failed + data.totals.skipped"
 rewrite_checksums
 expect_failure "summary mismatch fixture" "totals mismatch for failed"
 

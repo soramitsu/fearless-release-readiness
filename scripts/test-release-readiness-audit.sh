@@ -97,6 +97,9 @@ setup_fixture() {
     'exit 97'
   chmod +x "$bin_dir/gh"
 
+  write_file "$workspace/scripts/audit-passkey-enabled-acceptance.mjs" \
+    'if (process.env.FAKE_RELEASE_SCENARIO === "passkey-enabled-acceptance-fail") { console.error("passkey enabled acceptance evidence missing"); process.exit(1) }' \
+    'console.log("passkey enabled acceptance fixture passed")'
   write_fake_audit_script "$workspace/scripts/audit-plan-readiness.sh" "plan-fail,multi-fail"
   write_fake_audit_script "$workspace/scripts/audit-github-governance.sh" "github-fail,live-fail"
   write_fake_audit_script "$workspace/scripts/audit-release-pr-readiness.sh" "release-pr-fail,live-fail,multi-fail"
@@ -168,8 +171,8 @@ setup_fixture() {
     'const currentBranchRemoteSha = driftCurrentEqualsPr ? prHeadSha : driftPublication ? advancedCurrentBranchRemoteSha : localSha' \
     'const ignoredOutputFailure = "worktree contains ignored non-published paths (154): .cache/, .codex-target/, .playwright-cli/, .pytest_cache/, Cargo.lock, IrohaSwift/.build/, artifacts/js-sdk-bundle-size/, artifacts/python_fixture_regen_state.json; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts"' \
     'const preflightContinuityFailure = "source publication preflight did not pass before release checks"' \
-    'const canonicalPublicationFailures = [ignoredOutputFailure, "current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations", `local HEAD ${localSha} does not match pull request head ${prHeadSha}`, "upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/optimizations"]' \
-    'const canonicalDriftPublicationFailures = [ignoredOutputFailure, "current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations", `local HEAD ${localSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}`, `local HEAD ${localSha} does not match pull request head ${prHeadSha}`, "upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/optimizations", `cached upstream origin/optimizations at ${localSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}`]' \
+    'const canonicalPublicationFailures = [ignoredOutputFailure, "canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy"]' \
+    'const canonicalDriftPublicationFailures = [ignoredOutputFailure, `local HEAD ${localSha} does not match authoritative remote head ${currentBranchRemoteSha}`, `cached upstream origin/optimizations at ${localSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}`, "canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy"]' \
     'const publicationFailures = publicationIroha ? [...(driftPublication ? canonicalDriftPublicationFailures : canonicalPublicationFailures)] : ["current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations", "upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/forged"]' \
     'if (postflightContinuityIroha) publicationFailures.push(preflightContinuityFailure)' \
     'if (wrongContinuityMarker) publicationFailures.push("source publication preflight did not pass after release checks")' \
@@ -177,29 +180,30 @@ setup_fixture() {
     'if (reorderedContinuityMarker) publicationFailures.unshift(preflightContinuityFailure)' \
     'if (continuityMarkerPlusExtra) publicationFailures.push(preflightContinuityFailure, "authoritative publication proof accepted by an unrelated forged diagnostic")' \
     'if (mismatchedProofFailure) publicationFailures[2] = `local HEAD ${localSha} does not match pull request head ${"d".repeat(40)}`' \
-    'if (missingPrDiagnostic) publicationFailures.splice(2, 1)' \
-    'if (missingIgnoredDiagnostic) publicationFailures.shift()' \
+    'if (missingPrDiagnostic) publicationFailures.splice(1, 1)' \
+    'if (missingIgnoredDiagnostic) publicationFailures[0] = "worktree contains ignored non-published paths (0): forged"' \
     'if (staleCurrentDiagnostic) publicationFailures.push(`local HEAD ${localSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}`)' \
     'if (driftContinuityMarker) publicationFailures.push(preflightContinuityFailure)' \
-    'if (driftMissingCurrentDiagnostic) publicationFailures.splice(2, 1)' \
-    'if (driftMissingCachedDiagnostic) publicationFailures.splice(5, 1)' \
-    'if (driftReorderedDiagnostics) [publicationFailures[2], publicationFailures[3]] = [publicationFailures[3], publicationFailures[2]]' \
-    'if (driftForgedCurrentDiagnostic) publicationFailures[2] = `local HEAD ${localSha} does not match authoritative current branch optimizations at ${"d".repeat(40)}`' \
-    'if (driftForgedCachedDiagnostic) publicationFailures[5] = `cached upstream origin/optimizations at ${localSha} does not match authoritative current branch optimizations at ${"d".repeat(40)}`' \
+    'if (driftMissingCurrentDiagnostic) publicationFailures.splice(1, 1)' \
+    'if (driftMissingCachedDiagnostic) publicationFailures.splice(2, 1)' \
+    'if (driftReorderedDiagnostics) [publicationFailures[1], publicationFailures[2]] = [publicationFailures[2], publicationFailures[1]]' \
+    'if (driftForgedCurrentDiagnostic) publicationFailures[1] = `local HEAD ${localSha} does not match authoritative current branch optimizations at ${"d".repeat(40)}`' \
+    'if (driftForgedCachedDiagnostic) publicationFailures[2] = `cached upstream origin/optimizations at ${localSha} does not match authoritative current branch optimizations at ${"d".repeat(40)}`' \
     'if (driftUnrelatedExtra) publicationFailures.push("authoritative publication proof accepted by an unrelated forged diagnostic")' \
     'if (driftWrongContinuityMarker) publicationFailures.push("source publication preflight did not pass after release checks")' \
     'if (driftDuplicateContinuityMarker) publicationFailures.push(preflightContinuityFailure, preflightContinuityFailure)' \
     'if (driftContinuityMarkerPlusExtra) publicationFailures.push(preflightContinuityFailure, "authoritative publication proof accepted by an unrelated forged diagnostic")' \
-    'const publicationRow = {path:"../iroha",repository:"hyperledger-iroha/iroha",originUrl:"https://github.com/hyperledger-iroha/iroha.git",originRepository:"hyperledger-iroha/iroha",head:"codex/kagemusha-selector-hardening",base:"optimizations",prNumber:5612,prUrl:"https://github.com/hyperledger-iroha/iroha/pull/5612",prState:"merged",repositoryPath:"/fixture/iroha",branch:"optimizations",upstream:"origin/optimizations",headSha:localSha,upstreamSha:localSha,prHeadSha,remoteHeadSha:null,remoteBranchPresent:false,currentBranchRemoteSha,currentBranchRemotePresent:true,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:publicationFailures}' \
+    'const publicationRow = {path:"../iroha",repository:"hyperledger-iroha/iroha",originUrl:"https://github.com/hyperledger-iroha/iroha.git",originRepository:"hyperledger-iroha/iroha",head:"optimizations",base:"optimizations",prNumber:null,prUrl:null,prState:null,repositoryPath:"/fixture/iroha",branch:"optimizations",upstream:"origin/optimizations",headSha:localSha,upstreamSha:localSha,prHeadSha:null,remoteHeadSha:currentBranchRemoteSha,remoteBranchPresent:true,currentBranchRemoteSha,currentBranchRemotePresent:true,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:publicationFailures}' \
     'if (missingActualProof) { publicationRow.currentBranchRemoteSha = null; publicationRow.currentBranchRemotePresent = null }' \
     'if (forgedActualProof) publicationRow.currentBranchRemoteSha = "d".repeat(40)' \
-    'if (missingPrHead) publicationRow.prHeadSha = null' \
+    'if (missingPrHead) publicationRow.prState = "merged"' \
     'if (forgedPrHead) publicationRow.prHeadSha = localSha' \
     'if (invalidConfiguredRefProof) { publicationRow.remoteBranchPresent = true; publicationRow.remoteHeadSha = "d".repeat(40) }' \
     'if (driftCurrentEqualsLocal) { publicationRow.currentBranchRemoteSha = localSha; publicationFailures[2] = `local HEAD ${localSha} does not match authoritative current branch optimizations at ${localSha}`; publicationFailures[5] = `cached upstream origin/optimizations at ${localSha} does not match authoritative current branch optimizations at ${localSha}` }' \
     'if (driftUpstreamDiffersFromLocal) { publicationRow.upstreamSha = "d".repeat(40); publicationFailures[5] = `cached upstream origin/optimizations at ${publicationRow.upstreamSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}` }' \
+    'if (driftCurrentEqualsPr) publicationRow.prHeadSha = prHeadSha' \
     'if (driftPrEqualsLocal) { publicationRow.prHeadSha = localSha; publicationFailures[3] = `local HEAD ${localSha} does not match pull request head ${localSha}` }' \
-    'if (driftConfiguredRefPresent) publicationRow.remoteBranchPresent = true' \
+    'if (driftConfiguredRefPresent) publicationRow.remoteBranchPresent = false' \
     'if (driftConfiguredRefSha) publicationRow.remoteHeadSha = "d".repeat(40)' \
     'if (driftCurrentRefNotPresent) publicationRow.currentBranchRemotePresent = false' \
     'if (driftNonzeroCount) publicationRow.stagedCount = 1' \
@@ -1874,24 +1878,9 @@ assert_failed_check_metadata \
   "Do not edit or publish from the unsafe external ../iroha checkout" \
   "Owner-coordinated resolution of the unsafe external ../iroha source state"
 
-setup_fixture
-expect_failure \
-  "authoritative-current drift may equal merged PR head" \
-  plan-unpublished-iroha-drift-current-equals-pr \
-  "Static cross-repo plan readiness"
-assert_summary "authoritative-current drift may equal merged PR head" failed true 2 0 \
-  plan-readiness=failed \
-  github-governance=passed \
-  source-publication-readiness=failed
-assert_failed_check_metadata \
-  "authoritative-current drift may equal merged PR head" \
-  "plan-readiness" \
-  true \
-  "upstream-dependency" \
-  "Do not edit or publish from the unsafe external ../iroha checkout" \
-  "Owner-coordinated resolution of the unsafe external ../iroha source state"
 
 iroha_publication_proof_negative_cases=(
+  "canonical branch cannot claim merged PR proof|plan-unpublished-iroha-drift-current-equals-pr"
   "legacy v2 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v2"
   "wrong-phase Iroha publication proof stays local|plan-unpublished-iroha-wrong-report-phase"
   "wrong-preflight-digest Iroha publication proof stays local|plan-unpublished-iroha-wrong-preflight-digest"
@@ -2297,6 +2286,15 @@ assert_action_manifest "single passkey production smoke failure" failed true 1 \
   "PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper as a readable executable" \
   "PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper provisioned as a readable executable" \
   "PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production"
+
+setup_fixture
+expect_failure "enabled passkey acceptance is mandatory after successful smoke" passkey-enabled-acceptance-fail "Passkey production smoke"
+grep -q "passkey enabled acceptance evidence missing" "$report_dir/passkey-production-smoke.log" ||
+  fail "enabled acceptance failure must remain visible in the production smoke log"
+assert_summary "enabled passkey acceptance is mandatory after successful smoke" failed true 1 0 \
+  passkey-backup-prerequisites=passed \
+  passkey-production-smoke=failed \
+  iroha-release-readiness=passed
 
 setup_fixture
 expect_failure "single Iroha Taira/Nexus release readiness failure" iroha-fail "Iroha Taira/Nexus release prerequisites"

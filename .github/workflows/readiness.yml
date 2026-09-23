@@ -31,6 +31,7 @@ jobs:
           set -euo pipefail
           git diff --check
           node --check scripts/audit-source-publication-readiness.mjs
+          node --check scripts/audit-passkey-enabled-acceptance.mjs
           node --check scripts/capture-source-freeze.mjs
           node --check scripts/quarantine-source-publication-outputs.mjs
           node --check scripts/extract-android-apk-signer-evidence.mjs
@@ -42,6 +43,7 @@ jobs:
           bash scripts/test-github-governance-audit.sh
           bash scripts/test-workflow-action-pins-audit.sh
           bash scripts/test-passkey-challenge-service-audit.sh
+          node scripts/test-passkey-enabled-acceptance.mjs
           PASSKEY_CHALLENGE_SERVICE_AUDIT_SKIP_COMMANDS=1 bash scripts/audit-passkey-challenge-service.sh
 
   verify:

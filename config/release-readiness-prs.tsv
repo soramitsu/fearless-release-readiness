@@ -15,7 +15,7 @@ soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merg
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test
-# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	2bf823661acaf1a796a7ddf4d52fcd87cc4e8c30
+# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	0986721e5cb24e0177a067cecc443c1ec4b7d532
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	Validate IAS candidate; trusted develop dispatch may hand off	github-actions	15368	github-actions	323721421	.github/workflows/android-internal-app-sharing.yml
@@ -37,7 +37,7 @@ soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	vali
 soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
 # The September integration candidate contains the prior consolidated source plus
 # migration, TON, transport and final signing guards. Draft is not approval.
-# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	49f2f7eecb8d3203a2f73bdb53cc0ff33e08dc56
+# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	024664259740547bd25611f5bacd3238fa9b4333
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	release-contracts	github-actions	15368	github-actions	320731655	.github/workflows/ios-release-safety.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
@@ -156,15 +156,11 @@ sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	merged	validate,
 # required_check_provenance_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	validate	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
 # required_check_provenance_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	verify	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
 sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	merged	branch-flow,validate,verify
-# reviewed_pr_pin	hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	5611	313088b969a8afaceb0b95f5f39bee5979384f49
-# required_check_provenance_pin	hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	DCO	check-run-app	974774	dco-2	-	-
-hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	merged	DCO
-# reviewed_pr_pin	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	5612	e7a9e27691d6f34e2737d946af9b7f0768a31136
-# required_check_provenance_pin	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	DCO	check-run-app	974774	dco-2	-	-
-hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	merged	DCO
-# reviewed_pr_pin	hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	5619	9e146c135f91c0fff5d7b9f5c27af6b5a8e476de
-# required_check_provenance_pin	hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	DCO	check-run-app	974774	dco-2	-	-
-hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	merged	DCO
+# Iroha current source is optimizations only; exact-SHA review remains blocked in source-publication readiness.
+# Historical provenance only; these topic PRs are not release requirements or review of current optimizations:
+# https://github.com/hyperledger-iroha/iroha/pull/5611 at 313088b969a8afaceb0b95f5f39bee5979384f49
+# https://github.com/hyperledger-iroha/iroha/pull/5612 at e7a9e27691d6f34e2737d946af9b7f0768a31136
+# https://github.com/hyperledger-iroha/iroha/pull/5619 at 9e146c135f91c0fff5d7b9f5c27af6b5a8e476de
 
 # Root source ownership is assigned; this PR is still OPEN/REVIEW_REQUIRED.
 # Pins identify the current published candidate, not approval of the dirty working tree.

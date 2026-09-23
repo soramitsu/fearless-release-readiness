@@ -202,6 +202,12 @@ write_ios_ready() {
     '  func testWorkflowRejectsRevokeAllResultContainingCredentialIdentity() {}' \
     '  func testCoordinatorRejectsRevokeAllResultContainingCredentialIdentity() {}' \
     '}'
+  write_file "$repo/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift" \
+    'import Foundation' \
+    'final class GoogleDrivePasskeyBackupCloudStorage {' \
+    '  static let scope = "https://www.googleapis.com/auth/drive.appdata"' \
+    '  static let folder = "appDataFolder"' \
+    '}'
   write_file "$repo/fearless/WalletConnect.entitlements" \
     '<?xml version="1.0" encoding="UTF-8"?>' \
     '<plist version="1.0">' \
@@ -222,7 +228,7 @@ write_ios_ready() {
   write_file "$repo/docs/release-checklist.md" \
     'Run ../config/passkey-backup-production.json passkey release config checks before release.' \
     'Keep isPasskeyBackupEnabled=false unless live health passes.' \
-    'Confirm iCloud account availability, CloudKit production schema, associated-domain provisioning, provisioning profiles, and restore before creating a new backup.'
+    'Confirm Google account selection, Google Drive consent, cross-platform restore, optional iCloud copy, iCloud account availability, CloudKit production schema, associated-domain provisioning, provisioning profiles, and restore before creating a new backup.'
 }
 
 write_passkey_config() {
@@ -283,7 +289,9 @@ write_passkey_config() {
     '    ]' \
     '  },' \
     '  "ios": {' \
-    '    "backupStorage": "cloudkit-private-database",' \
+    '    "backupStorage": "google-drive-appdata",' \
+    '    "googleDriveScope": "https://www.googleapis.com/auth/drive.appdata",' \
+    '    "additionalBackupStorage": "cloudkit-private-database",' \
     '    "associatedDomain": "webcredentials:fearlesswallet.io",' \
     '    "cloudKitRecordType": "FearlessPasskeyBackup",' \
     '    "cloudKitContainers": [' \
@@ -291,7 +299,11 @@ write_passkey_config() {
     '      "iCloud.jp.co.soramitsu.fearlesswallet.dev"' \
     '    ],' \
     '    "releaseUxChecklist": [' \
-    '      "icloud-account-availability",' \
+    '      "google-account-selection",' \
+    '      "google-drive-consent",' \
+    '      "cross-platform-restore",' \
+    '      "optional-icloud-copy",' \
+      '      "icloud-account-availability",' \
     '      "associated-domain-provisioning",' \
     '      "cloudkit-production-schema",' \
     '      "restore-before-create",' \
@@ -836,6 +848,30 @@ perl -0pi -e 's#      "cloudkit-production-schema",\n##' "$workspace/config/pass
 expect_failure "missing iOS passkey release UX manifest field" "iOS releaseUxChecklist must include"
 
 reset_fixture
+node - "$workspace/config/passkey-backup-production.json" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+data.ios.backupStorage = 'cloudkit-private-database';
+fs.writeFileSync(file, JSON.stringify(data, null, 2));
+NODE
+expect_failure "iOS cannot use iCloud as its only recovery copy" "iOS backupStorage must be google-drive-appdata"
+
+reset_fixture
+perl -0pi -e 's#"additionalBackupStorage": "cloudkit-private-database"#"additionalBackupStorage": "google-drive-appdata"#' "$workspace/config/passkey-backup-production.json"
+expect_failure "iOS additional copy cannot replace Drive" "iOS CloudKit must be an optional additional copy"
+
+reset_fixture
+node - "$workspace/config/passkey-backup-production.json" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+data.ios.googleDriveScope = 'https://www.googleapis.com/auth/drive';
+fs.writeFileSync(file, JSON.stringify(data, null, 2));
+NODE
+expect_failure "iOS Drive scope must remain appdata" "iOS Drive scope must match Android drive.appdata"
+
+reset_fixture
 perl -0pi -e 's#https://backup\.fearlesswallet\.io#https://example.com#' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android release config drift" "Android passkey challenge service URL"
 
@@ -915,6 +951,14 @@ perl -0pi -e 's#iCloud\.jp\.co\.soramitsu\.fearlesswallet"#iCloud.jp.co.soramits
 expect_failure "ios production config uses stale release CloudKit container" "iOS release CloudKit container must match the App Store bundle identifier"
 
 reset_fixture
+rm "$workspace/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+expect_failure "ios missing Google Drive primary backup" "iOS Google Drive appdata scope source missing"
+
+reset_fixture
+perl -0pi -e 's#https://www\.googleapis\.com/auth/drive\.appdata#https://www.googleapis.com/auth/drive#' "$workspace/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+expect_failure "ios Drive requests wrong OAuth scope" "iOS Google Drive appdata scope"
+
+reset_fixture
 perl -0pi -e 's/import CloudKit\n//' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
 perl -0pi -e 's/  let container = CKContainer\(identifier: "iCloud\.io\.fearless\.wallet"\)\n//' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing CloudKit code" "iOS must contain iCloud/CloudKit backup storage integration"
@@ -947,6 +991,14 @@ expect_failure "ios missing disabled passkey flag" "iOS passkey backup release f
 reset_fixture
 perl -0pi -e 's#iCloud account availability, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
 expect_failure "ios missing iCloud account release gate" "iOS release checklist passkey iCloud account UX"
+
+reset_fixture
+perl -0pi -e 's#Google Drive consent, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+expect_failure "ios missing Google Drive consent release gate" "iOS release checklist Google Drive consent UX"
+
+reset_fixture
+perl -0pi -e 's#cross-platform restore, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+expect_failure "ios missing cross-platform restore release gate" "iOS release checklist cross-platform recovery UX"
 
 reset_fixture
 perl -0pi -e 's#CloudKit production schema, ##' "$workspace/fearless-iOS/docs/release-checklist.md"

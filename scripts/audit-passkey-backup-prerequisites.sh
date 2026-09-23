@@ -73,6 +73,7 @@ PASSKEY_CONFIG_CREDENTIALS_REVOKE=""
 PASSKEY_CONFIG_CREDENTIALS_REVOKE_ALL=""
 PASSKEY_CONFIG_ANDROID_SCOPE=""
 PASSKEY_CONFIG_ANDROID_OAUTH_SCOPE=""
+PASSKEY_CONFIG_IOS_DRIVE_SCOPE=""
 PASSKEY_CONFIG_IOS_ASSOCIATED_DOMAIN=""
 PASSKEY_CONFIG_IOS_RECORD_TYPE=""
 PASSKEY_CONFIG_IOS_CONTAINERS=""
@@ -280,6 +281,10 @@ const expectedAndroidUx = [
   'disabled-until-live-health',
 ];
 const expectedIosUx = [
+  'google-account-selection',
+  'google-drive-consent',
+  'cross-platform-restore',
+  'optional-icloud-copy',
   'icloud-account-availability',
   'associated-domain-provisioning',
   'cloudkit-production-schema',
@@ -323,14 +328,16 @@ assert(data.android?.oauthScope === 'oauth2:https://www.googleapis.com/auth/driv
 assert(Array.isArray(data.android?.releaseUxChecklist), 'Android releaseUxChecklist must be an array');
 assert(expectedAndroidUx.every((field) => data.android.releaseUxChecklist.includes(field)), 'Android releaseUxChecklist must include google-account-selection, google-drive-consent, restore-before-create, and disabled-until-live-health');
 
-assert(data.ios?.backupStorage === 'cloudkit-private-database', 'iOS backupStorage must be cloudkit-private-database');
+assert(data.ios?.backupStorage === 'google-drive-appdata', 'iOS backupStorage must be google-drive-appdata');
+assert(data.ios?.googleDriveScope === data.android.googleDriveScope, 'iOS Drive scope must match Android drive.appdata');
+assert(data.ios?.additionalBackupStorage === 'cloudkit-private-database', 'iOS CloudKit must be an optional additional copy');
 assert(data.ios?.associatedDomain === 'webcredentials:fearlesswallet.io', 'iOS associated domain must match RP ID');
 assert(data.ios?.cloudKitRecordType === 'FearlessPasskeyBackup', 'iOS CloudKit record type must be FearlessPasskeyBackup');
 assert(Array.isArray(data.ios?.cloudKitContainers) && data.ios.cloudKitContainers.length === 2, 'iOS CloudKit containers must contain exactly the release and dev containers');
 assert(data.ios.cloudKitContainers[0] === 'iCloud.jp.co.soramitsu.fearlesswallet', 'iOS release CloudKit container must match the App Store bundle identifier');
 assert(data.ios.cloudKitContainers[1] === 'iCloud.jp.co.soramitsu.fearlesswallet.dev', 'iOS dev CloudKit container must match the development bundle identifier');
 assert(Array.isArray(data.ios?.releaseUxChecklist), 'iOS releaseUxChecklist must be an array');
-assert(expectedIosUx.every((field) => data.ios.releaseUxChecklist.includes(field)), 'iOS releaseUxChecklist must include icloud-account-availability, associated-domain-provisioning, cloudkit-production-schema, restore-before-create, and disabled-until-live-health');
+assert(expectedIosUx.every((field) => data.ios.releaseUxChecklist.includes(field)), 'iOS releaseUxChecklist must include Google Drive account selection and consent, cross-platform restore, optional iCloud, provisioning, and restore-before-create');
 
 const pairs = {
   RP_ID: data.relyingPartyId,
@@ -345,6 +352,7 @@ const pairs = {
   CREDENTIALS_REVOKE_ALL: data.challengeServicePaths.credentialsRevokeAll,
   ANDROID_SCOPE: data.android.googleDriveScope,
   ANDROID_OAUTH_SCOPE: data.android.oauthScope,
+  IOS_DRIVE_SCOPE: data.ios.googleDriveScope,
   IOS_ASSOCIATED_DOMAIN: data.ios.associatedDomain,
   IOS_RECORD_TYPE: data.ios.cloudKitRecordType,
   IOS_CONTAINERS: data.ios.cloudKitContainers.join(','),
@@ -378,6 +386,7 @@ NODE
       CREDENTIALS_REVOKE_ALL) PASSKEY_CONFIG_CREDENTIALS_REVOKE_ALL="$value" ;;
       ANDROID_SCOPE) PASSKEY_CONFIG_ANDROID_SCOPE="$value" ;;
       ANDROID_OAUTH_SCOPE) PASSKEY_CONFIG_ANDROID_OAUTH_SCOPE="$value" ;;
+      IOS_DRIVE_SCOPE) PASSKEY_CONFIG_IOS_DRIVE_SCOPE="$value" ;;
       IOS_ASSOCIATED_DOMAIN) PASSKEY_CONFIG_IOS_ASSOCIATED_DOMAIN="$value" ;;
       IOS_RECORD_TYPE) PASSKEY_CONFIG_IOS_RECORD_TYPE="$value" ;;
       IOS_CONTAINERS) PASSKEY_CONFIG_IOS_CONTAINERS="$value" ;;
@@ -577,6 +586,7 @@ check_release_config_sources() {
   local android_drive="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
   local android_token="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
   local ios_contract="$ROOT_DIR/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+  local ios_drive="$ROOT_DIR/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
   local ios_serializer_test="$ROOT_DIR/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
   local ios_entitlements="$ROOT_DIR/fearless-iOS/fearless/WalletConnect.entitlements"
   local ios_project="$ROOT_DIR/fearless-iOS/fearless.xcodeproj/project.pbxproj"
@@ -611,6 +621,9 @@ check_release_config_sources() {
   require_file_literal "$ios_contract" "PASSKEY_RP_ID = \"$PASSKEY_CONFIG_RP_ID\"" "iOS passkey RP ID"
   require_file_literal "$ios_contract" "challengeServiceBaseURL = URL(string: \"$PASSKEY_CONFIG_BASE_URL\")!" "iOS passkey challenge service URL"
   require_file_literal "$ios_contract" "isPasskeyBackupEnabled = false" "iOS passkey backup release flag disabled by default"
+  require_file_literal "$ios_drive" "$PASSKEY_CONFIG_IOS_DRIVE_SCOPE" "iOS Google Drive appdata scope"
+  require_file_literal "$ios_drive" "appDataFolder" "iOS Google Drive appdata folder"
+  require_file_literal "$ios_drive" "GoogleDrivePasskeyBackupCloudStorage" "iOS Google Drive storage implementation"
   require_file_literal "$ios_contract" "recordType = \"$PASSKEY_CONFIG_IOS_RECORD_TYPE\"" "iOS CloudKit record type"
   require_file_literal "$ios_contract" "static func validateWalletId" "iOS passkey backup wallet metadata validator"
   require_file_literal "$ios_contract" "static func validateCreatedAtMillis" "iOS passkey backup creation timestamp validator"
@@ -679,6 +692,9 @@ check_release_config_sources() {
   require_file_literal "$android_release" "restore before creating a new backup" "Android release checklist passkey recovery UX"
   require_file_literal "$ios_release" "config/passkey-backup-production.json" "iOS release checklist passkey production config"
   require_file_literal "$ios_release" "isPasskeyBackupEnabled" "iOS release checklist passkey release flag"
+  require_file_literal "$ios_release" "Google account selection" "iOS release checklist Google account selection UX"
+  require_file_literal "$ios_release" "Google Drive consent" "iOS release checklist Google Drive consent UX"
+  require_file_literal "$ios_release" "cross-platform restore" "iOS release checklist cross-platform recovery UX"
   require_file_literal "$ios_release" "iCloud account availability" "iOS release checklist passkey iCloud account UX"
   require_file_literal "$ios_release" "CloudKit production schema" "iOS release checklist passkey CloudKit production schema"
   require_file_literal "$ios_release" "associated-domain provisioning" "iOS release checklist passkey associated-domain provisioning"

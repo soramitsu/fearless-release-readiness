@@ -94,6 +94,19 @@ function headerValues(request, name) {
   return Array.isArray(value) ? value : [value];
 }
 
+function rejectAmbiguousHeaders(request) {
+  for (const name of ['content-type', 'content-length', 'transfer-encoding', 'host',
+    'x-forwarded-for', 'forwarded', 'proxy-authorization']) {
+    if (headerValues(request, name).length > 1) {
+      throw serviceError(400, 'ambiguous_headers', 'Request contains ambiguous headers');
+    }
+  }
+  if (headerValues(request, 'content-length').length &&
+      headerValues(request, 'transfer-encoding').length) {
+    throw serviceError(400, 'ambiguous_headers', 'Request contains ambiguous headers');
+  }
+}
+
 function bearerToken(request) {
   const values = headerValues(request, 'authorization');
   if (values.length !== 1 || typeof values[0] !== 'string') {
@@ -368,6 +381,7 @@ export function createServer({
   });
   const server = createHttpServer(async (request, response) => {
     try {
+      rejectAmbiguousHeaders(request);
       const pathname = requestPath(request);
 
       if (pathname === PATHS.health) {

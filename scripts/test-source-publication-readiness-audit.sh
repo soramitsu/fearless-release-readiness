@@ -36,6 +36,20 @@ expect_failure() {
   fi
 }
 
+# Clean canonical branch publication is still blocked until exact-SHA review exists.
+expect_review_blocked() {
+  local log="$TMP_DIR/review-blocked-command.log"
+  if "$@" > "$log" 2>&1; then fail "unreviewed canonical source unexpectedly passed"; fi
+  node - "$log" <<'NODE'
+const fs = require('fs')
+const lines = fs.readFileSync(process.argv[2], 'utf8').split('\n').filter((line) => line.startsWith('  - '))
+const review = '  - ../iroha: canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy'
+const continuity = '  - ../iroha: source publication preflight did not pass before release checks'
+if (!lines.includes(review) || lines.some((line) => line !== review && line !== continuity)) process.exit(1)
+NODE
+  cat "$log"
+}
+
 write_source_config() {
   local target="$1"
   printf '%s\n' \
@@ -47,7 +61,7 @@ write_source_config() {
     $'../ton-indexer\ttonswap-org/ton-indexer\tcodex/ti-smoke-body-preview-tests\tdevelop\t13' \
     $'../solswap-indexer\tsolswap-io/solswap-indexer\tcodex/si-smoke-body-preview-tests\tdevelop\t16' \
     $'../polkaswap-indexer\tsora-xor/polkaswap-indexer\tcodex/pi-deployment-evidence-gate\tdevelop\t1' \
-    $'../iroha\thyperledger-iroha/iroha\tcodex/kagemusha-selector-hardening\toptimizations\t5612' > "$target"
+    $'../iroha\thyperledger-iroha/iroha\toptimizations\toptimizations\t-' > "$target"
 }
 
 write_release_config() {
@@ -112,7 +126,12 @@ for file in \
   .github/workflows/readiness.yml \
   .gitignore \
   README.md \
+  docs/passkey-enabled-acceptance.md \
   docs/source-freeze-20260801.md \
+  scripts/audit-passkey-enabled-acceptance.mjs \
+  scripts/test-passkey-enabled-acceptance.mjs \
+  scripts/audit-plan-readiness.sh \
+  scripts/test-plan-readiness-audit.sh \
   scripts/audit-release-readiness.sh \
   scripts/audit-source-publication-readiness.mjs \
   scripts/capture-source-freeze.mjs \
@@ -168,7 +187,7 @@ init_repo "$ROOT/fearless-site-web" soramitsu/fearless-site-web codex/site-todo-
 init_repo "$PARENT/ton-indexer" tonswap-org/ton-indexer codex/ti-smoke-body-preview-tests
 init_repo "$PARENT/solswap-indexer" solswap-io/solswap-indexer codex/si-smoke-body-preview-tests
 init_repo "$PARENT/polkaswap-indexer" sora-xor/polkaswap-indexer codex/pi-deployment-evidence-gate
-init_repo "$PARENT/iroha" hyperledger-iroha/iroha codex/kagemusha-selector-hardening
+init_repo "$PARENT/iroha" hyperledger-iroha/iroha optimizations
 IROHA_REMOTE_ADVANCED_SHA="$(
   tree="$($REAL_GIT -C "$PARENT/iroha" rev-parse 'HEAD^{tree}')"
   printf '%s\n' 'authoritative remote-only successor' |
@@ -251,7 +270,6 @@ printf '%s\n' \
   '  repos/tonswap-org/ton-indexer/pulls/13) repository=tonswap-org/ton-indexer; repo_path="$FIXTURE_PARENT/ton-indexer"; head=codex/ti-smoke-body-preview-tests; base=develop; number=13 ;;' \
   '  repos/solswap-io/solswap-indexer/pulls/16) repository=solswap-io/solswap-indexer; repo_path="$FIXTURE_PARENT/solswap-indexer"; head=codex/si-smoke-body-preview-tests; base=develop; number=16 ;;' \
   '  repos/sora-xor/polkaswap-indexer/pulls/1) repository=sora-xor/polkaswap-indexer; repo_path="$FIXTURE_PARENT/polkaswap-indexer"; head=codex/pi-deployment-evidence-gate; base=develop; number=1 ;;' \
-  '  repos/hyperledger-iroha/iroha/pulls/5612) repository=hyperledger-iroha/iroha; repo_path="$FIXTURE_PARENT/iroha"; head=codex/kagemusha-selector-hardening; base=optimizations; number=5612 ;;' \
   '  *) exit 65 ;;' \
   'esac' \
   'if [[ "$mode" == mutate-after-inspection && "$repository" == sora-xor/polkaswap-indexer ]]; then printf "%s\\n" late-drift >> "$FIXTURE_ROOT/FEARLESS_PROJECT_PLAN.md"; fi' \
@@ -271,24 +289,24 @@ chmod +x "$FAKE_GH"
 COMMON_ENV=(env SOURCE_PUBLICATION_TEST_MODE=1 SOURCE_PUBLICATION_NOW=2026-07-10T09:00:00.000Z REAL_GIT="$REAL_GIT" FIXTURE_ROOT="$ROOT" FIXTURE_PARENT="$PARENT" IROHA_REMOTE_ADVANCED_SHA="$IROHA_REMOTE_ADVANCED_SHA" IROHA_PR_HEAD_SHA="$IROHA_PR_HEAD_SHA" FAKE_GH_QUERY_DIR="$TMP_DIR/fake-gh-query-counts")
 COMMON_ARGS=(node "$AUDIT" --test-tool-injection --root "$ROOT" --parent "$PARENT" --config "$ROOT/config/source-publication-readiness.tsv" --root-owner-config "$ROOT/config/source-publication-root-owner.json" --release-pr-config "$ROOT/config/release-readiness-prs.tsv")
 
-"${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" > "$TMP_DIR/local-success.log"
+expect_review_blocked "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" > "$TMP_DIR/local-success.log"
 REPORT="$TMP_DIR/source-report.json"
-"${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$REPORT" > "$TMP_DIR/remote-success.log"
+expect_review_blocked "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$REPORT" > "$TMP_DIR/remote-success.log"
 node - "$REPORT" <<'NODE'
 const fs = require('fs')
 const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
-if (report.schemaVersion !== 3 || report.phase !== 'standalone' || report.preflightReportSha256 !== null || report.status !== 'passed' || report.checkRemote !== true) process.exit(1)
-if (report.totals.sources !== 9 || report.totals.passed !== 9 || report.totals.failed !== 0) process.exit(1)
+if (report.schemaVersion !== 3 || report.phase !== 'standalone' || report.preflightReportSha256 !== null || report.status !== 'failed' || report.checkRemote !== true) process.exit(1)
+if (report.totals.sources !== 9 || report.totals.passed !== 8 || report.totals.failed !== 1) process.exit(1)
 if (report.rootOwnerConfigFile !== `${report.workspaceRoot}/config/source-publication-root-owner.json`) process.exit(1)
 if (!report.workspaceSource || report.workspaceSource.repository !== 'example/fearless-release-orchestration' || report.workspaceSource.prState !== 'merged') process.exit(1)
-if (report.repositories.length !== 8 || report.repositories.some((repo) => repo.status !== 'passed' || repo.prState !== 'merged')) process.exit(1)
+if (report.repositories.length !== 8 || report.repositories.slice(0, -1).some((repo) => repo.status !== 'passed' || repo.prState !== 'merged')) process.exit(1)
 for (const source of [report.workspaceSource, ...report.repositories]) {
   if (source.currentBranchRemotePresent !== true || !/^[0-9a-f]{40}$/.test(source.currentBranchRemoteSha ?? '')) process.exit(1)
   if (source.currentBranchRemoteSha !== source.headSha || source.currentBranchRemoteSha !== source.upstreamSha) process.exit(1)
-  if (source.prHeadSha !== source.headSha) process.exit(1)
+  if (source.path !== '../iroha' && source.prHeadSha !== source.headSha) process.exit(1)
 }
 const iroha = report.repositories.at(-1)
-if (iroha.path !== '../iroha' || iroha.repository !== 'hyperledger-iroha/iroha' || iroha.head !== 'codex/kagemusha-selector-hardening' || iroha.base !== 'optimizations' || iroha.prNumber !== 5612) process.exit(1)
+if (iroha.path !== '../iroha' || iroha.repository !== 'hyperledger-iroha/iroha' || iroha.head !== 'optimizations' || iroha.base !== 'optimizations' || iroha.prNumber !== null || iroha.prUrl !== null || iroha.prState !== null || iroha.prHeadSha !== null || iroha.status !== 'failed') process.exit(1)
 NODE
 
 WALLET_EXCLUDE="$ROOT/fearless-wallet-web/.git/info/exclude"
@@ -297,7 +315,7 @@ printf '%s\n' 'node_modules/' 'build/' '.yarn/' >> "$WALLET_EXCLUDE"
 mkdir -p "$ROOT/fearless-wallet-web/node_modules/example"
 printf '%s\n' 'locked dependency cache' > "$ROOT/fearless-wallet-web/node_modules/example/index.js"
 PREFLIGHT_REPORT="$TMP_DIR/source-publication-preflight-report.json"
-"${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase preflight --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$PREFLIGHT_REPORT" > "$TMP_DIR/preflight-success.log"
+expect_review_blocked "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase preflight --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$PREFLIGHT_REPORT" > "$TMP_DIR/preflight-success.log"
 
 node - "$PREFLIGHT_REPORT" <<'NODE'
 const fs = require('fs')
@@ -344,7 +362,7 @@ expect_failure self-bound-preflight-report 'source publication preflight report 
 mkdir -p "$ROOT/fearless-wallet-web/build/reports"
 printf '%s\n' '{"currentRun":true}' > "$ROOT/fearless-wallet-web/build/reports/generated.json"
 POSTFLIGHT_REPORT="$TMP_DIR/source-publication-postflight-report.json"
-"${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase postflight --preflight-report "$PREFLIGHT_REPORT" --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$POSTFLIGHT_REPORT" > "$TMP_DIR/postflight-generated-output-success.log"
+expect_review_blocked "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase postflight --preflight-report "$PREFLIGHT_REPORT" --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$POSTFLIGHT_REPORT" > "$TMP_DIR/postflight-generated-output-success.log"
 node - "$PREFLIGHT_REPORT" "$POSTFLIGHT_REPORT" <<'NODE'
 const crypto = require('crypto')
 const fs = require('fs')
@@ -387,11 +405,31 @@ expect_failure postflight-clean-head-drift 'source identity changed between rele
 iroha_baseline_head="$($REAL_GIT -C "$PARENT/iroha" rev-parse HEAD)"
 printf '%s\n' 'unpublished Iroha drift after preflight' >> "$PARENT/iroha/source.txt"
 "$REAL_GIT" -C "$PARENT/iroha" commit -qam 'post-preflight Iroha drift'
-"$REAL_GIT" -C "$PARENT/iroha" update-ref refs/remotes/origin/codex/kagemusha-selector-hardening HEAD
-expect_failure postflight-iroha-head-drift 'source identity changed between release preflight and postflight' \
-  "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase postflight --preflight-report "$PREFLIGHT_REPORT" --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
+"$REAL_GIT" -C "$PARENT/iroha" update-ref refs/remotes/origin/optimizations HEAD
+expect_failure postflight-iroha-head-drift 'source publication preflight did not pass before release checks' \
+  "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase postflight --preflight-report "$PREFLIGHT_REPORT" --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$TMP_DIR/iroha-drift-postflight.json"
+node - "$PREFLIGHT_REPORT" "$TMP_DIR/iroha-drift-postflight.json" <<'NODE'
+const fs = require('fs')
+const [before, after] = process.argv.slice(2).map((file) => JSON.parse(fs.readFileSync(file, 'utf8')).repositories.at(-1))
+if (before.headSha === after.headSha || after.headSha !== after.currentBranchRemoteSha || after.branch !== 'optimizations' || after.prNumber !== null || after.status !== 'failed') process.exit(1)
+NODE
 "$REAL_GIT" -C "$PARENT/iroha" reset -q --hard "$iroha_baseline_head"
-"$REAL_GIT" -C "$PARENT/iroha" update-ref refs/remotes/origin/codex/kagemusha-selector-hardening HEAD
+"$REAL_GIT" -C "$PARENT/iroha" update-ref refs/remotes/origin/optimizations HEAD
+
+cp "$PREFLIGHT_REPORT" "$TMP_DIR/forged-reviewed-optimizations.json"
+node - "$TMP_DIR/forged-reviewed-optimizations.json" <<'NODE'
+const fs = require('fs')
+const file = process.argv[2]
+const report = JSON.parse(fs.readFileSync(file, 'utf8'))
+report.status = 'passed'
+report.totals.passed = 9
+report.totals.failed = 0
+report.repositories.at(-1).status = 'passed'
+report.repositories.at(-1).failures = []
+fs.writeFileSync(file, JSON.stringify(report))
+NODE
+expect_failure forged-canonical-reviewed-preflight 'canonical branch exact-SHA review is blocked' \
+  "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --phase postflight --preflight-report "$TMP_DIR/forged-reviewed-optimizations.json" --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
 
 cp "$PREFLIGHT_REPORT" "$TMP_DIR/stale-preflight-report.json"
 node - "$TMP_DIR/stale-preflight-report.json" <<'NODE'
@@ -407,7 +445,7 @@ expect_failure stale-preflight-report 'source publication preflight report is st
 rm -rf "$ROOT/fearless-wallet-web/node_modules"
 cp "$TMP_DIR/wallet-exclude-before-phase-tests" "$WALLET_EXCLUDE"
 
-"${COMMON_ENV[@]}" GIT_DIR="$TMP_DIR/attacker-git-dir" GIT_WORK_TREE="$TMP_DIR/attacker-worktree" GH_HOST=attacker.invalid \
+expect_review_blocked "${COMMON_ENV[@]}" GIT_DIR="$TMP_DIR/attacker-git-dir" GIT_WORK_TREE="$TMP_DIR/attacker-worktree" GH_HOST=attacker.invalid \
   GIT_SSH_COMMAND="$TMP_DIR/attacker-ssh" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0="$TMP_DIR/attacker-ssh" \
   "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" > "$TMP_DIR/scrubbed-tool-environment-success.log"
 
@@ -420,7 +458,7 @@ chmod +x "$ATTACKER_HELPER"
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config core.sshCommand "$ATTACKER_HELPER"
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config core.fsmonitor "$ATTACKER_HELPER"
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config diff.external "$ATTACKER_HELPER"
-"${COMMON_ENV[@]}" PROMPT_MARKER="$PROMPT_MARKER" \
+expect_review_blocked "${COMMON_ENV[@]}" PROMPT_MARKER="$PROMPT_MARKER" \
   "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" > "$TMP_DIR/repository-network-config-isolation-success.log"
 [[ ! -e "$PROMPT_MARKER" ]] || fail "network credential or SSH helper executed unexpectedly"
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config --unset-all core.askPass
@@ -505,14 +543,16 @@ expect_failure symlinked-git-directory 'repository .git metadata entry must not 
 rm "$PARENT/iroha/.git"
 mv "$PARENT/iroha/.git-real" "$PARENT/iroha/.git"
 
-"${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" > "$TMP_DIR/post-operation-clean-success.log"
+expect_review_blocked "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" > "$TMP_DIR/post-operation-clean-success.log"
 
-"$REAL_GIT" -C "$PARENT/iroha" checkout -q -b optimizations
-expect_failure iroha-wrong-branch '../iroha: current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
+"$REAL_GIT" -C "$PARENT/iroha" checkout -q -b codex/unapproved-iroha
+expect_failure iroha-wrong-branch '../iroha: current branch mismatch: expected optimizations, received codex/unapproved-iroha' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
+"$REAL_GIT" -C "$PARENT/iroha" checkout -q optimizations
+"$REAL_GIT" -C "$PARENT/iroha" branch -q -D codex/unapproved-iroha
 "$REAL_GIT" -C "$PARENT/iroha" update-ref refs/remotes/origin/optimizations HEAD
 "$REAL_GIT" -C "$PARENT/iroha" branch --set-upstream-to=origin/optimizations optimizations >/dev/null
 IROHA_REMOTE_REPORT="$TMP_DIR/iroha-actual-branch-remote-advanced.json"
-expect_failure iroha-actual-branch-remote-advanced 'does not match authoritative current branch optimizations' \
+expect_failure iroha-actual-branch-remote-advanced 'does not match authoritative remote head' \
   env FAKE_GIT_MODE=advanced-current-iroha "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" \
     --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$IROHA_REMOTE_REPORT"
 node - "$IROHA_REMOTE_REPORT" "$IROHA_REMOTE_ADVANCED_SHA" <<'NODE'
@@ -525,7 +565,7 @@ if (iroha.currentBranchRemoteSha !== expectedRemoteSha || iroha.upstreamSha !== 
 if (!iroha.failures.some((failure) => failure.includes('cached upstream origin/optimizations') && failure.includes(expectedRemoteSha))) process.exit(1)
 NODE
 IROHA_MODELED_LIVE_REPORT="$TMP_DIR/iroha-modeled-live-state.json"
-expect_failure iroha-modeled-live-state "local HEAD $IROHA_HEAD does not match pull request head $IROHA_PR_HEAD_SHA" \
+expect_failure iroha-modeled-live-state "local HEAD $IROHA_HEAD does not match authoritative remote head $IROHA_REMOTE_ADVANCED_SHA" \
   env FAKE_GIT_MODE=modeled-live-iroha FAKE_GH_MODE=modeled-live-iroha \
     "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" \
       --write-report "$IROHA_MODELED_LIVE_REPORT"
@@ -535,30 +575,25 @@ const [reportFile, localHead, actualRemoteHead, prHead] = process.argv.slice(2)
 const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'))
 const iroha = report.repositories.find((source) => source.path === '../iroha')
 if (!iroha || new Set([localHead, actualRemoteHead, prHead]).size !== 3) process.exit(1)
-if (iroha.headSha !== localHead || iroha.prHeadSha !== prHead || iroha.upstreamSha !== localHead) process.exit(1)
+if (iroha.headSha !== localHead || iroha.prHeadSha !== null || iroha.upstreamSha !== localHead) process.exit(1)
 if (iroha.currentBranchRemotePresent !== true || iroha.currentBranchRemoteSha !== actualRemoteHead) process.exit(1)
-if (iroha.remoteBranchPresent !== false || iroha.remoteHeadSha !== null || iroha.prState !== 'merged') process.exit(1)
+if (iroha.remoteBranchPresent !== true || iroha.remoteHeadSha !== actualRemoteHead || iroha.prState !== null || iroha.prNumber !== null) process.exit(1)
 const expectedFailures = [
-  'current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations',
-  `local HEAD ${localHead} does not match authoritative current branch optimizations at ${actualRemoteHead}`,
-  `local HEAD ${localHead} does not match pull request head ${prHead}`,
-  'upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/optimizations',
+  `local HEAD ${localHead} does not match authoritative remote head ${actualRemoteHead}`,
   `cached upstream origin/optimizations at ${localHead} does not match authoritative current branch optimizations at ${actualRemoteHead}`,
+  'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy',
 ]
 if (JSON.stringify(iroha.failures) !== JSON.stringify(expectedFailures)) process.exit(1)
 NODE
-expect_failure iroha-actual-branch-remote-missing 'authoritative current branch is missing or deleted: optimizations' \
+expect_failure iroha-actual-branch-remote-missing 'authoritative canonical branch is missing or deleted: optimizations' \
   env FAKE_GIT_MODE=missing-current-iroha "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" \
     --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
-expect_failure iroha-actual-branch-remote-unavailable 'authoritative current branch is unavailable: optimizations' \
+expect_failure iroha-actual-branch-remote-unavailable 'authoritative remote head is unavailable for optimizations' \
   env FAKE_GIT_MODE=error-current-iroha "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" \
     --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
-expect_failure iroha-actual-branch-remote-malformed 'authoritative current branch response is malformed: optimizations' \
+expect_failure iroha-actual-branch-remote-malformed 'authoritative remote head response is malformed for optimizations' \
   env FAKE_GIT_MODE=malformed-current-iroha "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" \
     --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
-"$REAL_GIT" -C "$PARENT/iroha" checkout -q codex/kagemusha-selector-hardening
-"$REAL_GIT" -C "$PARENT/iroha" branch -q -D optimizations
-"$REAL_GIT" -C "$PARENT/iroha" update-ref -d refs/remotes/origin/optimizations
 
 "$REAL_GIT" -C "$PARENT/iroha" remote set-url origin https://github.com/attacker/iroha.git
 expect_failure iroha-wrong-origin '../iroha: origin repository mismatch: expected hyperledger-iroha/iroha, received attacker/iroha' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
@@ -637,9 +672,11 @@ mv "$ROOT/.git.saved" "$ROOT/.git"
 expect_failure untracked-required 'required production source is not Git-tracked: FEARLESS_PROJECT_PLAN.md' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
 "$REAL_GIT" -C "$ROOT" reset -q FEARLESS_PROJECT_PLAN.md
 
-"$REAL_GIT" -C "$ROOT" rm -q --cached services/passkey-backup-owner-authority/src/authority.js
-expect_failure untracked-owner-authority 'required production source is not Git-tracked: services/passkey-backup-owner-authority/src/authority.js' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT" reset -q services/passkey-backup-owner-authority/src/authority.js
+for required_file in services/passkey-backup-owner-authority/src/authority.js scripts/audit-plan-readiness.sh; do
+  "$REAL_GIT" -C "$ROOT" rm -q --cached "$required_file"
+  expect_failure "untracked-required-source-$required_file" "required production source is not Git-tracked: $required_file" "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
+  "$REAL_GIT" -C "$ROOT" reset -q "$required_file"
+done
 
 expect_failure remote-stale 'does not match authoritative remote head' env FAKE_GIT_MODE=stale-fearless-wallet-web "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
 expect_failure remote-missing 'authoritative remote branch is missing for unmerged pull request' env FAKE_GIT_MODE=missing-ton-indexer FAKE_GH_MODE=open "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
@@ -659,13 +696,13 @@ expect_failure final-state-race 'local source state changed after publication in
 # matching-current-branch-reuses-configured-head: one authoritative ref query mirrors
 # the configured-head deletion proof into the actual-current-branch report fields.
 MERGED_DELETED_REPORT="$TMP_DIR/merged-deleted-current-branch.json"
-"${COMMON_ENV[@]}" FAKE_GH_MODE=merged FAKE_GIT_MODE=missing "${COMMON_ARGS[@]}" \
+expect_failure canonical-branch-deletion 'authoritative canonical branch is missing or deleted: optimizations' "${COMMON_ENV[@]}" FAKE_GH_MODE=merged FAKE_GIT_MODE=missing "${COMMON_ARGS[@]}" \
   --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH" --write-report "$MERGED_DELETED_REPORT" \
   > "$TMP_DIR/merged-deleted-success.log"
 node - "$MERGED_DELETED_REPORT" <<'NODE'
 const fs = require('fs')
 const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
-if (report.status !== 'passed') process.exit(1)
+if (report.status !== 'failed' || report.totals.passed !== 8 || report.repositories.at(-1).prState !== null) process.exit(1)
 for (const source of [report.workspaceSource, ...report.repositories]) {
   if (source.remoteBranchPresent !== false || source.remoteHeadSha !== null) process.exit(1)
   if (source.currentBranchRemotePresent !== false || source.currentBranchRemoteSha !== null) process.exit(1)

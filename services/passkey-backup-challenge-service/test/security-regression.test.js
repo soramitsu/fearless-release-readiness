@@ -314,6 +314,29 @@ test('HTTP authorization binds the exact transmitted body and rejects header amb
   }, { service, requestAuthorizer });
 });
 
+test('HTTP server rejects duplicate routing and body headers before authorization', async (t) => {
+  let authorizations = 0;
+  await withServer(t, async (baseUrl) => {
+    for (const headers of [
+      { 'content-type': ['application/json', 'text/plain'] },
+      { 'x-forwarded-for': ['198.51.100.1', '198.51.100.2'] },
+      { forwarded: ['for=198.51.100.1', 'for=198.51.100.2'] },
+    ]) {
+      const response = await rawPost(
+        baseUrl,
+        '/api/passkey-backup/v1/registration/challenge',
+        { headers },
+      );
+      assert.equal(response.status, 400);
+      assert.equal(response.body.error, 'ambiguous_headers');
+    }
+    assert.equal(authorizations, 0);
+  }, {
+    service: { health: () => ({ ok: true }), createRegistrationChallenge: () => ({ accepted: true }) },
+    requestAuthorizer: { async authorize() { authorizations += 1; return TEST_REQUEST_AUTHORIZER.authorize(); } },
+  });
+});
+
 test('HTTP authorization rejects a body-hash mismatch without leaking details', async (t) => {
   const expectedHash = sha256Base64Url(Buffer.from('{"authorized":true}'));
   const service = {
@@ -414,7 +437,10 @@ test('trusted-proxy rate limiting is opt-in, single-hop, and fail-closed', async
         : { 'x-forwarded-for': forwarded };
       const response = await rawPost(baseUrl, '/api/passkey-backup/v1/registration/challenge', { headers });
       assert.equal(response.status, 400, String(forwarded));
-      assert.equal(response.body.error, 'invalid_forwarded_client');
+      assert.equal(
+        response.body.error,
+        Array.isArray(forwarded) ? 'ambiguous_headers' : 'invalid_forwarded_client',
+      );
     }
     const clientOne = await rawPost(baseUrl, '/api/passkey-backup/v1/registration/challenge', {
       headers: { 'x-forwarded-for': '198.51.100.10' },

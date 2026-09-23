@@ -53,6 +53,43 @@ if (processArg && process.argv.includes(processArg)) {
 }
 NODE
 
+mark_canonical_review_blocked_fixture() {
+  node - "$report_dir/summary.json" "$report_dir/actions.json" "$report_dir/source-publication-readiness.log" <<'NODE'
+const fs = require('fs')
+const [summaryFile, actionsFile, logFile] = process.argv.slice(2)
+const summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8'))
+const actions = JSON.parse(fs.readFileSync(actionsFile, 'utf8'))
+  const sourceCheck = summary.checks.find((item) => item.slug === 'source-publication-readiness')
+  const sourceEvidence = '[source-publication-readiness][error] Source publication readiness failed:'
+  Object.assign(sourceCheck, {
+    status: 'failed',
+    exitCode: 1,
+    logFile: 'source-publication-readiness.log',
+    recommendedAction: "Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout's owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.",
+    requiresExternalAction: true,
+    unblockCategory: 'source-publication',
+    externalPrerequisite: 'Owner-resolved completion of every in-progress Git operation or unmerged index state, removal or quarantine of ignored non-published build outputs, canonical Git ownership for the root release/passkey source, plus reviewed commits, pushes, and protected pull requests for the exact tested HEAD of every source tree.',
+    verificationCommand: 'bash scripts/audit-release-readiness.sh',
+  })
+  actions.blockers.push({
+    name: sourceCheck.name,
+    slug: sourceCheck.slug,
+    exitCode: sourceCheck.exitCode,
+    logFile: sourceCheck.logFile,
+    recommendedAction: sourceCheck.recommendedAction,
+    requiresExternalAction: sourceCheck.requiresExternalAction,
+    unblockCategory: sourceCheck.unblockCategory,
+    externalPrerequisite: sourceCheck.externalPrerequisite,
+    verificationCommand: sourceCheck.verificationCommand,
+    evidencePreview: sourceEvidence,
+  })
+for (const manifest of [summary, actions]) { manifest.totals.passed -= 1; manifest.totals.failed += 1 }
+fs.writeFileSync(summaryFile, `${JSON.stringify(summary, null, 2)}\n`)
+fs.writeFileSync(actionsFile, `${JSON.stringify(actions, null, 2)}\n`)
+fs.writeFileSync(logFile, `${sourceEvidence}\n  - ../iroha: canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy\n`)
+NODE
+}
+
 write_fixture() {
   rm -rf "$report_dir" "$bundle_dir" "$workspace_dir"
   mkdir -p "$report_dir" "$workspace_dir/config" "$workspace_dir/scripts" "$workspace_dir/services/passkey-backup-challenge-service" \
@@ -1425,7 +1462,7 @@ fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hard
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
 ../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16
 ../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1
-../iroha	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	5612
+../iroha	hyperledger-iroha/iroha	optimizations	optimizations	-
 TSV
   cat > "$workspace_dir/config/source-publication-root-owner.json" <<'JSON'
 {
@@ -1453,18 +1490,18 @@ const configured = [
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', 16],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', 1],
-  ['../iroha', 'hyperledger-iroha/iroha', 'codex/kagemusha-selector-hardening', 'optimizations', 5612],
+  ['../iroha', 'hyperledger-iroha/iroha', 'optimizations', 'optimizations', null],
 ]
 function source(sourcePath, repository, head, base, prNumber) {
   return {
     path: sourcePath, repository, head, base, prNumber,
-    prUrl: `https://github.com/${repository}/pull/${prNumber}`, prState: 'merged', prHeadSha: sha,
-    repositoryPath: path.resolve(workspace, sourcePath), status: 'passed',
+    prUrl: prNumber === null ? null : `https://github.com/${repository}/pull/${prNumber}`, prState: prNumber === null ? null : 'merged', prHeadSha: prNumber === null ? null : sha,
+    repositoryPath: path.resolve(workspace, sourcePath), status: prNumber === null ? 'failed' : 'passed',
     originUrl: `https://github.com/${repository}.git`, originRepository: repository, branch: head,
     headSha: sha, upstream: `origin/${head}`, upstreamSha: sha, remoteHeadSha: sha,
     remoteBranchPresent: true, currentBranchRemoteSha: sha, currentBranchRemotePresent: true,
     stagedCount: 0, unstagedCount: 0, untrackedCount: 0, unmergedCount: 0,
-    dirtyPaths: [], requiredTrackedFiles: [], failures: [],
+    dirtyPaths: [], requiredTrackedFiles: [], failures: prNumber === null ? ['canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy'] : [],
   }
 }
 const workspaceSource = source('.', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-broadcast-evidence', 'develop', 1061)
@@ -1478,7 +1515,12 @@ workspaceSource.requiredTrackedFiles = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/passkey-enabled-acceptance.md',
   'docs/source-freeze-20260801.md',
+  'scripts/audit-passkey-enabled-acceptance.mjs',
+  'scripts/test-passkey-enabled-acceptance.mjs',
+  'scripts/audit-plan-readiness.sh',
+  'scripts/test-plan-readiness-audit.sh',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
   'scripts/capture-source-freeze.mjs',
@@ -1495,24 +1537,37 @@ workspaceSource.requiredTrackedFiles = [
   'services/passkey-backup-challenge-service/package-lock.json',
   'services/passkey-backup-challenge-service/package.json',
   'services/passkey-backup-challenge-service/src/server.js',
+  'services/passkey-backup-owner-authority/README.md',
+  'services/passkey-backup-owner-authority/package.json',
+  'services/passkey-backup-owner-authority/package-lock.json',
+  'services/passkey-backup-owner-authority/src/authority.js',
+  'services/passkey-backup-owner-authority/src/store.js',
+  'services/passkey-backup-owner-authority/src/validation.js',
+  'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/fixtures.js',
+  'services/passkey-backup-owner-authority/test/process-worker.js',
 ]
 const report = {
   schemaVersion: 3, phase: 'preflight', preflightReportSha256: null,
-  generatedAt: '2026-06-28T00:00:00.000Z', status: 'passed', checkRemote: true,
+  generatedAt: '2026-06-28T00:00:00.000Z', status: 'failed', checkRemote: true,
   workspaceRoot: workspace, workspaceParent: path.dirname(workspace),
   configFile: path.join(workspace, 'config/source-publication-readiness.tsv'),
   rootOwnerConfigFile: path.join(workspace, 'config/source-publication-root-owner.json'),
   releasePrConfigFile: path.join(workspace, 'config/release-readiness-prs.tsv'),
-  totals: {sources: 9, passed: 9, failed: 0, staged: 0, unstaged: 0, untracked: 0, unmerged: 0},
+  totals: {sources: 9, passed: 8, failed: 1, staged: 0, unstaged: 0, untracked: 0, unmerged: 0},
   workspaceSource,
   repositories: configured.map((row) => source(...row)),
 }
 const preflightBytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`)
 fs.writeFileSync(preflightOutput, preflightBytes)
 report.phase = 'postflight'
+report.repositories[7].failures.push('source publication preflight did not pass before release checks')
 report.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`)
 NODE
+  mark_canonical_review_blocked_fixture
+  rewrite_blocker_markdown_from_manifests
 }
 
 run_export() {
@@ -1608,14 +1663,13 @@ if (!iroha) throw new Error('Iroha source-publication fixture missing')
 const hasContinuity = iroha.failures.includes('source publication preflight did not pass before release checks')
 iroha.currentBranchRemotePresent = true
 iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'
+iroha.remoteHeadSha = iroha.currentBranchRemoteSha
 for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0
 iroha.failures = [
   iroha.failures[0],
-  `current branch mismatch: expected ${iroha.head}, received ${iroha.branch}`,
-  `local HEAD ${iroha.headSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`,
-  `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`,
-  `upstream mismatch: expected origin/${iroha.head}, received ${iroha.upstream}`,
+  `local HEAD ${iroha.headSha} does not match authoritative remote head ${iroha.remoteHeadSha}`,
   `cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`,
+  'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy',
   ...(hasContinuity ? ['source publication preflight did not pass before release checks'] : []),
 ]
 fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n')
@@ -1879,31 +1933,27 @@ if (variant === 'external' || variant === 'external-reviewed-source') {
   iroha.status = 'failed'
   if (variant === 'external-reviewed-source') {
     const liveHeadSha = 'e56af586b6d047c361e531d330424fb3067f57b2'
-    const mergedPrHeadSha = 'e7a9e27691d6f34e2737d946af9b7f0768a31136'
+    // Canonical branch has no pull-request identity.
     iroha.branch = 'optimizations'
     iroha.upstream = 'origin/optimizations'
     iroha.headSha = liveHeadSha
     iroha.upstreamSha = liveHeadSha
-    iroha.prHeadSha = mergedPrHeadSha
-    iroha.remoteBranchPresent = false
-    iroha.remoteHeadSha = null
+    iroha.prHeadSha = null
+    iroha.remoteBranchPresent = true
+    iroha.remoteHeadSha = liveHeadSha
     iroha.currentBranchRemotePresent = true
     iroha.currentBranchRemoteSha = liveHeadSha
     iroha.dirtyPaths = ['.cache/', '.codex-target/', '.playwright-cli/', '.pytest_cache/', 'Cargo.lock', 'IrohaSwift/.build/', 'artifacts/js-sdk-bundle-size/', 'artifacts/python_fixture_regen_state.json']
     iroha.failures = [
       'worktree contains ignored non-published paths (154): .cache/, .codex-target/, .playwright-cli/, .pytest_cache/, Cargo.lock, IrohaSwift/.build/, artifacts/js-sdk-bundle-size/, artifacts/python_fixture_regen_state.json; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts',
-      `current branch mismatch: expected ${iroha.head}, received ${iroha.branch}`,
-      `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`,
-      `upstream mismatch: expected origin/${iroha.head}, received ${iroha.upstream}`,
+      'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy',
     ]
   } else {
     iroha.stagedCount = 1
     iroha.dirtyPaths = ['crates/iroha_torii/src/offline_v2_issuer.rs']
-    iroha.failures = [operationFailure]
+    iroha.failures = [operationFailure, 'source publication preflight did not pass before release checks']
   }
   sourceReport.status = 'failed'
-  sourceReport.totals.passed -= 1
-  sourceReport.totals.failed += 1
   if (variant === 'external') sourceReport.totals.staged += 1
   if (variant === 'external-reviewed-source') {
     const preflightReport = JSON.parse(fs.readFileSync(preflightReportFile, 'utf8'))
@@ -1911,43 +1961,13 @@ if (variant === 'external' || variant === 'external-reviewed-source') {
     if (preflightIndex < 0) throw new Error('Iroha preflight source-publication fixture missing')
     preflightReport.repositories[preflightIndex] = JSON.parse(JSON.stringify(iroha))
     preflightReport.status = 'failed'
-    preflightReport.totals.passed -= 1
-    preflightReport.totals.failed += 1
     fs.writeFileSync(preflightReportFile, `${JSON.stringify(preflightReport, null, 2)}\n`)
     const preflightBytes = fs.readFileSync(preflightReportFile)
     sourceReport.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
     iroha.failures.push('source publication preflight did not pass before release checks')
   }
-  const sourceCheck = summary.checks.find((item) => item.slug === 'source-publication-readiness')
-  if (!sourceCheck || sourceCheck.status !== 'passed') throw new Error('source-publication fixture must start passed')
   const sourceEvidence = '[source-publication-readiness][error] Source publication readiness failed:'
-  Object.assign(sourceCheck, {
-    status: 'failed',
-    exitCode: 1,
-    logFile: 'source-publication-readiness.log',
-    recommendedAction: "Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout's owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.",
-    requiresExternalAction: true,
-    unblockCategory: 'source-publication',
-    externalPrerequisite: 'Owner-resolved completion of every in-progress Git operation or unmerged index state, removal or quarantine of ignored non-published build outputs, canonical Git ownership for the root release/passkey source, plus reviewed commits, pushes, and protected pull requests for the exact tested HEAD of every source tree.',
-    verificationCommand: 'bash scripts/audit-release-readiness.sh',
-  })
-  actions.blockers.push({
-    name: sourceCheck.name,
-    slug: sourceCheck.slug,
-    exitCode: sourceCheck.exitCode,
-    logFile: sourceCheck.logFile,
-    recommendedAction: sourceCheck.recommendedAction,
-    requiresExternalAction: sourceCheck.requiresExternalAction,
-    unblockCategory: sourceCheck.unblockCategory,
-    externalPrerequisite: sourceCheck.externalPrerequisite,
-    verificationCommand: sourceCheck.verificationCommand,
-    evidencePreview: sourceEvidence,
-  })
-  for (const manifest of [summary, actions]) {
-    manifest.totals.passed -= 1
-    manifest.totals.failed += 1
-  }
-  fs.writeFileSync(sourceReportFile, `${JSON.stringify(sourceReport, null, 2)}\n`)
+fs.writeFileSync(sourceReportFile, `${JSON.stringify(sourceReport, null, 2)}\n`)
   fs.writeFileSync(
     sourceLogFile,
     `${sourceEvidence}\n${iroha.failures.map((failure) => `  - ../iroha: ${failure}`).join('\n')}\n`,
@@ -2021,8 +2041,8 @@ assert_success_bundle() {
 const fs = require('fs')
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
 if (manifest.schemaVersion !== 3) throw new Error('bad schemaVersion')
-if (manifest.blockerCount !== 12) throw new Error('bad blockerCount')
-if (manifest.sourcePublicationHandoff?.sourceCount !== 9 || manifest.sourcePublicationHandoff?.passedCount !== 9 || manifest.sourcePublicationHandoff?.repositories?.length !== 8) {
+if (manifest.blockerCount !== 13) throw new Error('bad blockerCount')
+if (manifest.sourcePublicationHandoff?.sourceCount !== 9 || manifest.sourcePublicationHandoff?.passedCount !== 8 || manifest.sourcePublicationHandoff?.repositories?.length !== 8) {
   throw new Error('bad nine-source publication handoff totals')
 }
 if (manifest.sourcePublicationHandoff?.preflightReportPath !== 'source-publication-preflight-report.json' ||
@@ -2031,10 +2051,10 @@ if (manifest.sourcePublicationHandoff?.preflightReportPath !== 'source-publicati
   throw new Error('missing exact preflight source publication handoff')
 }
 const irohaSource = manifest.sourcePublicationHandoff.repositories[7]
-if (irohaSource?.path !== '../iroha' || irohaSource?.repository !== 'hyperledger-iroha/iroha' || irohaSource?.head !== 'codex/kagemusha-selector-hardening' || irohaSource?.base !== 'optimizations' || irohaSource?.prNumber !== 5612) {
+if (irohaSource?.path !== '../iroha' || irohaSource?.repository !== 'hyperledger-iroha/iroha' || irohaSource?.head !== 'optimizations' || irohaSource?.base !== 'optimizations' || irohaSource?.prNumber !== null) {
   throw new Error('missing exact Iroha source publication identity')
 }
-if (irohaSource?.branch !== irohaSource.head || irohaSource?.prHeadSha !== irohaSource.headSha || irohaSource?.remoteBranchPresent !== true || irohaSource?.currentBranchRemotePresent !== true || irohaSource?.currentBranchRemoteSha !== irohaSource.headSha) {
+if (irohaSource?.branch !== irohaSource.head || irohaSource?.prHeadSha !== null || irohaSource?.remoteBranchPresent !== true || irohaSource?.currentBranchRemotePresent !== true || irohaSource?.currentBranchRemoteSha !== irohaSource.headSha) {
   throw new Error('missing exact Iroha current-branch remote proof')
 }
 const releasePrBlocker = manifest.blockers.find((blocker) => blocker.slug === 'release-pr-readiness')
@@ -3758,7 +3778,7 @@ assert_no_bundle_temp_dirs
 
 write_fixture
 set_plan_readiness_blocker_fixture external
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.stagedCount = 0; iroha.unmergedCount = 2; iroha.failures = ['worktree is not clean (staged=0, unstaged=0, untracked=0, unmerged=2)']; data.totals.staged = 0; data.totals.unmerged = 2"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.stagedCount = 0; iroha.unmergedCount = 2; iroha.failures = ['worktree is not clean (staged=0, unstaged=0, untracked=0, unmerged=2)', 'source publication preflight did not pass before release checks']; data.totals.staged = 0; data.totals.unmerged = 2"
 expect_success "unmerged-Iroha-only plan blocker fixture"
 assert_no_bundle_temp_dirs
 
@@ -3782,7 +3802,7 @@ write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
 set_reviewed_source_authoritative_current_drift_fixture
 edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.currentBranchRemoteSha = iroha.prHeadSha; iroha.failures[2] = 'local HEAD ' + iroha.headSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha; iroha.failures[5] = 'cached upstream ' + iroha.upstream + ' at ' + iroha.upstreamSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha"
-expect_success "reviewed-source authoritative-current equals pull-request head drift fixture"
+expect_failure "reviewed-source canonical remote cannot use absent PR head fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 assert_no_bundle_temp_dirs
 
 write_fixture
@@ -3800,13 +3820,13 @@ assert_no_bundle_temp_dirs
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
 set_reviewed_source_authoritative_current_drift_fixture
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(2, 1)"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(1, 1)"
 expect_failure "reviewed-source authoritative-current drift missing diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
 set_reviewed_source_authoritative_current_drift_fixture
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(5, 1)"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(2, 1)"
 expect_failure "reviewed-source authoritative-current drift missing cached-upstream diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3862,7 +3882,7 @@ expect_failure "reviewed-source missing exact failed-preflight continuity marker
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); const marker = 'source publication preflight did not pass before release checks'; iroha.failures.splice(iroha.failures.indexOf(marker), 1); iroha.failures.splice(3, 0, marker)"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); const marker = 'source publication preflight did not pass before release checks'; iroha.failures.splice(iroha.failures.indexOf(marker), 1); iroha.failures.splice(1, 0, marker)"
 expect_failure "reviewed-source reordered preflight-continuity marker fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3887,8 +3907,8 @@ expect_failure "reviewed-source obsolete extra current-branch diagnostic fixture
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.prHeadSha = null"
-expect_failure "reviewed-source missing pull-request head SHA fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.prState = 'merged'"
+expect_failure "reviewed-source claimed pull-request review fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
@@ -3897,12 +3917,12 @@ expect_failure "reviewed-source forged pull-request head SHA fixture" "plan-read
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(2, 1)"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(1, 1)"
 expect_failure "reviewed-source missing pull-request head diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.remoteBranchPresent = true; iroha.remoteHeadSha = iroha.headSha"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.remoteBranchPresent = false; iroha.remoteHeadSha = null"
 expect_failure "reviewed-source invalid configured-ref relation fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3951,9 +3971,9 @@ edit_source_publication_report "const iroha = data.repositories.find((row) => ro
 expect_failure "failed Iroha matching-branch remote proof mismatch fixture" "source-publication-readiness-report.json.repositories[7].currentBranchRemotePresent must match remoteBranchPresent when branch matches head"
 
 write_fixture
-set_plan_readiness_blocker_fixture external
+set_plan_readiness_blocker_fixture external-reviewed-source
 edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.remoteHeadSha = null; iroha.currentBranchRemoteSha = null"
-expect_failure "failed Iroha malformed matching-branch remote response fixture" "sourcePublicationHandoff.sources[8].currentBranchRemoteSha must match across preflight and postflight"
+expect_failure "failed Iroha malformed matching-branch remote response fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
@@ -3998,7 +4018,7 @@ expect_failure "external plan metadata with local failure log fixture" "plan-rea
 write_fixture
 set_plan_readiness_blocker_fixture local
 set_plan_readiness_log_classification external
-expect_success "clean Iroha-only log stays local without unsafe source operation fixture"
+expect_failure "canonical review blocker cannot be classified as local-only fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 assert_no_bundle_temp_dirs
 
 write_fixture
@@ -4068,8 +4088,8 @@ edit_source_publication_report "data.repositories[7].head = 'attacker/unpublishe
 expect_failure "source publication Iroha identity fixture" "source-publication-readiness-report.json.repositories[7] identity mismatch"
 
 write_fixture
-edit_source_publication_report "data.repositories[7].unstagedCount = 1; data.totals.unstaged = 1"
-expect_failure "source publication passed dirty Iroha fixture" "source-publication-readiness-report.json.repositories[7].passed source must have zero dirty counts"
+edit_source_publication_report "data.repositories[7].status = 'passed'; data.repositories[7].failures = []; data.repositories[7].unstagedCount = 1; data.totals.unstaged = 1"
+expect_failure "source publication passed dirty Iroha fixture" "source-publication-readiness-report.json.repositories[7].canonical branch exact-SHA review is blocked"
 
 write_fixture
 edit_source_publication_report "data.repositories[0].originUrl = 'https://user:password@github.com/soramitsu/fearless-Android.git'"
@@ -4216,7 +4236,7 @@ const iroha = lines.pop()
 lines.splice(lines.length - 1, 0, iroha)
 fs.writeFileSync(file, `${lines.join('\n')}\n`)
 NODE
-expect_failure "source publication Iroha config order fixture" "sourcePublicationHandoff.config row 7 identity mismatch"
+expect_failure "source publication Iroha config order fixture" "sourcePublicationHandoff.config row 7 pull request must be canonical positive digits"
 
 write_fixture
 printf '%s\n' '# api_key=ghp_fixture_secret' >> "$workspace_dir/config/source-publication-readiness.tsv"
@@ -4561,6 +4581,20 @@ data.challengeServiceBaseUrl = 'https://backup.example.invalid'
 fs.writeFileSync(file, JSON.stringify(data, null, 2))
 NODE
 expect_failure "bad passkey production config base URL fixture" "passkey-production-smoke.passkeyProductionContract.productionConfig.challengeServiceBaseUrl mismatch"
+
+for spec in 'backupStorage|cloudkit-private-database' 'googleDriveScope|https://www.googleapis.com/auth/drive' 'additionalBackupStorage|none'; do
+  write_fixture
+  field="${spec%%|*}"
+  value="${spec#*|}"
+  node - "$workspace_dir/config/passkey-backup-production.json" "$field" "$value" <<'NODE'
+const fs = require('fs')
+const [file, field, value] = process.argv.slice(2)
+const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+data.ios[field] = value
+fs.writeFileSync(file, JSON.stringify(data))
+NODE
+  expect_failure "iOS portable Drive contract $field fixture" "passkey-production-smoke.passkeyProductionContract.productionConfig.ios.$field mismatch"
+done
 
 write_fixture
 node - "$workspace_dir/config/passkey-backup-production.json" <<'NODE'
@@ -6030,7 +6064,7 @@ const fs = require('fs')
 const file = process.argv[2]
 const data = JSON.parse(fs.readFileSync(file, 'utf8'))
 data.totals.failed = 1
-data.totals.total = 10
+data.totals.total = data.totals.passed + data.totals.failed + data.totals.skipped
 fs.writeFileSync(file, JSON.stringify(data, null, 2))
 NODE
 expect_failure "blocker count mismatch fixture" "summary/actions totals mismatch for failed"

@@ -6,4 +6,4 @@ fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hard
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
 ../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16
 ../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1
-../iroha	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	5612
+../iroha	hyperledger-iroha/iroha	optimizations	optimizations	-

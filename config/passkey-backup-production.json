@@ -78,7 +78,9 @@
   },
   "ios": {
     "releaseEnabled": false,
-    "backupStorage": "cloudkit-private-database",
+    "backupStorage": "google-drive-appdata",
+    "googleDriveScope": "https://www.googleapis.com/auth/drive.appdata",
+    "additionalBackupStorage": "cloudkit-private-database",
     "associatedDomain": "webcredentials:fearlesswallet.io",
     "cloudKitRecordType": "FearlessPasskeyBackup",
     "cloudKitContainers": [
@@ -86,6 +88,10 @@
       "iCloud.jp.co.soramitsu.fearlesswallet.dev"
     ],
     "releaseUxChecklist": [
+      "google-account-selection",
+      "google-drive-consent",
+      "cross-platform-restore",
+      "optional-icloud-copy",
       "icloud-account-availability",
       "associated-domain-provisioning",
       "cloudkit-production-schema",

@@ -1419,7 +1419,7 @@ const sourcePublicationRepositories = [
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', 16],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', 1],
-  ['../iroha', 'hyperledger-iroha/iroha', 'codex/kagemusha-selector-hardening', 'optimizations', 5612],
+  ['../iroha', 'hyperledger-iroha/iroha', 'optimizations', 'optimizations', null],
 ]
 const sourcePublicationWorkspaceRequiredFiles = [
   '.github/CODEOWNERS',
@@ -1430,7 +1430,12 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/passkey-enabled-acceptance.md',
   'docs/source-freeze-20260801.md',
+  'scripts/audit-passkey-enabled-acceptance.mjs',
+  'scripts/test-passkey-enabled-acceptance.mjs',
+  'scripts/audit-plan-readiness.sh',
+  'scripts/test-plan-readiness-audit.sh',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
   'scripts/capture-source-freeze.mjs',
@@ -1447,6 +1452,16 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'services/passkey-backup-challenge-service/package-lock.json',
   'services/passkey-backup-challenge-service/package.json',
   'services/passkey-backup-challenge-service/src/server.js',
+  'services/passkey-backup-owner-authority/README.md',
+  'services/passkey-backup-owner-authority/package.json',
+  'services/passkey-backup-owner-authority/package-lock.json',
+  'services/passkey-backup-owner-authority/src/authority.js',
+  'services/passkey-backup-owner-authority/src/store.js',
+  'services/passkey-backup-owner-authority/src/validation.js',
+  'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/fixtures.js',
+  'services/passkey-backup-owner-authority/test/process-worker.js',
 ]
 
 function repositoryFromCredentialFreeGitHubOrigin(value) {
@@ -1526,6 +1541,7 @@ function assertSourcePublicationSource(source, label) {
 
 function assertPassedSourcePublicationSemantics(source, label, expectedRepositoryPath, expectedRequiredTrackedFiles) {
   if (source.status !== 'passed') return
+  if (source.path === '../iroha') fail(`${label}.canonical branch exact-SHA review is blocked`)
   if (source.repositoryPath !== expectedRepositoryPath) fail(`${label}.repositoryPath mismatch`)
   for (const field of ['repository', 'head', 'base', 'prUrl', 'prState', 'prHeadSha', 'originUrl', 'originRepository', 'branch', 'headSha']) {
     if (source[field] === null) fail(`${label}.${field} is required for a passed source`)
@@ -1706,8 +1722,10 @@ function assertSourcePublicationConfig(content, label) {
   rows.forEach((row, index) => {
     if (row.length !== 5) fail(`${label} row ${index + 1} must contain five columns`)
     const [expectedPath, expectedRepository, expectedHead, expectedBase, expectedPr] = sourcePublicationRepositories[index]
-    if (!/^[1-9][0-9]*$/.test(row[4]) || !Number.isSafeInteger(Number(row[4]))) fail(`${label} row ${index + 1} pull request must be canonical positive digits`)
-    if (row[0] !== expectedPath || row[1] !== expectedRepository || row[2] !== expectedHead || row[3] !== expectedBase || row[4] !== String(expectedPr)) fail(`${label} row ${index + 1} identity mismatch`)
+    if (expectedPr === null) {
+      if (row[4] !== '-') fail(`${label} row ${index + 1} canonical branch must not claim a pull request`)
+    } else if (!/^[1-9][0-9]*$/.test(row[4]) || !Number.isSafeInteger(Number(row[4]))) fail(`${label} row ${index + 1} pull request must be canonical positive digits`)
+    if (row[0] !== expectedPath || row[1] !== expectedRepository || row[2] !== expectedHead || row[3] !== expectedBase || row[4] !== (expectedPr === null ? '-' : String(expectedPr))) fail(`${label} row ${index + 1} identity mismatch`)
   })
 }
 
@@ -3299,6 +3317,10 @@ const passkeyIosCloudKitContainers = [
   'iCloud.jp.co.soramitsu.fearlesswallet.dev',
 ]
 const passkeyIosReleaseUxChecklist = [
+  'google-account-selection',
+  'google-drive-consent',
+  'cross-platform-restore',
+  'optional-icloud-copy',
   'icloud-account-availability',
   'associated-domain-provisioning',
   'cloudkit-production-schema',
@@ -3439,9 +3461,11 @@ function assertPasskeyProductionConfig(config, label) {
   if (config.android.oauthScope !== 'oauth2:https://www.googleapis.com/auth/drive.appdata') fail(`${label}.android.oauthScope mismatch`)
   assertExactStringArray(config.android.releaseUxChecklist, passkeyAndroidReleaseUxChecklist, `${label}.android.releaseUxChecklist`)
 
-  assertAllowedKeys(config.ios, ['releaseEnabled', 'backupStorage', 'associatedDomain', 'cloudKitRecordType', 'cloudKitContainers', 'releaseUxChecklist'], `${label}.ios`)
+  assertAllowedKeys(config.ios, ['releaseEnabled', 'backupStorage', 'googleDriveScope', 'additionalBackupStorage', 'associatedDomain', 'cloudKitRecordType', 'cloudKitContainers', 'releaseUxChecklist'], `${label}.ios`)
   if (config.ios.releaseEnabled !== false) fail(`${label}.ios.releaseEnabled must be false`)
-  if (config.ios.backupStorage !== 'cloudkit-private-database') fail(`${label}.ios.backupStorage mismatch`)
+  if (config.ios.backupStorage !== 'google-drive-appdata') fail(`${label}.ios.backupStorage mismatch`)
+  if (config.ios.googleDriveScope !== 'https://www.googleapis.com/auth/drive.appdata') fail(`${label}.ios.googleDriveScope mismatch`)
+  if (config.ios.additionalBackupStorage !== 'cloudkit-private-database') fail(`${label}.ios.additionalBackupStorage mismatch`)
   if (config.ios.associatedDomain !== 'webcredentials:fearlesswallet.io') fail(`${label}.ios.associatedDomain mismatch`)
   if (config.ios.cloudKitRecordType !== 'FearlessPasskeyBackup') fail(`${label}.ios.cloudKitRecordType mismatch`)
   assertExactStringArray(config.ios.cloudKitContainers, passkeyIosCloudKitContainers, `${label}.ios.cloudKitContainers`)
@@ -4401,77 +4425,37 @@ function sourceReportHasUnsafeIrohaState(report) {
     report.totals && Number.isSafeInteger(report.totals.unmerged) &&
     report.totals.unmerged >= iroha.unmergedCount && iroha.failures.includes(unmergedFailure)
   const canonicalSha = (value) => typeof value === 'string' && /^[0-9a-f]{40}$/u.test(value)
-  const hasCanonicalReviewedSourceIdentity =
+  const hasCanonicalBranchSourceIdentity =
     report.schemaVersion === 3 &&
     report.phase === 'postflight' &&
     typeof report.preflightReportSha256 === 'string' &&
     /^[0-9a-f]{64}$/u.test(report.preflightReportSha256) &&
     iroha.repository === 'hyperledger-iroha/iroha' &&
     iroha.originRepository === 'hyperledger-iroha/iroha' &&
-    iroha.head === 'codex/kagemusha-selector-hardening' &&
-    iroha.base === 'optimizations' &&
-    iroha.prNumber === 5612 &&
-    iroha.prUrl === 'https://github.com/hyperledger-iroha/iroha/pull/5612' &&
-    iroha.prState === 'merged' &&
-    iroha.branch === 'optimizations' &&
-    iroha.upstream === 'origin/optimizations' &&
-    canonicalSha(iroha.headSha) &&
-    iroha.upstreamSha === iroha.headSha &&
-    canonicalSha(iroha.prHeadSha) &&
-    iroha.prHeadSha !== iroha.headSha &&
-    iroha.remoteBranchPresent === false &&
-    iroha.remoteHeadSha === null &&
-    iroha.currentBranchRemotePresent === true &&
-    canonicalSha(iroha.currentBranchRemoteSha)
-  const branchMismatchFailure = hasCanonicalReviewedSourceIdentity
-    ? `current branch mismatch: expected ${iroha.head}, received ${iroha.branch}`
-    : null
-  const upstreamMismatchFailure = hasCanonicalReviewedSourceIdentity
-    ? `upstream mismatch: expected origin/${iroha.head}, received ${iroha.upstream}`
-    : null
-  const pullRequestHeadFailure = hasCanonicalReviewedSourceIdentity
-    ? `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`
-    : null
-  const authoritativeCurrentBranchFailure = hasCanonicalReviewedSourceIdentity
-    ? `local HEAD ${iroha.headSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`
-    : null
-  const cachedUpstreamAuthoritativeCurrentBranchFailure = hasCanonicalReviewedSourceIdentity
-    ? `cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`
-    : null
+    iroha.head === 'optimizations' && iroha.base === 'optimizations' &&
+    iroha.prNumber === null && iroha.prUrl === null &&
+    iroha.prState === null && iroha.prHeadSha === null &&
+    iroha.branch === 'optimizations' && iroha.upstream === 'origin/optimizations' &&
+    canonicalSha(iroha.headSha) && iroha.upstreamSha === iroha.headSha &&
+    iroha.remoteBranchPresent === true && iroha.currentBranchRemotePresent === true &&
+    canonicalSha(iroha.remoteHeadSha) && iroha.currentBranchRemoteSha === iroha.remoteHeadSha
+  const expectedBranchFailures = []
   const ignoredOutputsFailure = iroha.failures[0]
-  const hasCanonicalIgnoredOutputsFailure =
-    typeof ignoredOutputsFailure === 'string' &&
-    /^worktree contains ignored non-published paths \([1-9][0-9]*\): .+; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts$/u.test(ignoredOutputsFailure)
+  if (typeof ignoredOutputsFailure === 'string' &&
+      /^worktree contains ignored non-published paths \([1-9][0-9]*\): .+; remove or quarantine these ignored outputs outside the source tree before publication; do not force-add generated artifacts$/u.test(ignoredOutputsFailure)) {
+    expectedBranchFailures.push(ignoredOutputsFailure)
+  }
+  if (iroha.headSha !== iroha.remoteHeadSha) {
+    expectedBranchFailures.push(`local HEAD ${iroha.headSha} does not match authoritative remote head ${iroha.remoteHeadSha}`)
+    expectedBranchFailures.push(`cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`)
+  }
+  expectedBranchFailures.push('canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy')
   const preflightContinuityFailure = 'source publication preflight did not pass before release checks'
-  const hasCanonicalSynchronizedFailureCountAndContinuity =
-    iroha.failures.length === 4 ||
-    (iroha.failures.length === 5 && iroha.failures[4] === preflightContinuityFailure)
-  const hasCanonicalSynchronizedReviewedSourceMismatch =
-    hasCanonicalReviewedSourceIdentity &&
-    iroha.currentBranchRemoteSha === iroha.headSha &&
-    hasCanonicalSynchronizedFailureCountAndContinuity &&
-    hasCanonicalIgnoredOutputsFailure &&
-    iroha.failures[1] === branchMismatchFailure &&
-    iroha.failures[2] === pullRequestHeadFailure &&
-    iroha.failures[3] === upstreamMismatchFailure
-  const hasCanonicalDriftFailureCountAndContinuity =
-    iroha.failures.length === 6 ||
-    (iroha.failures.length === 7 && iroha.failures[6] === preflightContinuityFailure)
-  const hasCanonicalDriftReviewedSourceMismatch =
-    hasCanonicalReviewedSourceIdentity &&
-    iroha.currentBranchRemoteSha !== iroha.headSha &&
-    hasCanonicalDriftFailureCountAndContinuity &&
-    hasCanonicalIgnoredOutputsFailure &&
-    iroha.failures[1] === branchMismatchFailure &&
-    iroha.failures[2] === authoritativeCurrentBranchFailure &&
-    iroha.failures[3] === pullRequestHeadFailure &&
-    iroha.failures[4] === upstreamMismatchFailure &&
-    iroha.failures[5] === cachedUpstreamAuthoritativeCurrentBranchFailure
-  const hasReviewedSourceMismatch =
-    counts.every((key) => iroha[key] === 0) &&
-    (hasCanonicalSynchronizedReviewedSourceMismatch ||
-      hasCanonicalDriftReviewedSourceMismatch)
-  return hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch
+  if (iroha.failures.at(-1) === preflightContinuityFailure) expectedBranchFailures.push(preflightContinuityFailure)
+  const hasCanonicalBranchReviewBlocker =
+    hasCanonicalBranchSourceIdentity && counts.every((key) => iroha[key] === 0) &&
+    JSON.stringify(iroha.failures) === JSON.stringify(expectedBranchFailures)
+  return hasOperation || hasUnmergedIndex || hasCanonicalBranchReviewBlocker
 }
 
 function isExternalIrohaOnlyPlanReadinessLog(content, sourcePublicationReport) {

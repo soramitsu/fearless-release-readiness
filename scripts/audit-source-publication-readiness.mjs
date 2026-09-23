@@ -17,7 +17,7 @@ const EXPECTED_REPOSITORIES = new Map([
   ['../ton-indexer', { repository: 'tonswap-org/ton-indexer', head: 'codex/ti-smoke-body-preview-tests', base: 'develop', prNumber: 13 }],
   ['../solswap-indexer', { repository: 'solswap-io/solswap-indexer', head: 'codex/si-smoke-body-preview-tests', base: 'develop', prNumber: 16 }],
   ['../polkaswap-indexer', { repository: 'sora-xor/polkaswap-indexer', head: 'codex/pi-deployment-evidence-gate', base: 'develop', prNumber: 1 }],
-  ['../iroha', { repository: 'hyperledger-iroha/iroha', head: 'codex/kagemusha-selector-hardening', base: 'optimizations', prNumber: 5612 }],
+  ['../iroha', { repository: 'hyperledger-iroha/iroha', head: 'optimizations', base: 'optimizations', prNumber: null }],
 ]);
 const REQUIRED_WORKSPACE_FILES = [
   '.github/CODEOWNERS',
@@ -28,7 +28,12 @@ const REQUIRED_WORKSPACE_FILES = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/passkey-enabled-acceptance.md',
   'docs/source-freeze-20260801.md',
+  'scripts/audit-passkey-enabled-acceptance.mjs',
+  'scripts/test-passkey-enabled-acceptance.mjs',
+  'scripts/audit-plan-readiness.sh',
+  'scripts/test-plan-readiness-audit.sh',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
   'scripts/capture-source-freeze.mjs',
@@ -56,6 +61,8 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-owner-authority/test/fixtures.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
 ];
+// A branch tip is publication evidence, never an exact-SHA review attestation.
+const CANONICAL_BRANCH_REVIEW_BLOCKER = 'canonical branch exact-SHA review is blocked: optimizations requires a verifiable reviewed/protected policy';
 const ROOT_OWNER_BLOCKER = 'canonical-root-source-owner-unassigned';
 const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 3;
 const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
@@ -575,6 +582,11 @@ function parseSourceConfig(target) {
     if (!SAFE_REF.test(base)) usage(`invalid source publication base branch for ${repoPath}: ${base}`);
     if (head !== expected.head) usage(`head branch mismatch for ${repoPath}: expected ${expected.head}`);
     if (base !== expected.base) usage(`base branch mismatch for ${repoPath}: expected ${expected.base}`);
+    if (expected.prNumber === null) {
+      if (prNumberRaw !== '-') usage(`canonical branch source ${repoPath} must not claim a pull request`);
+      rows.push({ path: repoPath, repository, head, base, prNumber: null });
+      continue;
+    }
     if (!/^[1-9][0-9]*$/u.test(prNumberRaw) || !Number.isSafeInteger(Number(prNumberRaw))) {
       usage(`invalid pull request number for ${repoPath}: ${prNumberRaw}`);
     }
@@ -666,6 +678,8 @@ function validateConfigCoverage(configRows, rootOwner, releasePrRows) {
     usage(`source publication config repository order must be: ${expectedOrder.join(', ')}`);
   }
   for (const row of configRows) {
+    // Canonical Iroha source is not any historical topic PR. Review stays blocked below.
+    if (row.prNumber === null) continue;
     const matches = releasePrRows.filter(
       (candidate) => candidate.repository === row.repository && candidate.head === row.head && candidate.base === row.base,
     );
@@ -784,6 +798,7 @@ function parsePreflightReport(target) {
     if (source.repositoryPath !== expectedRepositoryPath) usage(`source publication preflight repository path mismatch for ${source.path}`);
     if (!['passed', 'failed'].includes(source.status)) usage(`source publication preflight status is invalid for ${source.path}`);
     if (source.status === 'passed') {
+      if (source.path === '../iroha') usage(CANONICAL_BRANCH_REVIEW_BLOCKER);
       passed += 1;
       const remoteProofIsPresent =
         source.currentBranchRemotePresent === true &&
@@ -991,14 +1006,17 @@ function inspectRepository(row) {
   }
   if (checkRemote) {
     validateCurrentBranchRemote(source, addFailure);
-    const pullRequest = fetchPullRequest(source, addFailure);
-    if (pullRequest) validatePullRequest(source, pullRequest, row.requiredState, addFailure);
+    if (row.prNumber !== null) {
+      const pullRequest = fetchPullRequest(source, addFailure);
+      if (pullRequest) validatePullRequest(source, pullRequest, row.requiredState, addFailure);
+    }
     validateRemotePublication(source, addFailure);
     const deletedMergedHead = source.remoteBranchPresent === false && source.prState === 'merged';
     validateLocalUpstream(source, addFailure, deletedMergedHead, true);
   } else {
     validateLocalUpstream(source, addFailure, false, false);
   }
+  if (row.prNumber === null) addFailure(CANONICAL_BRANCH_REVIEW_BLOCKER);
   source.status = source.failures.length === 0 ? 'passed' : 'failed';
   return source;
 }
@@ -1635,7 +1653,8 @@ function validateRemotePublication(source, addFailure) {
   const branchMissing = remote.status !== 0 && /\bHTTP 404\b/u.test(remote.stderr ?? '');
   source.remoteBranchPresent = branchMissing ? false : remote.status === 0 ? true : null;
   if (branchMissing) {
-    if (source.prState !== 'merged') addFailure(`authoritative remote branch is missing for unmerged pull request ${source.prNumber}`);
+    if (source.prNumber === null) addFailure(`authoritative canonical branch is missing or deleted: ${source.head}`);
+    else if (source.prState !== 'merged') addFailure(`authoritative remote branch is missing for unmerged pull request ${source.prNumber}`);
   } else if (remote.status !== 0) {
     addFailure(`authoritative remote head is unavailable for ${source.head}`);
   } else {
