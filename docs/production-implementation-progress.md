@@ -1065,12 +1065,13 @@ identity validation, original-key signing/export proof and atomic installation
 are still required before cross-platform recovery may be enabled.
 
 Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
-now points to pushed head `08ed3f0779891c1a3ada0bcb59b99d67c5a2b924`.
+now points to pushed head `7f0a04adb3edafc71347fbf73aa527847c84165d`.
 Its pure semantic codec validates the candidate wire grammar and exact EVM,
 multi-root and full-metadata vectors. The `FPWMLE01` container recognizes the
 portable source/mode pair for either platform while retaining the local-opaque
 pairs. Focused tests pass 11/11 with the clean pinned Android dependency
-checkouts; a forced four-file Detekt/format run has zero findings. This codec
+checkouts; a forced four-file Detekt/format run has zero findings. TON root and
+watch entries accept only the released Wallet V4R2 contract code. This codec
 has no capture, Drive upload, backup-completion or installer call site.
 Watch-only cohorts still fail in the Android local draft capture, and no
 Android adapter yet converts that draft to the shared format.

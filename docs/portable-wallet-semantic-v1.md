@@ -55,7 +55,7 @@ favorites, 128 watch identities and 1,024 auxiliary sources per wallet.
 | 2 | Unused chain IDs: the same ordered string-list encoding. |
 | 3 | Selected currency: raw strict UTF-8 (empty allowed). |
 | 4 | Network management filter: raw strict UTF-8 (empty allowed). |
-| 5 | Asset visibility: `u16 count`, then ascending unique nonempty `text key, u8 visible` pairs. |
+| 5 | Asset visibility: `u16 count`, then ascending unique nonempty `text assetId, u8 hidden` pairs. |
 | 6 | Favorite chain IDs: ordered string list; mutually exclusive with role 6 slots. |
 | 7 | Asset filter options: ordered string list. |
 | 8 | Zero-balance assets hidden: canonical single-byte boolean. |
@@ -85,12 +85,12 @@ must be sorted and unique. Each metadata value is at most 32 KiB.
 | 5 | Original seed, 1...32,768 bytes. |
 | 6 | Derivation path, raw strict UTF-8. |
 | 7 | Original account ID or address. Usually 1...128 bytes; V1 SS58 is strict UTF-8, and TON follows field 14. |
-| 8 | Crypto type, one byte in 1...3. |
+| 8 | Protocol crypto type, one byte: `1` SR25519, `2` ED25519, `3` ECDSA. Map explicitly; iOS `CryptoType.rawValue` is 0...2. |
 | 9 | Chain name, raw strict UTF-8. |
 | 10 | Initialized/favorite, canonical one-byte boolean. |
 | 11 | Source recipe, one byte: `0` for normal roots, `1...5` for V1 and auxiliary provenance. |
 | 12 | Original mnemonic, raw nonempty strict UTF-8; V1 or native TON only. |
-| 13 | TON contract version, one byte in 0...2. |
+| 13 | TON contract version, exactly byte `2` for the released Wallet V4R2 contract. Other contracts need a reviewed format revision. |
 | 14 | TON address encoding, one byte: `1` means canonical 33-byte workchain plus account hash; `2` means nonempty strict UTF-8 TonSwift JSON bytes. |
 | 15 | Historical source platform, one byte: `1` Android or `2` iOS. |
 | 16 | Historical source slot role, one byte, restricted by platform below. |
