@@ -67,17 +67,17 @@ The current pushed Android candidate is
 `93b58fc593d70e70628fb1eb2be44eab122e6a2c`, including exact amount-property
 integrity and confirmation/submission parity checks for XCM; its focused tests
 and Detekt pass locally. The
-current pushed iOS candidate is `d4e60ce4a1124a60787cfb7a1de5004b5e9c8dcc`;
+current pushed iOS candidate is `c29acdf15781574ae566aa50d676ca632dd6b4cd`;
 102 impacted tests passed locally at the earlier accessibility checkpoint.
 At the current iOS head, a focused iOS 18.1 simulator preflight suite passes
-14/14: it locally signs and verifies ED25519/ECDSA Substrate, EVM and explicit
-chain keys. SR25519 portable qualification remains blocked at the pinned
-native C/Rust signer boundary, which aborted on a malformed 64-byte key in an
-earlier test. Recovery remains disabled; this preflight cannot establish
-cross-device restoration. Exact-head
+14/14: it locally signs and verifies SR25519/ED25519/ECDSA Substrate, EVM and
+explicit chain keys. The checked native SR25519 signer returns an error for
+the malformed key that previously aborted the simulator process. The focused
+wallet signing-wrapper suite passes 12/12. Recovery remains disabled; this
+preflight cannot establish cross-device restoration. Exact-head
 hosted qualification, independent review, distribution-signed upgrade and
 cross-device recovery evidence remain open. The shared-features candidate is
-`b7ef68761b7962fc06193b500467da7ba5498070`, and the website-association
+`4323032511ee788b178aa3f9ed05e2518ee21c74`, and the website-association
 candidate is `fb824cf23ee4bb606f4a5168242da701b6ec78ac`.
 
 ## Source preservation
@@ -736,17 +736,15 @@ passkey wallet serializer, owner-session integration, or replacement-device
 recovery.
 
 The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
-previously had green hosted checks at
-`7df9c5131d471a53232025814399ec6bb45b3f23` for
-`verify`, `verify-owner` and `validate` checks. These checks validate the
-source tooling and metadata-only, non-deployed credential authority at that
-head; the updated head requires new exact-head checks. They are not proof of
-a live recovery service or shipping build.
+has green hosted `verify`, `verify-owner` and `validate` checks at
+`83c910018a6e674f75c34208519acb1ab6d193ea`. These validate the source
+tooling and metadata-only, non-deployed credential authority, not a live
+recovery service or shipping build.
 
 ## Exact-file legacy Drive backup checkpoint — 2026-09-24
 
-Shared-features [PR #84](https://github.com/soramitsu/shared-features-spm/pull/84)
-now points to immutable source `b7ef68761b7962fc06193b500467da7ba5498070`
+At this checkpoint, shared-features [PR #84](https://github.com/soramitsu/shared-features-spm/pull/84)
+pointed to immutable source `b7ef68761b7962fc06193b500467da7ba5498070`
 (tree `53bb7f75f3cd1a30f2ab53e189535decbffa42e9`). The legacy iOS Google
 Drive backup flow captures the ID returned by a new upload, downloads that exact
 file, compares its encrypted bytes and decrypts it before allowing the app to
@@ -897,6 +895,31 @@ only a previously proven binding. Tests seed proof commitments and do not verify
 historical JSON import. The seven live HTTP routes still use the JSON writer;
 one-writer switchover, independent review, provider/device qualification and
 cross-platform recovery remain open. Portable recovery stays disabled.
+
+## Checked SR25519 signing checkpoint — 2026-09-24
+
+Shared-features [PR #84](https://github.com/soramitsu/shared-features-spm/pull/84)
+now points to `4323032511ee788b178aa3f9ed05e2518ee21c74` (tree
+`bda39df7a41621190c3c34be9a60aa87c73141c2`). The rebuilt, source-pinned
+SR25519 library retains the old C ABI and signing compatibility while its new
+checked signing entrypoint rejects malformed secrets/public keys and mismatched
+keypairs without a process abort. Rust tests pass 9/9, old/new simulator
+signatures verify across libraries, three Apple architectures link, and device
+and simulator IrohaCrypto Release builds pass. Shared exact-head hosted native
+and RPC checks are green. Device execution and the full shared-package XCTest
+suite remain open; the latter is blocked by existing SSFXCM test-mock compile
+errors.
+
+The iOS app pins that exact source at
+`c29acdf15781574ae566aa50d676ca632dd6b4cd`. Source verification and pin
+consistency pass; focused iOS 18.1 simulator wallet-material preflight tests
+pass 14/14, including valid SR25519 signing and malformed-key rejection, and
+signing-wrapper tests pass 12/12. The Android candidate at
+`93b58fc593d70e70628fb1eb2be44eab122e6a2c` has green exact-head hosted
+build/test CI. This resolves one native signing safety blocker, not the
+production wallet serializer, original-key export proof, native provider
+interoperability or replacement-device restoration. New-feature activation
+remains disabled.
 
 ## Completion record
 
