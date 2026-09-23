@@ -24,7 +24,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. Android's latest scoped backup run passes 205 JVM tests; its preceding journal head passed two API 36 emulator filesystem cases. iOS's latest Drive coordinator passes 49 selected Release simulator tests, while an earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. Android's latest scoped backup run passes 205 JVM tests; its preceding journal head passed two API 36 emulator filesystem cases. iOS's latest Drive coordinator passes 51 selected Release simulator tests, while an earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
 
 The owner/grant authority core and its optional existing-owner WebAuthn verifier now pass 55 local tests; an earlier 52-test revision passed on each of two Node runtimes. First-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
@@ -297,7 +297,7 @@ failures/errors/skips. Receipt:
 `fearless-Android-production-consolidated-20260731/build/reports/android-generation-reconcile-20260923/handoff-receipt.json`,
 SHA-256 `3d38ad2adc622eaf9b220b991a849e973a7a1bff03bd42a2640d4947fbbe17cf`.
 
-The latest pushed iOS source is
+The initial pushed iOS coordinator source was
 `87901e64625aca8d3b6ba9927040372ab26d052b`. Its matching coordinator
 reconciles an uncertain upload and 404 using the same journaled file ID and
 requires exact download plus an independently supplied local wallet verifier.
@@ -315,6 +315,17 @@ hosted jobs, including the 88-case source-publication fixture suite locally.
 Mobile exact-head hosted CI and reviewer decisions must be rechecked after the
 new pushes.
 
+The latest pushed iOS source `87c494ea11014ce3dfdbc42c92f4f6f562eec12e`
+also rechecks the exact attempted journal record and selected Google subject
+after the asynchronous local verifier. A removed journal or switched account
+cannot produce local round-trip evidence. The same arm64 Release simulator
+suite now passes 51/51 tests, zero failures/skips; the changed Swift files
+pass bundled SwiftFormat and strict SwiftLint. Receipt:
+`fearless-iOS-production-consolidated-20260731/build/reports/ios-drive-coordinator-postverify-20260923/handoff-receipt.json`,
+SHA-256 `366a545acd27e95a7324a093a2c6ee8600586307698f5569abf5c910045012ec`.
+Hosted CI and independent review are pending for this exact head. The verifier
+remains a test fixture, and portable recovery remains disabled.
+
 ## Owner backup-head authorization — 2026-09-23
 
 The non-deployed owner authority now mints an internal 60-second grant bound
@@ -325,7 +336,8 @@ an altered body, an expired grant or a revoked session cannot advance the head;
 successful operation replays require a fresh grant. The seven-route challenge
 grant contract remains unchanged. All 55 owner-service tests pass locally,
 including separate-process same-grant races and before/after-commit crash
-reconciliation. This adds no HTTP service, native decrypt verifier, owner
+reconciliation. The full root source-publication adversarial suite also passes
+88 negative cases locally. This adds no HTTP service, native decrypt verifier, owner
 lifecycle integration or permission to enable recovery. Exact-head hosted CI
 and independent review remain required after publication.
 
