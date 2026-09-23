@@ -24,9 +24,9 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. Android's latest scoped backup run passes 200 JVM tests and two API 36 emulator journal cases; its previous exact-head full app CI passed. iOS's latest journal increment passes 44 selected Release simulator tests, while the earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. Android's latest scoped backup run passes 205 JVM tests; its preceding journal head passed two API 36 emulator filesystem cases. iOS's latest Drive coordinator passes 49 selected Release simulator tests, while an earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
 
-The owner/grant authority core and its optional existing-owner WebAuthn verifier pass 45 tests on each of two Node runtimes; first-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
+The owner/grant authority core and its optional existing-owner WebAuthn verifier pass 52 tests on each of two Node runtimes; first-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
 ## Source preservation
 
@@ -121,11 +121,11 @@ The source-publication gate now selects the consolidated Android/iOS checkout pa
 
 The release-bundle exporter and verifier now bind the same consolidated mobile source/PR identities. Their Iroha source-publication row still points to a historical review branch; it must be replaced with an `optimizations`-only source contract before a production audit can pass. The root PR's exact-head review pin also cannot be embedded in its own final commit without a detached, reviewed manifest. Both are fail-closed manifest-design work, not grounds to accept a stale pin.
 
-## Latest candidate and enabled-feature checkpoint — 2026-09-23
+## Earlier candidate and enabled-feature checkpoint — 2026-09-23
 
 The source-publication row, bundle exporter/verifier and aggregate audit are being reconciled to require Iroha's existing `optimizations` branch only. The user will handle the required signed Iroha commit and publication; no other Iroha branch is authorized for this release. Root and mobile code can be committed and pushed independently, but an unstaged or unsigned Iroha source change cannot become a qualified SDK artifact.
 
-The latest pushed Android candidate is `0986721e5cb24e0177a067cecc443c1ec4b7d532` on `codex/android-production-consolidated-20260731`, [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). It retains API 36 targeting and disabled production XCM submission while preserving read-only discovery/quotation. The latest pushed iOS candidate is `024664259740547bd25611f5bacd3238fa9b4333` on `codex/testflight-redesign-2026.8.17`, [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its focused accessibility regression run passed 16/16 selected simulator tests, and its exact-head Release Safety CI passed. Android's exact-head full CI and Internal App Sharing checks, and iOS Codecov, were still in progress when this checkpoint was written; their final conclusions must be rechecked before using them as evidence. The preceding candidate hashes and test totals in this document are historical, not shipping pins.
+At that checkpoint, Android candidate `0986721e5cb24e0177a067cecc443c1ec4b7d532` was pushed on `codex/android-production-consolidated-20260731`, [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). It retained API 36 targeting and disabled production XCM submission while preserving read-only discovery/quotation. iOS candidate `024664259740547bd25611f5bacd3238fa9b4333` was pushed on `codex/testflight-redesign-2026.8.17`, [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its focused accessibility regression run passed 16/16 selected simulator tests, and its exact-head Release Safety CI passed. Android's exact-head full CI and Internal App Sharing checks, and iOS Codecov, were still in progress when this checkpoint was written; their final conclusions must be rechecked before using them as evidence. These candidate hashes and test totals are historical, not shipping pins.
 
 The passkey production policy now specifies Google Drive app-data as primary on Android and iOS, with optional iCloud on iOS. The global and both platform enable flags remain false. A new enabled-feature acceptance gate requires a reviewed shipping manifest, two independent Ed25519-signed QA/security attestations, exact artifact and source binding, raw evidence digests, native PRF and shared Drive-file interoperability, replacement-device recovery in both directions with original devices unavailable, and store-signed in-place upgrades. Its 21 synthetic rejection cases pass; the production gate correctly fails because the manifest, trust keys, attestation and actual device evidence are absent. The complete release manifest and its separate validator are still required. Source-publication and bundle fixtures still encode the interim disabled policy and must be deliberately updated when enabled artifacts actually qualify.
 
@@ -282,6 +282,38 @@ any remaining discovery-only route. Eight synthetic exact-source/tamper cases
 pass. This deliberately keeps the current candidate unshippable while the
 frozen discovery gaps and their funded transaction receipts are outstanding;
 it does not qualify or enable an XCM route.
+
+## Exact mobile Drive round-trip candidates — 2026-09-23
+
+The latest pushed Android source is
+`b93ce04ab0f0a0786aef1f3ec2f2c2e3ba5d380c`. Its read-only reconciler
+requires an admitted journal marker and independently supplied owner, Google
+account and wallet identities. It downloads the same Drive ID, compares exact
+canonical FPBKGEN1 bytes, requires local decrypt/sign/export evidence and
+rechecks the journal and selected Google subject before returning local
+round-trip evidence. It never retries POST, advances an owner head or marks
+backup complete. All 205 backup-module JVM tests and `detektAll` pass with zero
+failures/errors/skips. Receipt:
+`fearless-Android-production-consolidated-20260731/build/reports/android-generation-reconcile-20260923/handoff-receipt.json`,
+SHA-256 `3d38ad2adc622eaf9b220b991a849e973a7a1bff03bd42a2640d4947fbbe17cf`.
+
+The latest pushed iOS source is
+`87901e64625aca8d3b6ba9927040372ab26d052b`. Its matching coordinator
+reconciles an uncertain upload and 404 using the same journaled file ID and
+requires exact download plus an independently supplied local wallet verifier.
+Its final selected arm64 Release simulator suite passes 49/49 tests with zero
+failures/skips, strict SwiftLint and source formatting pass, and dependency
+source remains pinned. Receipt:
+`fearless-iOS-production-consolidated-20260731/build/reports/ios-drive-coordinator-20260923/handoff-receipt.json`,
+SHA-256 `f5ec61f2e664151bd68a394bc77ef70288a10b3d8b978cf4e8d0394a18447543`.
+Both verifier interfaces deliberately lack a production implementation. Native
+PRF unwrap/decryption and original-wallet identity/sign/export, owner/grant
+atomic integration and real replacement-device proof remain unqualified;
+recovery stays disabled. The root route-manifest commit
+`1a7405eff5a1a0332882cc4eb67e447f516bcfa6` passed all three exact-head
+hosted jobs, including the 88-case source-publication fixture suite locally.
+Mobile exact-head hosted CI and reviewer decisions must be rechecked after the
+new pushes.
 
 ## Current local access check
 
