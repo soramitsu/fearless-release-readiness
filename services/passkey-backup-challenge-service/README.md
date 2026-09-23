@@ -165,6 +165,13 @@ non-root runtime. The file store is a single-writer contract; run one service
 replica per mounted credential-store file. Compose uses required-variable
 interpolation for `PASSKEY_ANDROID_ALLOWED_ORIGIN`, so configuration fails
 before container creation when the release origin has not been supplied.
+The production process requires `PASSKEY_RECOVERY_ENABLED=false` and rejects
+`PASSKEY_OWNER_AUTHORITY_STORE_FILE`. These are fail-closed legacy-mode
+configuration checks, not a transaction bridge: the existing seven HTTP
+routes still use JSON after separate grant introspection. They do not enable
+portable recovery or make owner revocation atomic with JSON writes. Keep the
+owner SQLite authority out of this deployment until a reviewed migration and
+one authoritative lifecycle transaction are in place.
 It also requires the introspection endpoint, pins its audience, and enables a
 single-hop forwarded-client contract. The TLS proxy must overwrite or append a
 single canonical client IP and must block direct public access; missing,

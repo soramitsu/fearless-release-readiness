@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { fsyncSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { fsyncSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { authorizationSubjectHash } from '../src/authorization.js';
 import { base64UrlEncode } from '../src/base64url.js';
 import { createPasskeyBackupChallengeService } from '../src/service.js';
-import { FileBackedPasskeyChallengeStore, InMemoryPasskeyChallengeStore } from '../src/store.js';
+import { FileBackedPasskeyChallengeStore, InMemoryPasskeyChallengeStore, readCredentialStoreSnapshot } from '../src/store.js';
 import { RP_ID, SCHEMA_VERSION } from '../src/validation.js';
 import { authenticationCredential, createAuthenticator } from './webauthn-fixture.js';
 
@@ -53,6 +53,24 @@ function legacyFixture(t) {
 function rejectsLookup(store, id) {
   assert.throws(() => store.findCredentialOwner(id), { code: 'credential_not_registered', status: 403 });
 }
+
+test('read-only inventory preserves v3 bytes and tombstones, then rejects malformed and substituted input', (t) => {
+  const { file, stored } = legacyFixture(t);
+  const before = readFileSync(file);
+  const snapshot = readCredentialStoreSnapshot(file);
+  assert.equal(snapshot.needsMigration, true);
+  assert.equal(snapshot.credentialsByStorageKey.get(storageKey).get(stored.id).userId, stored.userId);
+  assert.equal(snapshot.credentialsByStorageKey.get(otherStorageKey).size, 0);
+  assert.equal(snapshot.ownersByStorageKey.get(otherStorageKey), otherOwner);
+  assert.deepEqual(readFileSync(file), before);
+  const alias = `${file}.alias`;
+  symlinkSync(file, alias);
+  assert.throws(() => readCredentialStoreSnapshot(alias), { code: 'credential_store_invalid' });
+  writeFileSync(file, '{invalid json');
+  assert.throws(() => readCredentialStoreSnapshot(file), { code: 'credential_store_invalid' });
+  assert.equal(readFileSync(file, 'utf8'), '{invalid json');
+  assert.throws(() => readCredentialStoreSnapshot(`${file}.missing`), { code: 'credential_store_unavailable' });
+});
 
 test('v3 migration preserves every credential field and empty-owner tombstone, then authenticates after restart', async (t) => {
   const { file, document, authenticator, stored } = legacyFixture(t);

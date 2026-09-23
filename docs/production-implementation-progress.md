@@ -515,6 +515,49 @@ verifier and 29/29 focused arm64 Release simulator tests passed with no
 failures or skips on an iOS 26.5 simulator. This is also disabled-path
 plumbing, not replacement-device recovery or distribution acceptance.
 
+## Legacy credential reconciliation and HTTP isolation — 2026-09-23
+
+The existing challenge HTTP implementation still consumes a grant through
+configured introspection and then writes schema-4 JSON separately. Its deterministic
+historical user handles, storage-key owner binding and full public credential
+metadata cannot be inferred from the random owner namespace and narrower
+SQLite schema. Replacing one live route with a SQLite write would create two
+authorities and would not close the revocation race. **No cross-store atomicity
+or portable recovery integration is claimed.**
+
+The root candidate now has a read-only operator inventory for existing
+schema-3/4 JSON and schema-2 owner SQLite. It checks both stores, reports
+bounded conflict counts and JSON entry positions without emitting credential
+IDs or storage keys, preserves tombstones, and always returns
+`migrationPermitted: false`. SQLite rows are read in one read transaction;
+the two files are sampled sequentially, so an inventory must use drained
+private copies. The JSON snapshot does not trigger schema migration. Invalid,
+symlinked or missing stores and oversized JSON are rejected; mismatched
+metadata produces a blocked report. The legacy production container
+explicitly sets `PASSKEY_RECOVERY_ENABLED=false`, and
+its store factory rejects a recovery-enabled setting or an owner SQLite path
+beside the JSON writer. This is a configuration guard, not a lifecycle
+transaction bridge; existing legacy HTTP credential routes remain available.
+
+Current-source local checks: owner authority **70/70**, challenge service
+**111/111**, both syntax suites and diff check pass. The source-publication
+and release-bundle required-file inventories include the new reconciliation
+tool and adversarial tests. The source-publication fixture passed all 88
+negative cases, and both release-bundle export and verifier fixture suites
+passed. These checks validate source/evidence contracts, not deployed
+recovery. The preceding root commit `d8ad4eec06ed418f934fe61a8a883bc0b4fa1716`
+passed exact-head CI at [run 35864031123](https://github.com/soramitsu/fearless-release-readiness/actions/runs/35864031123);
+that run predates this increment. Recovery remains disabled until one
+reviewed authority owns all seven live routes, verified historical migration
+preserves every credential/tombstone, and device/cloud acceptance passes.
+
+Android's subsequent disabled-path verifier candidate is pushed at
+`64ce2dd96` with 221/221 backup-module tests and strict Detekt passing
+locally. It verifies local PRF unwrap, authenticated decryption and
+wallet-owned signing/export evidence, but has no production wallet callback
+or native replacement-device recovery. The iOS reference above remains
+`613affcdd018b14623d85602cf7d33b2f0fc3ab0` pending its next candidate.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

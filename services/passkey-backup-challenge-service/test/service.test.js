@@ -1048,6 +1048,20 @@ test('createPasskeyChallengeStore selects durable store only when configured', (
   }) instanceof FileBackedPasskeyChallengeStore);
 });
 
+test('legacy JSON process refuses recovery-enabled and parallel owner-writer configurations', (t) => {
+  const credentialStoreFile = tempCredentialStoreFile(t);
+  const disabled = { credentialStoreFile, requireDurable: true, productionMode: true, recoveryEnabled: 'false' };
+  assert.ok(createPasskeyChallengeStore(disabled) instanceof FileBackedPasskeyChallengeStore);
+  for (const recoveryEnabled of [undefined, 'true', 'TRUE', '', '0']) {
+    assertServiceError(() => createPasskeyChallengeStore({ ...disabled, recoveryEnabled }),
+      'credential_store_unavailable', 500);
+  }
+  assertServiceError(() => createPasskeyChallengeStore({ ...disabled, ownerAuthorityStoreFile: '/tmp/owner.sqlite' }),
+    'credential_store_unavailable', 500);
+  assertServiceError(() => createPasskeyChallengeStore({ ...disabled, ownerAuthorityStoreFile: '' }),
+    'credential_store_unavailable', 500);
+});
+
 test('rejects request smuggling fields and invalid identifiers including noncanonical aliases', async () => {
   const service = makeService();
   assertServiceError(

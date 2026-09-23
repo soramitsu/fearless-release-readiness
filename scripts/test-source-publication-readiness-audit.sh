@@ -154,7 +154,9 @@ for file in \
   services/passkey-backup-owner-authority/README.md \
   services/passkey-backup-owner-authority/package.json \
   services/passkey-backup-owner-authority/package-lock.json \
+  services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs \
   services/passkey-backup-owner-authority/src/authority.js \
+  services/passkey-backup-owner-authority/src/legacy-reconciliation.js \
   services/passkey-backup-owner-authority/src/store.js \
   services/passkey-backup-owner-authority/src/validation.js \
   services/passkey-backup-owner-authority/src/verifier-contract.d.ts \
@@ -162,6 +164,7 @@ for file in \
   services/passkey-backup-owner-authority/test/authority.test.js \
   services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js \
   services/passkey-backup-owner-authority/test/generation-head.test.js \
+  services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js \
   services/passkey-backup-owner-authority/test/fixtures.js \
   services/passkey-backup-owner-authority/test/process-worker.js \
   services/passkey-backup-owner-authority/test/webauthn-verifier.test.js; do

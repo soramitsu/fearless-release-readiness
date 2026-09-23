@@ -28,6 +28,7 @@ services:
       PASSKEY_RATE_LIMIT_MAX_REQUESTS: "120"
       PASSKEY_GLOBAL_RATE_LIMIT_MAX_REQUESTS: "5000"
       PASSKEY_CREDENTIAL_STORE_FILE: /data/passkey-backup/credentials.json
+      PASSKEY_RECOVERY_ENABLED: "false"
     ports:
       - "127.0.0.1:8789:8789"
     volumes:

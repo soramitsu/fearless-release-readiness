@@ -10,6 +10,7 @@ COPY src ./src
 ENV NODE_ENV=production
 ENV PORT=8789
 ENV PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials.json
+ENV PASSKEY_RECOVERY_ENABLED=false
 
 EXPOSE 8789
 

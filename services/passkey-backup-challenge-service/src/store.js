@@ -350,6 +350,25 @@ function readBoundedRegularFile(filePath) {
   }
 }
 
+// Operator reconciliation must inspect v3/v4 records without invoking the
+// writable FileBacked constructor: opening a v3 file there replaces it with v4.
+// This snapshot validates the complete file but never migrates or creates it.
+export function readCredentialStoreSnapshot(filePath) {
+  if (typeof filePath !== 'string' || filePath.trim() === '') {
+    throw credentialStoreUnavailable('Credential store file path is required');
+  }
+  try {
+    const stat = lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CREDENTIAL_STORE_BYTES) {
+      throw credentialStoreInvalid('Credential store path must be a bounded regular file');
+    }
+    return deserializeCredentials(readBoundedRegularFile(filePath));
+  } catch (error) {
+    if (error.code === 'credential_store_invalid') throw error;
+    throw credentialStoreUnavailable('Credential store file cannot be read');
+  }
+}
+
 function validateStorageKey(storageKey) {
   if (typeof storageKey !== 'string' || !STORAGE_KEY_RE.test(storageKey)) {
     throw serviceError(400, 'invalid_request', 'storageKey is invalid');
@@ -806,16 +825,7 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
       return { credentialsByStorageKey: new Map(), ownersByStorageKey: new Map() };
     }
 
-    try {
-      const stat = lstatSync(this.credentialStoreFile);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CREDENTIAL_STORE_BYTES) {
-        throw credentialStoreInvalid('Credential store path must be a bounded regular file');
-      }
-      return deserializeCredentials(readBoundedRegularFile(this.credentialStoreFile));
-    } catch (error) {
-      if (error.code === 'credential_store_invalid') throw error;
-      throw credentialStoreUnavailable('Credential store file cannot be read');
-    }
+    return readCredentialStoreSnapshot(this.credentialStoreFile);
   }
 
   persistCredentials(credentialsByStorageKey, ownersByStorageKey) {
@@ -869,8 +879,24 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
 export function createPasskeyChallengeStore({
   credentialStoreFile = process.env.PASSKEY_CREDENTIAL_STORE_FILE,
   requireDurable = process.env.NODE_ENV === 'production',
+  productionMode = process.env.NODE_ENV === 'production',
+  recoveryEnabled = process.env.PASSKEY_RECOVERY_ENABLED,
+  ownerAuthorityStoreFile = process.env.PASSKEY_OWNER_AUTHORITY_STORE_FILE,
   ...options
 } = {}) {
+  // This implementation remains the legacy JSON writer. A production process
+  // must explicitly keep portable recovery disabled, and must not be pointed
+  // at a separately writable owner SQLite source. No import or partial mirror
+  // is safer than two independent credential/revocation authorities.
+  if (recoveryEnabled !== undefined && recoveryEnabled !== 'false') {
+    throw credentialStoreUnavailable('PASSKEY_RECOVERY_ENABLED must be false for the legacy credential store');
+  }
+  if (productionMode && recoveryEnabled !== 'false') {
+    throw credentialStoreUnavailable('PASSKEY_RECOVERY_ENABLED=false is required for the legacy production store');
+  }
+  if (ownerAuthorityStoreFile !== undefined) {
+    throw credentialStoreUnavailable('Owner authority cannot share a deployment with the legacy JSON credential writer');
+  }
   if (credentialStoreFile === undefined || credentialStoreFile === null ||
       String(credentialStoreFile).trim() === '') {
     if (requireDurable) {

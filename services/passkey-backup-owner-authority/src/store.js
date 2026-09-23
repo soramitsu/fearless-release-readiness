@@ -182,3 +182,32 @@ export class AuthorityStore {
     return result;
   }
 }
+
+/** Read-only operator snapshot for planning a verified legacy migration. */
+export function readOwnerCredentialSnapshot(path) {
+  if (!isAbsolute(path)) deny('store_unavailable');
+  let db;
+  try {
+    privateFile(dirname(path), true);
+    privateFile(path);
+    db = new DatabaseSync(path, { readOnly: true });
+    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF;');
+    db.exec('BEGIN');
+    if (db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
+        db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
+        db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
+        db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
+    const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
+      .map((row) => Object.freeze({ ...row }));
+    const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()
+      .map((row) => Object.freeze({ ...row }));
+    db.exec('COMMIT');
+    return Object.freeze({ schemaVersion: SCHEMA_VERSION,
+      owners: Object.freeze(owners), credentials: Object.freeze(credentials) });
+  } catch {
+    try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
+    deny('store_unavailable');
+  } finally {
+    db?.close();
+  }
+}
