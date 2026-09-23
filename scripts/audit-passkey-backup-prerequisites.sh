@@ -25,7 +25,7 @@ passkey-backed cloud backup. This is a release-readiness gate: current repos
 should fail until product, platform, entitlement, and recovery contracts exist.
 
 Environment:
-  PASSKEY_AUDIT_ROOT                  Workspace root containing fearless-Android and fearless-iOS.
+  PASSKEY_AUDIT_ROOT                  Workspace root containing fearless-Android-production-consolidated-20260731 and fearless-iOS-production-consolidated-20260731.
   PASSKEY_BACKUP_LIVE_HEALTH          Set to 1/true to require the configured
                                       challenge service health endpoint.
   PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS
@@ -221,6 +221,21 @@ require_file_literal() {
     return
   fi
   if ! grep -Fq "$literal" "$file"; then
+    record_failure "$description missing in $file"
+  fi
+}
+
+require_file_whitespace_literal() {
+  local file="$1"
+  local literal="$2"
+  local description="$3"
+  if [[ ! -f "$file" ]]; then
+    record_failure "$description source missing: $file"
+    return
+  fi
+  local normalized
+  normalized="$(tr '\n\r\t' '   ' < "$file" | tr -s '[:space:]')"
+  if [[ "$normalized" != *"$literal"* ]]; then
     record_failure "$description missing in $file"
   fi
 }
@@ -581,17 +596,17 @@ check_release_config_sources() {
     return
   fi
 
-  local android_contract="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
-  local android_challenge="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
-  local android_drive="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
-  local android_token="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
-  local ios_contract="$ROOT_DIR/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
-  local ios_drive="$ROOT_DIR/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
-  local ios_serializer_test="$ROOT_DIR/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
-  local ios_entitlements="$ROOT_DIR/fearless-iOS/fearless/WalletConnect.entitlements"
-  local ios_project="$ROOT_DIR/fearless-iOS/fearless.xcodeproj/project.pbxproj"
-  local android_release="$ROOT_DIR/fearless-Android/docs/release-checklist.md"
-  local ios_release="$ROOT_DIR/fearless-iOS/docs/release-checklist.md"
+  local android_contract="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+  local android_challenge="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
+  local android_drive="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+  local android_token="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
+  local ios_contract="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
+  local ios_drive="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+  local ios_serializer_test="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+  local ios_entitlements="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
+  local ios_project="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.pbxproj"
+  local android_release="$ROOT_DIR/fearless-Android-production-consolidated-20260731/docs/release-checklist.md"
+  local ios_release="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
 
   require_file_literal "$android_contract" "PASSKEY_RP_ID = \"$PASSKEY_CONFIG_RP_ID\"" "Android passkey RP ID"
   require_file_literal "$android_contract" "CHALLENGE_SERVICE_BASE_URL = \"$PASSKEY_CONFIG_BASE_URL\"" "Android passkey challenge service URL"
@@ -610,9 +625,11 @@ check_release_config_sources() {
   require_file_literal "$android_challenge" "$PASSKEY_CONFIG_CREDENTIALS_REVOKE_ALL" "Android credential revoke-all path"
   require_file_literal "$android_drive" "$PASSKEY_CONFIG_ANDROID_SCOPE" "Android Drive appdata scope"
   require_file_literal "$android_drive" "oauth2:\$APP_DATA_SCOPE" "Android Drive OAuth scope derivation"
-  require_file_literal "$android_drive" 'addProperty("walletId"' "Android Drive passkey backup wallet metadata persistence"
-  require_file_literal "$android_drive" 'addProperty("accountName"' "Android Drive passkey backup account metadata persistence"
-  require_file_literal "$android_drive" 'addProperty("createdAtMillis"' "Android Drive passkey backup creation timestamp persistence"
+  require_file_literal "$android_drive" 'addBoundedProperty("walletId", payload.walletId)' "Android Drive passkey backup wallet metadata persistence"
+  require_file_literal "$android_drive" 'addBoundedProperty("accountName", payload.accountName)' "Android Drive passkey backup account metadata persistence"
+  require_file_literal "$android_drive" 'addBoundedProperty("createdAtMillis", payload.createdAtMillis.toString())' "Android Drive passkey backup creation timestamp persistence"
+  require_file_literal "$android_drive" 'MAX_APP_PROPERTY_BYTES' "Android Drive bounded metadata property size"
+  require_file_literal "$android_drive" 'addProperty(name, value)' "Android Drive bounded metadata property writer"
   require_file_literal "$android_drive" 'requiredAppProperty(appProperties, "walletId")' "Android Drive passkey backup wallet metadata load validation"
   require_file_literal "$android_drive" 'requiredAppProperty(appProperties, "accountName")' "Android Drive passkey backup account metadata load validation"
   require_file_literal "$android_drive" 'requiredAppProperty(appProperties, "createdAtMillis")' "Android Drive passkey backup creation timestamp load validation"
@@ -679,8 +696,8 @@ check_release_config_sources() {
   require_file_literal "$ios_serializer_test" "testWorkflowRejectsRevokeAllResultContainingCredentialIdentity" "iOS workflow revoke-all identity-injection adversarial test"
   require_file_literal "$ios_serializer_test" "testCoordinatorRejectsRevokeAllResultContainingCredentialIdentity" "iOS coordinator revoke-all identity-injection adversarial test"
   require_file_literal "$ios_entitlements" "$PASSKEY_CONFIG_IOS_ASSOCIATED_DOMAIN" "iOS associated-domain entitlement"
-  require_file_literal "$ios_entitlements" 'iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)' "iOS configuration-resolved CloudKit container entitlement"
-  require_file_literal "$ios_entitlements" 'group.$(PRODUCT_BUNDLE_IDENTIFIER)' "iOS configuration-resolved application-group entitlement"
+  require_file_literal "$ios_entitlements" 'iCloud.jp.co.soramitsu.fearlesswallet' "iOS production CloudKit container entitlement"
+  require_file_literal "$ios_entitlements" 'group.jp.co.soramitsu.fearlesswallet' "iOS production application-group entitlement"
   reject_file_literal "$ios_entitlements" '<key>keychain-access-groups</key>' "iOS unprovisioned explicit keychain access-group entitlement"
   require_file_literal "$ios_project" 'PRODUCT_BUNDLE_IDENTIFIER = jp.co.soramitsu.fearlesswallet;' "iOS App Store bundle identifier"
   require_file_literal "$ios_project" 'PRODUCT_BUNDLE_IDENTIFIER = jp.co.soramitsu.fearlesswallet.dev;' "iOS development bundle identifier"
@@ -698,7 +715,7 @@ check_release_config_sources() {
   require_file_literal "$ios_release" "iCloud account availability" "iOS release checklist passkey iCloud account UX"
   require_file_literal "$ios_release" "CloudKit production schema" "iOS release checklist passkey CloudKit production schema"
   require_file_literal "$ios_release" "associated-domain provisioning" "iOS release checklist passkey associated-domain provisioning"
-  require_file_literal "$ios_release" "provisioning profiles" "iOS release checklist passkey provisioning profiles"
+  require_file_whitespace_literal "$ios_release" "provisioning profiles" "iOS release checklist passkey provisioning profiles"
   require_file_literal "$ios_release" "restore before creating a new backup" "iOS release checklist passkey recovery UX"
 }
 
@@ -958,7 +975,7 @@ android_has_reviewed_cloud_backup_posture() {
 }
 
 check_android() {
-  local repo="$ROOT_DIR/fearless-Android"
+  local repo="$ROOT_DIR/fearless-Android-production-consolidated-20260731"
   log "Checking Android passkey backup prerequisites"
 
   if [[ ! -d "$repo" ]]; then
@@ -1060,7 +1077,7 @@ ios_has_entitlement_value() {
 }
 
 check_ios() {
-  local repo="$ROOT_DIR/fearless-iOS"
+  local repo="$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
   log "Checking iOS passkey backup prerequisites"
 
   if [[ ! -d "$repo" ]]; then

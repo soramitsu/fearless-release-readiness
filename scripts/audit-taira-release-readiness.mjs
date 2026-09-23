@@ -520,103 +520,103 @@ function runStaticAudit({ root, parent }) {
     'web background address routing'
   );
   const androidRegistry = requireText(
-    resolve(root, 'fearless-Android/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt'),
     'Android universal-wallet registry'
   );
   const androidTorii = requireText(
-    resolve(root, 'fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt'),
     'Android Torii client'
   );
   const androidToriiModels = requireText(
-    resolve(root, 'fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiModels.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiModels.kt'),
     'Android Torii models'
   );
   const androidToriiRoutes = requireText(
-    resolve(root, 'fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiRoutes.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiRoutes.kt'),
     'Android Torii routes'
   );
   const androidNetworkModule = requireText(
-    resolve(root, 'fearless-Android/common/src/main/java/jp/co/soramitsu/common/di/modules/NetworkModule.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/di/modules/NetworkModule.kt'),
     'Android network module'
   );
   const androidHistory = requireText(
-    resolve(root, 'fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/historySource/IrohaHistorySource.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/historySource/IrohaHistorySource.kt'),
     'Android Iroha history service'
   );
   const androidBalance = requireText(
-    resolve(root, 'fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt'),
     'Android Iroha balance service'
   );
   const androidIdentity = requireText(
-    resolve(root, 'fearless-Android/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt'),
     'Android Iroha identity routing'
   );
   const androidBalanceProvider = requireText(
-    resolve(root, 'fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/BalanceLoaderProvider.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/BalanceLoaderProvider.kt'),
     'Android balance routing'
   );
   const androidTransfer = requireText(
-    resolve(root, 'fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/TransferService.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/TransferService.kt'),
     'Android transfer routing'
   );
   const androidMetaAccount = requireText(
-    resolve(root, 'fearless-Android/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/MetaAccount.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/MetaAccount.kt'),
     'Android stored account routing'
   );
   const androidMigration = requireText(
-    resolve(root, 'fearless-Android/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt'),
+    resolve(root, 'fearless-Android-production-consolidated-20260731/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt'),
     'Android migration routing'
   );
   const iosRegistry = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Model/UniversalWalletRegistry.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletRegistry.swift'),
     'iOS universal-wallet registry'
   );
   const iosTorii = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Model/IrohaToriiClient.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiClient.swift'),
     'iOS Torii client'
   );
   const iosToriiContract = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift'),
     'iOS Torii contract'
   );
   const iosTransfer = requireText(
-    resolve(root, 'fearless-iOS/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift'),
     'iOS transfer service'
   );
   const iosHistory = requireText(
-    resolve(root, 'fearless-iOS/fearless/CoreLayer/OperationFactory/BlockExplorer/History/Main/IrohaHistoryOperationFactory.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/CoreLayer/OperationFactory/BlockExplorer/History/Main/IrohaHistoryOperationFactory.swift'),
     'iOS Iroha history service'
   );
   const iosBalance = requireText(
-    resolve(root, 'fearless-iOS/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift'),
     'iOS Iroha balance service'
   );
   const iosAddressResolver = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift'),
     'iOS stored account routing'
   );
   const iosMetaAccountMapper = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift'),
     'iOS stored account quarantine'
   );
   const iosAddressResolverTests = requireText(
-    resolve(root, 'fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift'),
     'iOS stored account routing tests'
   );
   const iosMetaAccountMapperTests = requireText(
-    resolve(root, 'fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift'),
     'iOS stored account quarantine tests'
   );
   const iosToriiContractTests = requireText(
-    resolve(root, 'fearless-iOS/fearlessTests/IrohaToriiContractTests.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearlessTests/IrohaToriiContractTests.swift'),
     'iOS Torii contract tests'
   );
   const iosMigration = requireText(
-    resolve(root, 'fearless-iOS/fearless/Common/Model/UniversalWalletMigrationContract.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletMigrationContract.swift'),
     'iOS migration routing'
   );
   const iosSendContainer = requireText(
-    resolve(root, 'fearless-iOS/fearless/Modules/Send/SendDependencyContainer.swift'),
+    resolve(root, 'fearless-iOS-production-consolidated-20260731/fearless/Modules/Send/SendDependencyContainer.swift'),
     'iOS send routing'
   );
   const profile = requireText(

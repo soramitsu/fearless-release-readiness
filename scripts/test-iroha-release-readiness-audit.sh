@@ -1087,7 +1087,7 @@ write_wallet_ready_sources() {
     'const isOutgoing = isSameIrohaLiteral(sourceAccount, address);' \
     "return typeof left === 'string' && left === right;"
 
-  write_file "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt" \
     "object UniversalWalletRegistry {" \
     '  const val TAIRA_CHAIN_ID = "fc56984b-2be7-431d-840e-21514d1883f0"' \
     '  const val TAIRA_XOR_ASSET_DEFINITION_ID = "6TEAJqbb8oEPmLncoNiMRbLEK6tw"' \
@@ -1108,7 +1108,7 @@ write_wallet_ready_sources() {
     "  )" \
     "}"
 
-  write_file "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt" \
     'const val SUBMIT_AND_WAIT_TOOL = "iroha.transactions.submit_and_wait"' \
     'const val BODY_FIELD = "body_base64"' \
     'const val FANOUT_DENIED_HEADER = "x-iroha-fanout-routes-denied"' \
@@ -1126,26 +1126,26 @@ write_wallet_ready_sources() {
     'return completeRoutedBody(response)' \
     'return completeMcpBody(response)'
 
-  write_file "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiModels.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiModels.kt" \
     'data class AccountAssets(val hasMore: Boolean?)' \
     'data class Definitions(val hasMore: Boolean?)' \
     'val jsonrpc: String? = null' \
     'if (notFound > failed - denied - unavailable) return false'
 
-  write_file "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiRoutes.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiRoutes.kt" \
     'if (parsed.protocol != "https" && !(parsed.protocol == "http" && isLocal)) fail()' \
     'if (parsed.userInfo != null || parsed.query != null || parsed.ref != null) fail()' \
     'if (!HASH_256.matches(hash)) fail()' \
     'return hash'
 
-  write_file "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/di/modules/NetworkModule.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/di/modules/NetworkModule.kt" \
     'fun irohaNoRedirectHttpClient(client: OkHttpClient) = client.newBuilder()' \
     '  .followRedirects(false)' \
     '  .followSslRedirects(false)' \
     'val api = irohaNoRedirectHttpClient(okHttpClient)' \
     'irohaNoRedirectHttpClient(okHttpClient)'
 
-  write_file "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/historySource/IrohaHistorySource.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/historySource/IrohaHistorySource.kt" \
     'if (definitions.hasMore != false) fail()' \
     'if (toolResult["isError"] != false) fail()' \
     'val route = toolResult["structuredContent"]' \
@@ -1164,7 +1164,7 @@ write_wallet_ready_sources() {
     'val fee = null' \
     'val outgoing = sourceAccount == accountAddress'
 
-  write_file "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt" \
     'val definitions = torii.assetDefinitions(limit = IrohaToriiRoutes.MAX_LIMIT, offset = 0, countMode = IrohaToriiRoutes.CountMode.Bounded)' \
     'if (definitions.hasMore != false || definitions.countMode != IrohaToriiRoutes.CountMode.Bounded.apiValue) fail()' \
     'val response = torii.accountAssets(limit = IrohaToriiRoutes.MAX_LIMIT, offset = 0, countMode = IrohaToriiRoutes.CountMode.Bounded)' \
@@ -1177,29 +1177,29 @@ write_wallet_ready_sources() {
     'val maxBalanceInPlanks = MAX_QUANTITY.multiply(BigInteger.TEN.pow(precision))' \
     'if (value > maxBalanceInPlanks.subtract(total)) fail()'
 
-  write_file "$workspace/fearless-Android/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt" \
     'return id == UniversalWalletRegistry.taira.chainId ||' \
     'id == UniversalWalletRegistry.nexus.chainId' \
     'fun Chain.hasNonCanonicalUniversalWalletIrohaIdentity() = false' \
     'UniversalWalletRegistry.taira.chainId -> UniversalWalletRegistry.taira' \
     'UniversalWalletRegistry.nexus.chainId -> UniversalWalletRegistry.nexus'
 
-  write_file "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/BalanceLoaderProvider.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/BalanceLoaderProvider.kt" \
     'chain.hasNonCanonicalUniversalWalletIrohaIdentity() -> throw IllegalArgumentException('
 
-  write_file "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/TransferService.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/TransferService.kt" \
     '} else if (chain.hasNonCanonicalUniversalWalletIrohaIdentity()) {' \
     'return this?.takeIf(IROHA_TRANSACTION_HASH_PATTERN::matches)'
 
-  write_file "$workspace/fearless-Android/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/MetaAccount.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/MetaAccount.kt" \
     'UniversalWalletRegistry.taira.chainId' \
     'UniversalWalletRegistry.nexus.chainId'
 
-  write_file "$workspace/fearless-Android/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt" \
+  write_file "$workspace/fearless-Android-production-consolidated-20260731/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt" \
     'UniversalWalletRegistry.taira.chainId' \
     'UniversalWalletRegistry.nexus.chainId'
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletRegistry.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletRegistry.swift" \
     "enum UniversalWalletRegistry {" \
     '  static let tairaChainId = "fc56984b-2be7-431d-840e-21514d1883f0"' \
     '  static let tairaXorAssetDefinitionId = "6TEAJqbb8oEPmLncoNiMRbLEK6tw"' \
@@ -1220,7 +1220,7 @@ write_wallet_ready_sources() {
     "  )" \
     "}"
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiClient.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiClient.swift" \
     'let submitTool = "iroha.transactions.submit_and_wait"' \
     'let bodyField = "body_base64"' \
     'let deniedHeader = "x-iroha-fanout-routes-denied"' \
@@ -1240,7 +1240,7 @@ write_wallet_ready_sources() {
     'completionHandler(nil)' \
     'transport: IrohaToriiHTTPTransport = IrohaNoRedirectHTTPTransport()'
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift" \
     'let headers: [String: String]' \
     'let contentType: String' \
     'let jsonrpc: String?' \
@@ -1250,10 +1250,10 @@ write_wallet_ready_sources() {
     'guard (scheme == "https" || (scheme == "http" && isLocal)) else { fail() }' \
     'guard url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { fail() }'
 
-  write_file "$workspace/fearless-iOS/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift" \
     'guard value.range(of: "^[0-9a-f]{63}[13579bdf]$", options: .regularExpression) != nil else'
 
-  write_file "$workspace/fearless-iOS/fearless/CoreLayer/OperationFactory/BlockExplorer/History/Main/IrohaHistoryOperationFactory.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/CoreLayer/OperationFactory/BlockExplorer/History/Main/IrohaHistoryOperationFactory.swift" \
     'let items = try response.instructionPage(' \
     'let route = toolResult["structuredContent"]' \
     'case missingScale(String)' \
@@ -1273,7 +1273,7 @@ write_wallet_ready_sources() {
     'let outgoing = sourceAccount == accountAddress' \
     'amount.toSubstrateAmount(precision: Int16(precision)) == transfer.amount'
 
-  write_file "$workspace/fearless-iOS/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift" \
     'let definitions = try await client.assetDefinitions(limit: IrohaToriiRoutes.maxLimit, offset: 0, countMode: .bounded)' \
     'guard definitions.countMode == IrohaToriiCountMode.bounded.rawValue else { fail() }' \
     'let response = try await client.accountAssets(limit: IrohaToriiRoutes.maxLimit, offset: 0, countMode: .bounded)' \
@@ -1286,7 +1286,7 @@ write_wallet_ready_sources() {
     'let maxBalanceInPlanks = maxIrohaNumeric * scaleFactor' \
     'guard value <= maxBalanceInPlanks - total else { fail() }'
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift" \
     'if exactIrohaNetwork(for: requestedChainId) != nil {' \
     'return storedChainId == requestedChainId' \
     'case UniversalWalletRegistry.taira.chainId:' \
@@ -1298,26 +1298,26 @@ write_wallet_ready_sources() {
     'trimmedChainId.caseInsensitiveCompare(UniversalWalletRegistry.nexus.chainId) == .orderedSame' \
     'trimmedChainId.caseInsensitiveCompare("iroha3-taira") == .orderedSame'
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift" \
     'chainId == chainId.trimmingCharacters(in: .whitespacesAndNewlines)' \
     '!UniversalWalletChainAccountSupport.isNonCanonicalIrohaIdentity(chainId)'
 
-  write_file "$workspace/fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift" \
     'func testIrohaAddressResolutionRejectsAliasesCaseMutationsAndUnknownIdentifiers() {}' \
     'func testIrohaAddressResolutionRejectsWhitespaceWrappedKnownIdentities() {}'
 
-  write_file "$workspace/fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift" \
     'func testSingleNoncanonicalIrohaStoredRowIsQuarantined() {}' \
     'func testSingleWhitespaceWrappedIrohaStoredRowIsQuarantined() {}'
 
-  write_file "$workspace/fearless-iOS/fearlessTests/IrohaToriiContractTests.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/IrohaToriiContractTests.swift" \
     'func testRejectsPaddedAssetDefinitionIdentifiersWithoutCanonicalizing() {}'
 
-  write_file "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletMigrationContract.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletMigrationContract.swift" \
     'chainAccount(matchingExactly: Self.tairaChainIds)' \
     'chainAccount(matchingExactly: Self.nexusChainIds)'
 
-  write_file "$workspace/fearless-iOS/fearless/Modules/Send/SendDependencyContainer.swift" \
+  write_file "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Modules/Send/SendDependencyContainer.swift" \
     'if UniversalWalletChainAccountSupport.isNonCanonicalIrohaProfile(chainAsset.chain) {'
 }
 
@@ -1408,8 +1408,8 @@ setup_fixture() {
   write_iroha_ready
   write_iroha_release_config
   write_nexus_production_evidence_config
-  write_fake_mobile_validator "$workspace/fearless-Android/scripts/check-iroha-mobile-sdk-release-assets.sh" android
-  write_fake_mobile_validator "$workspace/fearless-iOS/scripts/check-iroha-mobile-sdk-release-assets.sh" ios
+  write_fake_mobile_validator "$workspace/fearless-Android-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh" android
+  write_fake_mobile_validator "$workspace/fearless-iOS-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh" ios
   write_fake_web_validator "$workspace/fearless-wallet-web/scripts/check-iroha-js-sdk-artifact.sh"
   write_fake_curl
   write_fake_cargo
@@ -1588,6 +1588,30 @@ fi
 
 setup_fixture
 expect_success "complete fixture with default Minamoto URL" good
+
+setup_fixture
+cp -R "$workspace/fearless-Android-production-consolidated-20260731" "$workspace/fearless-Android"
+rm "$workspace/fearless-Android-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh"
+expect_failure "historical Android validator cannot replace missing consolidated candidate" "Android Iroha mobile SDK release asset validator" good
+
+setup_fixture
+cp -R "$workspace/fearless-iOS-production-consolidated-20260731" "$workspace/fearless-iOS"
+rm "$workspace/fearless-iOS-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh"
+expect_failure "historical iOS validator cannot replace missing consolidated candidate" "iOS Iroha mobile SDK release asset validator" good
+
+setup_fixture
+cp -R "$workspace/fearless-Android-production-consolidated-20260731" "$workspace/fearless-Android"
+sed -i.bak 's#https://minamoto.sora.org#https://wrong.invalid#' \
+  "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt"
+rm -f "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt.bak"
+expect_failure "historical Android registry cannot mask consolidated candidate drift" "SORA Nexus Torii URL" good
+
+setup_fixture
+cp -R "$workspace/fearless-iOS-production-consolidated-20260731" "$workspace/fearless-iOS"
+sed -i.bak 's#https://minamoto.sora.org#https://wrong.invalid#' \
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletRegistry.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletRegistry.swift.bak"
+expect_failure "historical iOS registry cannot mask consolidated candidate drift" "SORA Nexus Torii URL" good
 
 setup_fixture
 NEXUS_RECEIPT_BASE_URL=https://forged.invalid \
@@ -2184,32 +2208,32 @@ expect_failure "web retired receipt hash alias restored" "web canonical submit r
 
 setup_fixture
 sed -i.bak 's/requireJsonContentType(response)/acceptAnySuccessfulBody(response)/' \
-  "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt"
-rm -f "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt.bak"
+  "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt"
+rm -f "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt.bak"
 expect_failure "Android outer JSON media-type guard removed" "Android outer JSON media-type requirement" good
 
 setup_fixture
 sed -i.bak 's/duplicate case-insensitive headers/ignored case-insensitive headers/' \
-  "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt"
-rm -f "$workspace/fearless-Android/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt.bak"
+  "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt"
+rm -f "$workspace/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/data/network/iroha/IrohaToriiClient.kt.bak"
 expect_failure "Android nested header collision guard removed" "Android nested case-colliding header refusal" good
 
 setup_fixture
 sed -i.bak 's/try requireJSONContentType(headers)/try acceptAnySuccessfulBody(headers)/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiClient.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiClient.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiClient.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiClient.swift.bak"
 expect_failure "iOS outer JSON media-type guard removed" "iOS outer JSON media-type requirement" good
 
 setup_fixture
 sed -i.bak 's/let contentType: String/let contentType: String?/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift.bak"
 expect_failure "iOS nested content type made optional" "iOS nested MCP content type must not be optional" good
 
 setup_fixture
 sed -i.bak 's/let headers: \[String: String\]/let headers: [String: String]?/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift.bak"
 expect_failure "iOS nested fanout headers made optional" "iOS nested MCP fanout headers must not be optional" good
 
 setup_fixture
@@ -2220,90 +2244,90 @@ expect_failure "web case-insensitive Iroha routing restored" "web exact Iroha tr
 
 setup_fixture
 sed -i.bak 's/return id == UniversalWalletRegistry.taira.chainId ||/return id == UniversalWalletRegistry.taira.id ||/' \
-  "$workspace/fearless-Android/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt"
-rm -f "$workspace/fearless-Android/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt.bak"
+  "$workspace/fearless-Android-production-consolidated-20260731/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt"
+rm -f "$workspace/fearless-Android-production-consolidated-20260731/runtime/src/main/java/jp/co/soramitsu/runtime/ext/UniversalWalletIrohaExt.kt.bak"
 expect_failure "Android Iroha registry-alias routing restored" "Android exact Iroha identity" good
 
 setup_fixture
 sed -i.bak 's/seenAccountAssetScopes.add(canonicalItemAsset to canonicalScope)/true/' \
-  "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt"
-rm -f "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt.bak"
+  "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt"
+rm -f "$workspace/fearless-Android-production-consolidated-20260731/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/network/blockchain/balance/IrohaBalanceLoader.kt.bak"
 expect_failure "Android duplicate account-asset scope accepted" "Android strict Taira balance contract" good
 
 setup_fixture
 sed -i.bak 's/return storedChainId == requestedChainId/return storedChainId.lowercased() == requestedChainId.lowercased()/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
 expect_failure "iOS case-insensitive Iroha stored-account matching restored" "iOS exact Iroha account identity" good
 
 setup_fixture
 sed -i.bak 's/seenAssetScopes.insert("\\(canonicalAsset)\\u{0}\\(canonicalScope)").inserted/true/' \
-  "$workspace/fearless-iOS/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift"
-rm -f "$workspace/fearless-iOS/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/ApplicationLayer/Services/Balance/RemoteSubscription/AccountInfoRemoteService.swift.bak"
 expect_failure "iOS duplicate account-asset scope accepted" "iOS strict Taira balance contract" good
 
 setup_fixture
 sed -i.bak 's/assetDefinitionId == assetDefinitionId.trimmingCharacters(in: .whitespacesAndNewlines)/true/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/IrohaToriiContract.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/IrohaToriiContract.swift.bak"
 expect_failure "iOS asset-definition padding normalized" "iOS exact asset-definition identifier routing" good
 
 setup_fixture
 sed -i.bak 's/testRejectsPaddedAssetDefinitionIdentifiersWithoutCanonicalizing/testAcceptsPaddedAssetDefinitionIdentifiers/' \
-  "$workspace/fearless-iOS/fearlessTests/IrohaToriiContractTests.swift"
-rm -f "$workspace/fearless-iOS/fearlessTests/IrohaToriiContractTests.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/IrohaToriiContractTests.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/IrohaToriiContractTests.swift.bak"
 expect_failure "iOS padded asset-definition regression test removed" "iOS padded asset-definition identifier adversarial test" good
 
 setup_fixture
 sed -i.bak 's/!UniversalWalletChainAccountSupport.isNonCanonicalIrohaIdentity(chainId)/true/' \
-  "$workspace/fearless-iOS/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Storage/EntityToModel/MetaAccountMapper.swift.bak"
 expect_failure "iOS stored Iroha quarantine bypassed" "iOS stored Iroha identity quarantine invariant" good
 
 setup_fixture
 sed -i.bak 's/testSingleNoncanonicalIrohaStoredRowIsQuarantined/testSingleIrohaStoredRowIsAccepted/' \
-  "$workspace/fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift"
-rm -f "$workspace/fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift.bak"
 expect_failure "iOS stored Iroha quarantine test removed" "iOS stored Iroha identity quarantine test" good
 
 setup_fixture
 sed -i.bak 's/testIrohaAddressResolutionRejectsAliasesCaseMutationsAndUnknownIdentifiers/testIrohaAddressResolutionAcceptsAliases/' \
-  "$workspace/fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift"
-rm -f "$workspace/fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift.bak"
 expect_failure "iOS noncanonical identity adversarial test removed" "iOS noncanonical Iroha identity adversarial test" good
 
 setup_fixture
 sed -i.bak 's/let trimmedChainId = chainId.trimmingCharacters(in: .whitespacesAndNewlines)/let trimmedChainId = chainId/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
 expect_failure "iOS whitespace-wrapped Iroha identity accepted" "iOS noncanonical Iroha identity classifier" good
 
 setup_fixture
 sed -i.bak 's/trimmedChainId.caseInsensitiveCompare("iroha3-taira") == .orderedSame/false/' \
-  "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
-rm -f "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletAccountAddressResolver.swift.bak"
 expect_failure "iOS retired Taira identity accepted" "iOS noncanonical Iroha identity classifier" good
 
 setup_fixture
 sed -i.bak 's/testIrohaAddressResolutionRejectsWhitespaceWrappedKnownIdentities/testIrohaAddressResolutionAcceptsWhitespaceWrappedKnownIdentities/' \
-  "$workspace/fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift"
-rm -f "$workspace/fearless-iOS/fearlessTests/UniversalWalletAccountAddressResolverTests.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/UniversalWalletAccountAddressResolverTests.swift.bak"
 expect_failure "iOS whitespace-wrapped identity test removed" "iOS whitespace-wrapped Iroha identity adversarial test" good
 
 setup_fixture
 sed -i.bak 's/testSingleWhitespaceWrappedIrohaStoredRowIsQuarantined/testSingleWhitespaceWrappedIrohaStoredRowIsAccepted/' \
-  "$workspace/fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift"
-rm -f "$workspace/fearless-iOS/fearlessTests/Common/Storage/MetaAccountMapperTests.swift.bak"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift"
+rm -f "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/Common/Storage/MetaAccountMapperTests.swift.bak"
 expect_failure "iOS whitespace-wrapped stored-row test removed" "iOS whitespace-wrapped stored Iroha quarantine test" good
 
 setup_fixture
 printf '\nval retiredIrohaIdentity = UniversalWalletRegistry.taira.id\n' >> \
-  "$workspace/fearless-Android/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt"
+  "$workspace/fearless-Android-production-consolidated-20260731/feature-account-api/src/main/java/jp/co/soramitsu/account/api/domain/model/AndroidUniversalWalletMigrationSnapshotBuilder.kt"
 expect_failure "Android Iroha migration registry alias restored" "Android Iroha registry aliases must not be stored-account or migration identities" good
 
 setup_fixture
 printf '\nlet retiredIrohaIdentity = UniversalWalletRegistry.taira.id\n' >> \
-  "$workspace/fearless-iOS/fearless/Common/Model/UniversalWalletMigrationContract.swift"
+  "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletMigrationContract.swift"
 expect_failure "iOS Iroha migration registry alias restored" "iOS Iroha registry aliases must not be migration identities" good
 
 setup_fixture

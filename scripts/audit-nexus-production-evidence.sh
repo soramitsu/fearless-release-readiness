@@ -165,8 +165,8 @@ const WALLET_EXPECTED_COMMIT_ENV = {
 };
 const EXPECTED_COMMIT_REPOS = {
   routeManifest: { label: '../iroha', repoPath: path.resolve(rootDir, '..', 'iroha') },
-  android: { label: 'fearless-Android', repoPath: path.resolve(rootDir, 'fearless-Android') },
-  ios: { label: 'fearless-iOS', repoPath: path.resolve(rootDir, 'fearless-iOS') },
+  android: { label: 'fearless-Android-production-consolidated-20260731', repoPath: path.resolve(rootDir, 'fearless-Android-production-consolidated-20260731') },
+  ios: { label: 'fearless-iOS-production-consolidated-20260731', repoPath: path.resolve(rootDir, 'fearless-iOS-production-consolidated-20260731') },
   web: { label: 'fearless-wallet-web', repoPath: path.resolve(rootDir, 'fearless-wallet-web') },
 };
 

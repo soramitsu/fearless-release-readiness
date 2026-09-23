@@ -346,6 +346,43 @@ blocked-state self-tests and audits on the selected sources, including 110 iOS
 and 48 web negative/adversarial fixtures. This closes a checkout-selection
 gap in the gate; it does not qualify new SDK artifacts or funded sends.
 
+## Consolidated candidate audit reconciliation — 2026-09-23
+
+The root passkey prerequisite, Iroha wallet coverage and release, Taira source,
+Nexus evidence, private-overlay and workflow-action audits now select the
+consolidated Android/iOS candidates. Historical mobile trees cannot substitute
+for missing or changed current source in the added fixtures. The real wallet
+coverage audit passes on the current source, including the iOS production-send
+denial test. Its result is explicitly blocked-state coverage: enabled Taira/Nexus
+send, new SDK artifacts and funded receipts remain unqualified. The Nexus
+evidence suite passes 14 positive and 161 negative cases; it now derives wallet
+commit identities from the consolidated checkouts. The action-pin audit checks
+72 immutable references across 20 selected workflows.
+
+The passkey prerequisite audit initially reported six gaps that were stale
+source-pattern assumptions. Android already persists the wallet, account and
+timestamp fields through a bounded Drive-property writer. The iOS production
+entitlements use the exact App Store CloudKit container and application group;
+the provisioning checklist phrase wraps across two lines. The audit now verifies
+those actual contracts, and its 128 adversarial fixtures and real source check
+pass. This is a source prerequisite check only: provider provisioning, native
+PRF/decryption, owner integration and replacement-device proof remain open.
+
+Root and mobile private-overlay audits now accept real Git worktrees and invoke
+Git with an isolated environment for both checkout validation and private-file
+enumeration. The platform and root fixtures pass, including ambient `GIT_DIR`
+and `GIT_INDEX_FILE` substitution attempts; the real Android/iOS private-overlay
+comparison passes. Android commit `62a6e5709` and iOS commit `04e521410` contain
+the platform fixes and require push and exact-head CI after the preceding hosted
+runs finish.
+
+The Taira audit's mobile lookups now read consolidated candidates, but its full
+suite and real static audit stop on the current Iroha OpenAPI artifact: required
+`SoraRuntimeHfModelHostV1` is missing. The nested Iroha release fixture also
+omits that artifact. Focused candidate-substitution fixtures pass; no Iroha
+source or branch was modified. The user's Iroha work is restricted to its
+`optimizations` branch. These failures remain release blockers, not waived gates.
+
 ## Owner backup-head authorization — 2026-09-23
 
 The non-deployed owner authority now mints an internal 60-second grant bound

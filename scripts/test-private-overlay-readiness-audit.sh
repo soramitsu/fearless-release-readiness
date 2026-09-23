@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AUDIT_SCRIPT="$SCRIPT_DIR/audit-private-overlay-readiness.sh"
-REAL_ANDROID_AUDIT="$SCRIPT_DIR/../fearless-Android/scripts/audit-private-overlay-boundary.sh"
-REAL_ANDROID_TEST="$SCRIPT_DIR/../fearless-Android/scripts/test-private-overlay-boundary.sh"
-REAL_IOS_AUDIT="$SCRIPT_DIR/../fearless-iOS/scripts/audit-private-overlay-boundary.sh"
-REAL_IOS_TEST="$SCRIPT_DIR/../fearless-iOS/scripts/test-private-overlay-boundary.sh"
+REAL_ANDROID_AUDIT="$SCRIPT_DIR/../fearless-Android-production-consolidated-20260731/scripts/audit-private-overlay-boundary.sh"
+REAL_ANDROID_TEST="$SCRIPT_DIR/../fearless-Android-production-consolidated-20260731/scripts/test-private-overlay-boundary.sh"
+REAL_IOS_AUDIT="$SCRIPT_DIR/../fearless-iOS-production-consolidated-20260731/scripts/audit-private-overlay-boundary.sh"
+REAL_IOS_TEST="$SCRIPT_DIR/../fearless-iOS-production-consolidated-20260731/scripts/test-private-overlay-boundary.sh"
 
 fail() {
   echo "[private-overlay-readiness-test][error] $*" >&2
@@ -49,7 +49,7 @@ install_platform_scripts() {
 }
 
 make_android_pair() {
-  local public_repo="$workspace/fearless-Android"
+  local public_repo="$workspace/fearless-Android-production-consolidated-20260731"
   local private_repo="$workspace/fearless-Android-priv"
   mkdir -p "$public_repo" "$private_repo"
   init_repo "$public_repo"
@@ -62,7 +62,7 @@ make_android_pair() {
 }
 
 make_ios_pair() {
-  local public_repo="$workspace/fearless-iOS"
+  local public_repo="$workspace/fearless-iOS-production-consolidated-20260731"
   local private_repo="$workspace/fearless-iOS-priv"
   mkdir -p "$public_repo" "$private_repo"
   init_repo "$public_repo"
@@ -132,6 +132,7 @@ grep -q $'T\tapp/src/main/java/jp/co/soramitsu/PublicFeature.kt' "$report_dir/an
 reset_fixture
 rm -rf "$workspace/fearless-iOS-priv"
 expect_failure "missing private repo" "ios private repo missing"
+expect_success "allow missing private repo" --allow-missing
 
 reset_fixture
 write_file "$workspace/fearless-Android-priv/feature-wallet-impl/src/main/java/jp/co/soramitsu/PrivateTransfer.kt" "private product code"
@@ -148,7 +149,14 @@ grep -q $'M\tfearless/Common/Model/PublicFeature.swift' "$report_dir/ios-private
   fail "expected iOS report to include modified product path"
 
 reset_fixture
-rm -rf "$workspace/fearless-iOS-priv"
-expect_success "allow missing private repo" --allow-missing
+cp -R "$workspace/fearless-Android-production-consolidated-20260731" "$workspace/fearless-Android"
+rm -rf "$workspace/fearless-Android-production-consolidated-20260731"
+expect_failure "historical Android checkout cannot substitute for candidate" "android public repo missing or not a Git checkout"
+
+reset_fixture
+git -C "$workspace/fearless-Android-production-consolidated-20260731" -c commit.gpgsign=false commit -qm fixture
+mv "$workspace/fearless-Android-production-consolidated-20260731" "$workspace/fearless-Android"
+git -C "$workspace/fearless-Android" worktree add --detach "$workspace/fearless-Android-production-consolidated-20260731" HEAD >/dev/null
+expect_success "consolidated Git worktree checkout"
 
 echo "[private-overlay-readiness-test] all tests passed"

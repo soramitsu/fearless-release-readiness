@@ -690,12 +690,26 @@ expect_failure "missing expected route manifest commit source" "NEXUS_ROUTE_MANI
     NEXUS_EVIDENCE_ROOT="$tmp_dir/no-repos" \
     bash "$AUDIT_SCRIPT" --evidence "$ready" --require-ready
 
-expect_failure "missing expected android wallet commit source" "NEXUS_ANDROID_WALLET_EXPECTED_COMMIT must be set because fearless-Android HEAD could not be determined" \
+mkdir -p "$tmp_dir/no-repos/fearless-Android" "$tmp_dir/no-repos/fearless-iOS"
+git -C "$tmp_dir/no-repos/fearless-Android" init -q
+git -C "$tmp_dir/no-repos/fearless-Android" -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm historical
+git -C "$tmp_dir/no-repos/fearless-iOS" init -q
+git -C "$tmp_dir/no-repos/fearless-iOS" -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm historical
+expect_failure "historical Android checkout cannot supply expected wallet commit" "NEXUS_ANDROID_WALLET_EXPECTED_COMMIT must be set because fearless-Android-production-consolidated-20260731 HEAD could not be determined" \
   env \
     -u NEXUS_ANDROID_WALLET_EXPECTED_COMMIT \
     NEXUS_EVIDENCE_ROOT="$tmp_dir/no-repos" \
     NEXUS_ROUTE_MANIFEST_EXPECTED_COMMIT="$ROUTE_MANIFEST_COMMIT" \
     NEXUS_IOS_WALLET_EXPECTED_COMMIT="$IOS_WALLET_COMMIT" \
+    NEXUS_WEB_WALLET_EXPECTED_COMMIT="$WEB_WALLET_COMMIT" \
+    bash "$AUDIT_SCRIPT" --evidence "$ready" --require-ready
+
+expect_failure "historical iOS checkout cannot supply expected wallet commit" "NEXUS_IOS_WALLET_EXPECTED_COMMIT must be set because fearless-iOS-production-consolidated-20260731 HEAD could not be determined" \
+  env \
+    -u NEXUS_IOS_WALLET_EXPECTED_COMMIT \
+    NEXUS_EVIDENCE_ROOT="$tmp_dir/no-repos" \
+    NEXUS_ROUTE_MANIFEST_EXPECTED_COMMIT="$ROUTE_MANIFEST_COMMIT" \
+    NEXUS_ANDROID_WALLET_EXPECTED_COMMIT="$ANDROID_WALLET_COMMIT" \
     NEXUS_WEB_WALLET_EXPECTED_COMMIT="$WEB_WALLET_COMMIT" \
     bash "$AUDIT_SCRIPT" --evidence "$ready" --require-ready
 

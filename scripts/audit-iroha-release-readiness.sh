@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="${IROHA_READINESS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PARENT_DIR="${IROHA_READINESS_PARENT:-$(cd "$ROOT_DIR/.." && pwd)}"
 
-ANDROID_VALIDATOR="$ROOT_DIR/fearless-Android/scripts/check-iroha-mobile-sdk-release-assets.sh"
-IOS_VALIDATOR="$ROOT_DIR/fearless-iOS/scripts/check-iroha-mobile-sdk-release-assets.sh"
+ANDROID_VALIDATOR="$ROOT_DIR/fearless-Android-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh"
+IOS_VALIDATOR="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/scripts/check-iroha-mobile-sdk-release-assets.sh"
 WEB_REPO="$ROOT_DIR/fearless-wallet-web"
 WEB_JS_VALIDATOR="$ROOT_DIR/fearless-wallet-web/scripts/check-iroha-js-sdk-artifact.sh"
 IROHA_REPO="$PARENT_DIR/iroha"
@@ -762,8 +762,8 @@ NODE
 check_nexus_sources() {
   local nexus_base_url="$1"
   local web_registry="$ROOT_DIR/fearless-wallet-web/src/consts/universalWallet.ts"
-  local android_registry="$ROOT_DIR/fearless-Android/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt"
-  local ios_registry="$ROOT_DIR/fearless-iOS/fearless/Common/Model/UniversalWalletRegistry.swift"
+  local android_registry="$ROOT_DIR/fearless-Android-production-consolidated-20260731/common/src/main/java/jp/co/soramitsu/common/model/UniversalWalletRegistry.kt"
+  local ios_registry="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/UniversalWalletRegistry.swift"
 
   log "Checking committed SORA Nexus Torii endpoint bindings"
 

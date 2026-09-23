@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -401,6 +401,40 @@ for (const firstReleasePin of [
   );
 }
 cases += 1;
+
+const sourceRoot = resolve(SCRIPT_DIR, '..');
+const historicalSubstitutionRoot = mkdtempSync(resolve(tmpdir(), 'fearless-taira-mobile-source-'));
+try {
+  symlinkSync(resolve(sourceRoot, 'fearless-wallet-web'), resolve(historicalSubstitutionRoot, 'fearless-wallet-web'), 'dir');
+  symlinkSync(
+    resolve(sourceRoot, 'fearless-Android-production-consolidated-20260731'),
+    resolve(historicalSubstitutionRoot, 'fearless-Android'),
+    'dir'
+  );
+  expectFailure(
+    'historical Android checkout cannot replace a missing consolidated candidate',
+    () => runStaticAudit({ root: historicalSubstitutionRoot, parent: resolve(SCRIPT_DIR, '../..') }),
+    /Android universal-wallet registry is missing or unreadable at .*fearless-Android-production-consolidated-20260731/u
+  );
+
+  symlinkSync(
+    resolve(sourceRoot, 'fearless-Android-production-consolidated-20260731'),
+    resolve(historicalSubstitutionRoot, 'fearless-Android-production-consolidated-20260731'),
+    'dir'
+  );
+  symlinkSync(
+    resolve(sourceRoot, 'fearless-iOS-production-consolidated-20260731'),
+    resolve(historicalSubstitutionRoot, 'fearless-iOS'),
+    'dir'
+  );
+  expectFailure(
+    'historical iOS checkout cannot replace a missing consolidated candidate',
+    () => runStaticAudit({ root: historicalSubstitutionRoot, parent: resolve(SCRIPT_DIR, '../..') }),
+    /iOS universal-wallet registry is missing or unreadable at .*fearless-iOS-production-consolidated-20260731/u
+  );
+} finally {
+  rmSync(historicalSubstitutionRoot, { force: true, recursive: true });
+}
 
 const irohaRoot = resolve(SCRIPT_DIR, '../../iroha');
 const runtimeExecutionHostOpenApiArtifacts = {

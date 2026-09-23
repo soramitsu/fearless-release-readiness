@@ -7,8 +7,8 @@ MAX_WORKFLOW_BYTES=$((1024 * 1024))
 
 repos=(
   "$ROOT_DIR"
-  "$ROOT_DIR/fearless-Android"
-  "$ROOT_DIR/fearless-iOS"
+  "$ROOT_DIR/fearless-Android-production-consolidated-20260731"
+  "$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
   "$ROOT_DIR/fearless-wallet-web"
   "$ROOT_DIR/fearless-site-web"
   "$PARENT_DIR/ton-indexer"

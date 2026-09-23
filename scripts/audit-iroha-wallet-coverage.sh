@@ -77,7 +77,7 @@ check_web_coverage() {
 }
 
 check_android_coverage() {
-  local android="$ROOT_DIR/fearless-Android"
+  local android="$ROOT_DIR/fearless-Android-production-consolidated-20260731"
   local transfer_test="$android/feature-wallet-impl/src/test/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/BitcoinTransferServiceProviderTest.kt"
   local metadata_test="$android/feature-wallet-impl/src/test/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/IrohaTransferMetadataTest.kt"
   local metadata="$android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/IrohaTransferMetadata.kt"
@@ -122,7 +122,7 @@ check_android_coverage() {
 }
 
 check_ios_coverage() {
-  local ios="$ROOT_DIR/fearless-iOS"
+  local ios="$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
   local transfer_test="$ios/fearlessTests/ApplicationLayer/Services/FeatureToggle/TonChainSelectionTests.swift"
   local transfer="$ios/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift"
   local torii_test="$ios/fearlessTests/IrohaToriiClientTests.swift"
@@ -134,8 +134,10 @@ check_ios_coverage() {
   require_file "$torii_test" "iOS Iroha Torii client test"
   require_file "$routing_test" "iOS Iroha address resolver test"
 
-  require_literal "$transfer_test" "testPrepareDependenciesCreatesIrohaTransferServiceForTairaAccount" "iOS Taira transfer service routing test"
-  require_literal "$transfer_test" "testPrepareDependenciesCreatesIrohaTransferServiceForNexusAccount" "iOS Nexus transfer service routing test"
+  require_literal "$transfer_test" "testProductionSendDependenciesRejectIrohaBeforeServiceConstruction" "iOS production Iroha send-routing denial test"
+  require_literal "$transfer_test" "UniversalWalletRegistry.taira.chainId," "iOS Taira send-routing denial coverage"
+  require_literal "$transfer_test" "UniversalWalletRegistry.nexus.chainId" "iOS Nexus send-routing denial coverage"
+  require_literal "$transfer_test" "XCTAssertEqual(error, .irohaProductionSendDisabled)" "iOS disabled production-send error assertion"
   require_literal "$transfer_test" "testIrohaTransferServiceBuildsSignerRequestAndSubmitsNorito" "iOS Taira signed transfer submission test"
   require_literal "$transfer_test" "testIrohaTransferServiceBuildsNexusSignerRequestAndSubmitsNorito" "iOS Nexus signed transfer submission test"
   require_literal "$transfer_test" "testIrohaTransferServiceRejectsMnemonicMismatchBeforeSignerOrToriiCalls" "iOS Iroha mnemonic mismatch test"
@@ -175,4 +177,4 @@ if ((${#failures[@]} > 0)); then
   exit 1
 fi
 
-log "Iroha/Nexus wallet coverage audit passed."
+log "Iroha/Nexus blocked-state wallet coverage passed; enabled production send and funded receipts remain unqualified."

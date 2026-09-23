@@ -24,7 +24,7 @@ write_file() {
 }
 
 write_android_ready() {
-  local repo="$workspace/fearless-Android"
+  local repo="$workspace/fearless-Android-production-consolidated-20260731"
   write_file "$repo/app/src/main/AndroidManifest.xml" \
     '<?xml version="1.0" encoding="utf-8"?>' \
     '<manifest xmlns:android="http://schemas.android.com/apk/res/android">' \
@@ -75,15 +75,17 @@ write_android_ready() {
     'object GoogleDrivePasskeyBackup {' \
     '  const val APP_DATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata"' \
     '  const val OAUTH_APP_DATA_SCOPE = "oauth2:$APP_DATA_SCOPE"' \
+    '  const val MAX_APP_PROPERTY_BYTES = 124' \
     '}' \
     'fun metadata(appProperties: Map<String, String>) {' \
-    '  addProperty("walletId", "wallet-001")' \
-    '  addProperty("accountName", "alice@example.com")' \
-    '  addProperty("createdAtMillis", "1767225600000")' \
+    '  addBoundedProperty("walletId", payload.walletId)' \
+    '  addBoundedProperty("accountName", payload.accountName)' \
+    '  addBoundedProperty("createdAtMillis", payload.createdAtMillis.toString())' \
     '  requiredAppProperty(appProperties, "walletId")' \
     '  requiredAppProperty(appProperties, "accountName")' \
     '  requiredAppProperty(appProperties, "createdAtMillis")' \
     '}' \
+    'fun addBoundedProperty(name: String, value: String) { require(MAX_APP_PROPERTY_BYTES > 0); addProperty(name, value) }' \
     'class GoogleDrivePasskeyBackupCloudStorage'
   write_file "$repo/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt" \
     'package jp.co.soramitsu.passkey' \
@@ -96,7 +98,7 @@ write_android_ready() {
 }
 
 write_ios_ready() {
-  local repo="$workspace/fearless-iOS"
+  local repo="$workspace/fearless-iOS-production-consolidated-20260731"
   write_file "$repo/fearless/Common/Model/PasskeyBackupContract.swift" \
     'import AuthenticationServices' \
     'import CloudKit' \
@@ -217,9 +219,9 @@ write_ios_ready() {
     '  <key>com.apple.developer.icloud-services</key>' \
     '  <array><string>CloudKit</string></array>' \
     '  <key>com.apple.developer.icloud-container-identifiers</key>' \
-    '  <array><string>iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)</string></array>' \
+    '  <array><string>iCloud.jp.co.soramitsu.fearlesswallet</string></array>' \
     '  <key>com.apple.security.application-groups</key>' \
-    '  <array><string>group.$(PRODUCT_BUNDLE_IDENTIFIER)</string></array>' \
+    '  <array><string>group.jp.co.soramitsu.fearlesswallet</string></array>' \
     '</dict>' \
     '</plist>'
   write_file "$repo/fearless.xcodeproj/project.pbxproj" \
@@ -228,7 +230,8 @@ write_ios_ready() {
   write_file "$repo/docs/release-checklist.md" \
     'Run ../config/passkey-backup-production.json passkey release config checks before release.' \
     'Keep isPasskeyBackupEnabled=false unless live health passes.' \
-    'Confirm Google account selection, Google Drive consent, cross-platform restore, optional iCloud copy, iCloud account availability, CloudKit production schema, associated-domain provisioning, provisioning profiles, and restore before creating a new backup.'
+    'Confirm Google account selection, Google Drive consent, cross-platform restore, optional iCloud copy, iCloud account availability, CloudKit production schema, associated-domain provisioning, provisioning' \
+    'profiles, and restore before creating a new backup.'
 }
 
 write_passkey_config() {
@@ -546,6 +549,15 @@ expect_command_failure() {
 
 reset_fixture
 expect_success "complete passkey backup fixture"
+
+reset_fixture
+cp -R "$workspace/fearless-Android-production-consolidated-20260731" "$workspace/fearless-Android"
+perl -0pi -e 's#https://backup\.fearlesswallet\.io#https://example.com#' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+expect_failure "historical Android checkout cannot mask a changed consolidated candidate" "Android passkey challenge service URL"
+
+reset_fixture
+mv "$workspace/fearless-iOS-production-consolidated-20260731" "$workspace/fearless-iOS"
+expect_failure "historical iOS checkout cannot replace a missing consolidated candidate" "iOS repo missing: $workspace/fearless-iOS-production-consolidated-20260731"
 
 reset_fixture
 PASSKEY_BACKUP_LIVE_HEALTH=1 FAKE_PASSKEY_AUDIT_SCENARIO=good expect_success "complete passkey backup fixture with live health"
@@ -872,78 +884,82 @@ NODE
 expect_failure "iOS Drive scope must remain appdata" "iOS Drive scope must match Android drive.appdata"
 
 reset_fixture
-perl -0pi -e 's#https://backup\.fearlesswallet\.io#https://example.com#' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+perl -0pi -e 's#https://backup\.fearlesswallet\.io#https://example.com#' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android release config drift" "Android passkey challenge service URL"
 
 reset_fixture
-perl -0pi -e 's#  const val PASSKEY_BACKUP_ENABLED = false\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+perl -0pi -e 's#  const val PASSKEY_BACKUP_ENABLED = false\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android missing disabled passkey flag" "Android passkey backup release flag disabled by default"
 
 reset_fixture
-perl -0pi -e 's#Google account selection, ##' "$workspace/fearless-Android/docs/release-checklist.md"
+perl -0pi -e 's#Google account selection, ##' "$workspace/fearless-Android-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "android missing Google account selection release gate" "Android release checklist passkey Google account selection UX"
 
 reset_fixture
-perl -0pi -e 's#Google Drive consent, ##' "$workspace/fearless-Android/docs/release-checklist.md"
+perl -0pi -e 's#Google Drive consent, ##' "$workspace/fearless-Android-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "android missing Google Drive consent release gate" "Android release checklist passkey Google Drive consent UX"
 
 reset_fixture
-rm -rf "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey"
+rm -rf "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey"
 expect_failure "android system backup disabled without app-owned backup" "Android app must define a reviewed backup posture"
 
 reset_fixture
-rm "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+rm "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android missing Credential Manager code" "Android must contain Credential Manager"
 
 reset_fixture
-perl -0pi -e 's#const val APP_DATA_SCOPE = "https://www\.googleapis\.com/auth/drive\.appdata"\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
-perl -0pi -e 's#const val OAUTH_APP_DATA_SCOPE = "oauth2:\\$APP_DATA_SCOPE"\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+perl -0pi -e 's#const val APP_DATA_SCOPE = "https://www\.googleapis\.com/auth/drive\.appdata"\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+perl -0pi -e 's#const val OAUTH_APP_DATA_SCOPE = "oauth2:\\$APP_DATA_SCOPE"\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
 expect_failure "android missing Google Drive appdata scope" "Android Drive appdata scope"
 
 reset_fixture
-perl -0pi -e 's#class GoogleDrivePasskeyBackupCloudStorage##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+perl -0pi -e 's#class GoogleDrivePasskeyBackupCloudStorage##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
 expect_failure "android missing Google Drive appDataFolder adapter" "Android must include a Google Drive appDataFolder passkey backup storage adapter"
 
 reset_fixture
-perl -0pi -e 's#const val OAUTH_APP_DATA_SCOPE = "oauth2:\\$APP_DATA_SCOPE"\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
-perl -0pi -e 's#GoogleAuthUtil##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
-perl -0pi -e 's#class GoogleDrivePasskeyBackupTokenProvider\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
+perl -0pi -e 's#const val OAUTH_APP_DATA_SCOPE = "oauth2:\\$APP_DATA_SCOPE"\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+perl -0pi -e 's#GoogleAuthUtil##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
+perl -0pi -e 's#class GoogleDrivePasskeyBackupTokenProvider\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
 expect_failure "android missing Google Drive token provider" "Android Google Drive token fetcher"
 
 reset_fixture
-perl -0pi -e 's#class HttpPasskeyBackupChallengeService##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
+perl -0pi -e 's#class HttpPasskeyBackupChallengeService##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
 expect_failure "android missing remote challenge service" "Android passkey backup must include a remote challenge service contract"
 
 reset_fixture
-perl -0pi -e 's#class PasskeyBackupWorkflow\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+perl -0pi -e 's#class PasskeyBackupWorkflow\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android missing passkey workflow" "Android passkey backup must expose a testable registration and restore workflow"
 
 reset_fixture
-perl -0pi -e 's#  val walletId: String,\n##' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+perl -0pi -e 's#  val walletId: String,\n##' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
 expect_failure "android missing payload wallet metadata" "Android passkey encrypted payload wallet metadata"
 
 reset_fixture
-perl -0pi -e 's#^.*createdAtMillis.*\n##mg' "$workspace/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+perl -0pi -e 's#^.*createdAtMillis.*\n##mg' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
 expect_failure "android missing Drive created timestamp metadata validation" "Android Drive passkey backup creation timestamp persistence"
 
 reset_fixture
-perl -0pi -e 's#<string>webcredentials:fearlesswallet\.io</string>##' "$workspace/fearless-iOS/fearless/WalletConnect.entitlements"
+perl -0pi -e 's/addProperty\(name, value\)/ignoreProperty(name, value)/' "$workspace/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+expect_failure "android bounded metadata writer removed" "Android Drive bounded metadata property writer"
+
+reset_fixture
+perl -0pi -e 's#<string>webcredentials:fearlesswallet\.io</string>##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
 expect_failure "ios missing webcredentials" "iOS entitlements must include associated domains"
 
 reset_fixture
-perl -0pi -e 's#iCloud\.\$\(PRODUCT_BUNDLE_IDENTIFIER\)#iCloud.jp.co.soramitsu.fearless#' "$workspace/fearless-iOS/fearless/WalletConnect.entitlements"
-expect_failure "ios stale literal CloudKit entitlement" "iOS configuration-resolved CloudKit container entitlement"
+perl -0pi -e 's#iCloud\.jp\.co\.soramitsu\.fearlesswallet#iCloud.jp.co.soramitsu.fearless#' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
+expect_failure "ios wrong production CloudKit entitlement" "iOS production CloudKit container entitlement"
 
 reset_fixture
-perl -0pi -e 's#group\.\$\(PRODUCT_BUNDLE_IDENTIFIER\)#group.com.walletconnect.sdk#' "$workspace/fearless-iOS/fearless/WalletConnect.entitlements"
-expect_failure "ios stale literal application group" "iOS configuration-resolved application-group entitlement"
+perl -0pi -e 's#group\.jp\.co\.soramitsu\.fearlesswallet#group.com.walletconnect.sdk#' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
+expect_failure "ios wrong production application group" "iOS production application-group entitlement"
 
 reset_fixture
-perl -0pi -e 's#</dict>#  <key>keychain-access-groups</key><array><string>group.com.walletconnect.sdk</string></array></dict>#' "$workspace/fearless-iOS/fearless/WalletConnect.entitlements"
+perl -0pi -e 's#</dict>#  <key>keychain-access-groups</key><array><string>group.com.walletconnect.sdk</string></array></dict>#' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
 expect_failure "ios unprovisioned explicit keychain group" "iOS unprovisioned explicit keychain access-group entitlement"
 
 reset_fixture
-perl -0pi -e 's#PRODUCT_BUNDLE_IDENTIFIER = jp\.co\.soramitsu\.fearlesswallet;#PRODUCT_BUNDLE_IDENTIFIER = jp.co.soramitsu.fearless;#' "$workspace/fearless-iOS/fearless.xcodeproj/project.pbxproj"
+perl -0pi -e 's#PRODUCT_BUNDLE_IDENTIFIER = jp\.co\.soramitsu\.fearlesswallet;#PRODUCT_BUNDLE_IDENTIFIER = jp.co.soramitsu.fearless;#' "$workspace/fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.pbxproj"
 expect_failure "ios App Store bundle id no longer matches entitlement expansion" "iOS App Store bundle identifier"
 
 reset_fixture
@@ -951,149 +967,153 @@ perl -0pi -e 's#iCloud\.jp\.co\.soramitsu\.fearlesswallet"#iCloud.jp.co.soramits
 expect_failure "ios production config uses stale release CloudKit container" "iOS release CloudKit container must match the App Store bundle identifier"
 
 reset_fixture
-rm "$workspace/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+rm "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
 expect_failure "ios missing Google Drive primary backup" "iOS Google Drive appdata scope source missing"
 
 reset_fixture
-perl -0pi -e 's#https://www\.googleapis\.com/auth/drive\.appdata#https://www.googleapis.com/auth/drive#' "$workspace/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+perl -0pi -e 's#https://www\.googleapis\.com/auth/drive\.appdata#https://www.googleapis.com/auth/drive#' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
 expect_failure "ios Drive requests wrong OAuth scope" "iOS Google Drive appdata scope"
 
 reset_fixture
-perl -0pi -e 's/import CloudKit\n//' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
-perl -0pi -e 's/  let container = CKContainer\(identifier: "iCloud\.io\.fearless\.wallet"\)\n//' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/import CloudKit\n//' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/  let container = CKContainer\(identifier: "iCloud\.io\.fearless\.wallet"\)\n//' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing CloudKit code" "iOS must contain iCloud/CloudKit backup storage integration"
 
 reset_fixture
-perl -0pi -e 's#enum PasskeyBackupError: Error \{\n  case unavailableCloudKitAccount\n\}\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
-perl -0pi -e 's#protocol PasskeyBackupCloudKitAccountStatusProvider \{\n  func accountStatus\\(\\) async throws -> CKAccountStatus\n\}\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#enum PasskeyBackupError: Error \{\n  case unavailableCloudKitAccount\n\}\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#protocol PasskeyBackupCloudKitAccountStatusProvider \{\n  func accountStatus\\(\\) async throws -> CKAccountStatus\n\}\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing CloudKit account status guard" "iOS passkey backup must fail closed when the CloudKit account is unavailable"
 
 reset_fixture
-perl -0pi -e 's#  static func validateAccountName\(_ value: String\) throws -> String \{ value \}\n##; s#  static func validateMatchingAccountName\(expected: String, actual: String\) throws -> String \{ expected \}\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#  static func validateAccountName\(_ value: String\) throws -> String \{ value \}\n##; s#  static func validateMatchingAccountName\(expected: String, actual: String\) throws -> String \{ expected \}\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing selected account validation" "iOS passkey backup must validate selected account names before registration"
 
 reset_fixture
-perl -0pi -e 's#  static func validateWalletId\(_ value: String\) throws -> String \{ value \}\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#  static func validateWalletId\(_ value: String\) throws -> String \{ value \}\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing wallet metadata validator" "iOS passkey backup wallet metadata validator"
 
 reset_fixture
-perl -0pi -e 's#  static let createdAtMillisField = "createdAtMillis"\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#  static let createdAtMillisField = "createdAtMillis"\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing CloudKit creation timestamp metadata" "iOS CloudKit passkey backup creation timestamp persistence"
 
 reset_fixture
-perl -0pi -e 's/PasskeyBackupChallengeService/RemovedChallengeService/g' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/PasskeyBackupChallengeService/RemovedChallengeService/g' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing remote challenge service" "iOS passkey backup must include a remote challenge service contract"
 
 reset_fixture
-perl -0pi -e 's#  static let isPasskeyBackupEnabled = false\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#  static let isPasskeyBackupEnabled = false\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing disabled passkey flag" "iOS passkey backup release flag disabled by default"
 
 reset_fixture
-perl -0pi -e 's#iCloud account availability, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's#iCloud account availability, ##' "$workspace/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "ios missing iCloud account release gate" "iOS release checklist passkey iCloud account UX"
 
 reset_fixture
-perl -0pi -e 's#Google Drive consent, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's#Google Drive consent, ##' "$workspace/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "ios missing Google Drive consent release gate" "iOS release checklist Google Drive consent UX"
 
 reset_fixture
-perl -0pi -e 's#cross-platform restore, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's#cross-platform restore, ##' "$workspace/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "ios missing cross-platform restore release gate" "iOS release checklist cross-platform recovery UX"
 
 reset_fixture
-perl -0pi -e 's#CloudKit production schema, ##' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's/profiles, and restore/profile, and restore/' "$workspace/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
+expect_failure "ios missing provisioning profile release gate" "iOS release checklist passkey provisioning profiles"
+
+reset_fixture
+perl -0pi -e 's#CloudKit production schema, ##' "$workspace/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
 expect_failure "ios missing CloudKit production schema release gate" "iOS release checklist passkey CloudKit production schema"
 
 reset_fixture
-perl -0pi -e 's#final class PasskeyBackupWorkflow \{\}\n##' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's#final class PasskeyBackupWorkflow \{\}\n##' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing passkey workflow" "iOS passkey backup must expose a testable registration and restore workflow"
 
 reset_fixture
-perl -0pi -e 's/enum PasskeyCredentialResponseSerializer/enum RemovedCredentialResponseSerializer/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/enum PasskeyCredentialResponseSerializer/enum RemovedCredentialResponseSerializer/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios missing standard WebAuthn serializer" "iOS standard WebAuthn credential response serializer"
 
 reset_fixture
-perl -0pi -e 's/"rawId": encodedCredentialID/"rawId": "different-id"/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/"rawId": encodedCredentialID/"rawId": "different-id"/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios WebAuthn rawId no longer bound to id" "iOS WebAuthn credential rawId binding"
 
 reset_fixture
-perl -0pi -e 's/"type": "public-key"/"type": "password"/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/"type": "public-key"/"type": "password"/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios WebAuthn credential type drift" "iOS WebAuthn public-key credential type"
 
 reset_fixture
-perl -0pi -e 's/userHandle: Data/userHandle: Data?/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/userHandle: Data/userHandle: Data?/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios optional WebAuthn user handle" "iOS WebAuthn optional assertion user handle is forbidden by the challenge service"
 
 reset_fixture
-perl -0pi -e 's/replacingOccurrences\(of: "=", with: ""\)/replacingOccurrences(of: "=", with: "=")/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/replacingOccurrences\(of: "=", with: ""\)/replacingOccurrences(of: "=", with: "=")/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios padded WebAuthn base64url output" "iOS WebAuthn unpadded base64url serialization"
 
 reset_fixture
-perl -0pi -e 's/testAssertionSerializerRejectsEveryEmptyRequiredField/testAssertionSerializerAcceptsEmptyFields/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testAssertionSerializerRejectsEveryEmptyRequiredField/testAssertionSerializerAcceptsEmptyFields/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing assertion empty-field adversarial test" "iOS WebAuthn assertion empty-field adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testSerializerRejectsFieldsBeyondChallengeServiceLimits/testSerializerAcceptsOversizedFields/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testSerializerRejectsFieldsBeyondChallengeServiceLimits/testSerializerAcceptsOversizedFields/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing oversized-field adversarial test" "iOS WebAuthn oversized-field adversarial test"
 
 reset_fixture
-perl -0pi -e 's/maximumResponseBytes = 256 \* 1024/maximumResponseBytes = 512 * 1024/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/maximumResponseBytes = 256 \* 1024/maximumResponseBytes = 512 * 1024/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios passkey response ceiling increased" "iOS passkey transport hard response-size ceiling"
 
 reset_fixture
-perl -0pi -e 's/response\.body\.count <= PasskeyBackupHTTPTransportPolicy\.maximumResponseBytes/response.body.count < PasskeyBackupHTTPTransportPolicy.maximumResponseBytes/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/response\.body\.count <= PasskeyBackupHTTPTransportPolicy\.maximumResponseBytes/response.body.count < PasskeyBackupHTTPTransportPolicy.maximumResponseBytes/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios injected transport response cap drift" "iOS passkey service injected-transport response-size guard"
 
 reset_fixture
-perl -0pi -e 's/PasskeyBackupHTTPTransportPolicy\.followsRedirects \? request : nil/PasskeyBackupHTTPTransportPolicy.followsRedirects ? nil : request/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/PasskeyBackupHTTPTransportPolicy\.followsRedirects \? request : nil/PasskeyBackupHTTPTransportPolicy.followsRedirects ? nil : request/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios passkey redirect policy inversion" "iOS passkey transport fail-closed redirect policy"
 
 reset_fixture
-perl -0pi -e 's/withTaskCancellationHandler/withoutTaskCancellationHandler/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/withTaskCancellationHandler/withoutTaskCancellationHandler/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios passkey transport cancellation handler removed" "iOS passkey transport structured-cancellation propagation"
 
 reset_fixture
-perl -0pi -e 's/result\.credentialId == credentialId/result.credentialId != credentialId/' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/result\.credentialId == credentialId/result.credentialId != credentialId/' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios compensation credential identity guard inverted" "iOS registration compensation credential-identity validation"
 
 reset_fixture
-perl -0pi -e 's/revoked\.credentialId == nil/revoked.credentialId != nil/g' "$workspace/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+perl -0pi -e 's/revoked\.credentialId == nil/revoked.credentialId != nil/g' "$workspace/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
 expect_failure "ios revoke-all credential injection guard inverted" "iOS revoke-all response credential-identity rejection"
 
 reset_fixture
-perl -0pi -e 's/testChallengeClientRejectsOversizedInjectedTransportResponsesBeforeStatusOrJSON/testChallengeClientAcceptsOversizedInjectedTransportResponses/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testChallengeClientRejectsOversizedInjectedTransportResponsesBeforeStatusOrJSON/testChallengeClientAcceptsOversizedInjectedTransportResponses/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing injected transport cap adversarial test" "iOS injected-transport oversized-response adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testURLSessionTransportRejectsInvalidResponseLimits/testURLSessionTransportAcceptsInvalidResponseLimits/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testURLSessionTransportRejectsInvalidResponseLimits/testURLSessionTransportAcceptsInvalidResponseLimits/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing invalid response limit adversarial test" "iOS invalid transport response-limit adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testURLSessionTransportRejectsOversizedDeclaredResponseBeforeBody/testURLSessionTransportAcceptsOversizedDeclaredResponse/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testURLSessionTransportRejectsOversizedDeclaredResponseBeforeBody/testURLSessionTransportAcceptsOversizedDeclaredResponse/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing declared response cap adversarial test" "iOS declared oversized-response adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testURLSessionTransportRejectsChunkedResponseBeyondLimit/testURLSessionTransportAcceptsChunkedResponseBeyondLimit/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testURLSessionTransportRejectsChunkedResponseBeyondLimit/testURLSessionTransportAcceptsChunkedResponseBeyondLimit/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing streamed response cap adversarial test" "iOS streamed oversized-response adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testURLSessionTransportBoundsDecodedStreamingBytes/testURLSessionTransportIgnoresDecodedStreamingBytes/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testURLSessionTransportBoundsDecodedStreamingBytes/testURLSessionTransportIgnoresDecodedStreamingBytes/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing compressed expansion cap adversarial test" "iOS compressed-expansion oversized-response adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testURLSessionTransportCancellationStopsTaskAndClearsState/testURLSessionTransportCancellationLeaksState/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testURLSessionTransportCancellationStopsTaskAndClearsState/testURLSessionTransportCancellationLeaksState/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing cancellation cleanup adversarial test" "iOS transport cancellation cleanup adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testRegistrationCompensationRejectsMismatchedRevokeResultIdentities/testRegistrationCompensationAcceptsMismatchedRevokeResultIdentities/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testRegistrationCompensationRejectsMismatchedRevokeResultIdentities/testRegistrationCompensationAcceptsMismatchedRevokeResultIdentities/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing compensation identity adversarial test" "iOS compensation response-identity adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testWorkflowRejectsRevokeAllResultContainingCredentialIdentity/testWorkflowAcceptsRevokeAllResultContainingCredentialIdentity/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testWorkflowRejectsRevokeAllResultContainingCredentialIdentity/testWorkflowAcceptsRevokeAllResultContainingCredentialIdentity/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing workflow revoke-all identity adversarial test" "iOS workflow revoke-all identity-injection adversarial test"
 
 reset_fixture
-perl -0pi -e 's/testCoordinatorRejectsRevokeAllResultContainingCredentialIdentity/testCoordinatorAcceptsRevokeAllResultContainingCredentialIdentity/' "$workspace/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+perl -0pi -e 's/testCoordinatorRejectsRevokeAllResultContainingCredentialIdentity/testCoordinatorAcceptsRevokeAllResultContainingCredentialIdentity/' "$workspace/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
 expect_failure "ios missing coordinator revoke-all identity adversarial test" "iOS coordinator revoke-all identity-injection adversarial test"
 
 echo "[passkey-backup-audit-test] all $TEST_CASE_COUNT tests passed"

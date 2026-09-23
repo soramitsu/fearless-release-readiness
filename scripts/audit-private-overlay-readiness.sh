@@ -56,6 +56,21 @@ record_failure() {
   warn "$1"
 }
 
+clean_git() {
+  /usr/bin/env -i PATH=/usr/bin:/bin HOME=/ GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
+    /usr/bin/git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"
+}
+
+is_git_checkout() {
+  local repo="$1"
+  local expected_root actual_root
+  [[ -d "$repo" && ! -L "$repo" && -e "$repo/.git" && ! -L "$repo/.git" ]] || return 1
+  expected_root="$(cd -P "$repo" && pwd)" || return 1
+  actual_root="$(clean_git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [[ "$actual_root" == "$expected_root" ]]
+}
+
 run_platform_audit() {
   local platform="$1"
   local public_repo="$2"
@@ -64,12 +79,12 @@ run_platform_audit() {
 
   log "Checking $platform private overlay"
 
-  if [[ ! -d "$public_repo/.git" ]]; then
+  if ! is_git_checkout "$public_repo"; then
     record_failure "$platform public repo missing or not a Git checkout: $public_repo"
     return
   fi
 
-  if [[ ! -d "$private_repo/.git" ]]; then
+  if ! is_git_checkout "$private_repo"; then
     if [[ "$ALLOW_MISSING" == true ]]; then
       warn "$platform private repo missing; skipped because --allow-missing was set: $private_repo"
       return
@@ -117,12 +132,12 @@ run_platform_audit() {
 
 run_platform_audit \
   "android" \
-  "$ROOT_DIR/fearless-Android" \
+  "$ROOT_DIR/fearless-Android-production-consolidated-20260731" \
   "$ROOT_DIR/fearless-Android-priv"
 
 run_platform_audit \
   "ios" \
-  "$ROOT_DIR/fearless-iOS" \
+  "$ROOT_DIR/fearless-iOS-production-consolidated-20260731" \
   "$ROOT_DIR/fearless-iOS-priv"
 
 if ((${#failures[@]} > 0)); then
