@@ -24,9 +24,9 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. The current Android candidate passes 215 scoped backup JVM tests and Detekt locally; the current iOS candidate passes 63 focused credential/compensation Release simulator tests. Earlier iOS Drive and key/sign/send candidates passed 51 and **463** Release tests, respectively. These are development checks at different source heads. Both app trees are committed and pushed on review branches; current exact-head hosted checks, independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. The current Android candidate passes 221 scoped backup JVM tests and Detekt locally; its exact-head hosted build-and-test job passes. The current iOS disabled-path PRF verifier passes 24 focused Release simulator tests; its hosted build remains in progress. Earlier iOS key/sign/send qualification passed **463** Release tests on a different source head. Both app trees are committed and pushed on review branches, but independent security review, protected qualification and distribution acceptance remain outstanding.
 
-The owner/grant authority core and its optional existing-owner WebAuthn verifier now pass 55 local tests; the challenge service passes 109 local tests. First-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
+The metadata-only owner/grant authority passes 75 local tests; the challenge service passes 112. They still have separate credential writers. First-owner wallet proof, verified legacy migration, one-writer live HTTP cutover, deployment and native Drive/PRF recovery remain unintegrated. The root source gate now selects the consolidated mobile worktrees and site-association PR #49. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
 ## Source preservation
 
@@ -617,6 +617,34 @@ Current-source checks passed: owner authority 75/75 tests, challenge service
 112/112 tests, both syntax suites, source-publication 88 negative cases, both
 release-bundle fixture suites and diff check. These are source and blocked-path
 checks, not production recovery acceptance.
+
+## Selected website source and reversible worktree quarantine — 2026-09-23
+
+The root source-publication, shipping-manifest, aggregate, live-association,
+action-pin and release-bundle inventories now select the app-association site
+worktree on `fix/app-association-publication`, [PR #49](https://github.com/soramitsu/fearless-site-web/pull/49),
+instead of the retired website checkout and PR #45. The old PR remains a
+historical release requirement; stale reviewed-head pins were not relabeled as
+new approvals. Production association content, headers and Play-distribution
+certificate parity remain unverified, so recovery stays disabled.
+
+The source-output quarantine helper now binds the selected Android, iOS and
+website worktrees to their exact local Git owners through regular `.git`
+pointers, canonical admin directories and bidirectional links. It still
+excludes `../iroha`. Its production dry run succeeds and inventories ignored
+build caches plus ignored documentation and evidence; it moved nothing. Apply
+must preserve those bytes in its private reversible manifest and be followed
+by an exact-source audit before publication.
+
+On the combined root source, the worktree quarantine adversarial suite,
+shipping manifest 8/8, workflow action pins, unblock command contracts,
+source-publication 88 negative cases, and both release-bundle fixture suites
+pass. The synthetic plan-readiness "complete fixture" still fails on many
+stale source/fixture expectations, including web and service contracts. That
+failure remains an open gate; an isolated fixture reconciliation is in progress
+without weakening the production audit. The root PR is open and requires
+review and final exact-head CI. Neither mobile app has passed store-delivered
+upgrade acceptance or cross-platform replacement-device recovery.
 
 ## Completion record
 
