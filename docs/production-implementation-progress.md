@@ -64,20 +64,24 @@ expectations; 38 other Android warnings remain across IAS, migration/Play,
 XCM, Iroha readiness and the native passkey ceremony.
 
 The latest pushed Android candidate is
-`86b498992bacd39a96d089e3356b77b3ff476cdf` on
+`a790e9128cc503d7d268f5a91ec7bd0ca21e413e` on
 [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). Its
 Android-local draft captures validated V3 Substrate/EVM/TON, V2 chain-account
 and separately guarded V1 source material across multiple wallets. Active V1
 aliases without one durable wallet owner, malformed aliases and inventory
 changes block capture without deleting the source; its plaintext staging
-buffer is wiped. Focused material tests passed 26/26 and the full account
-module passed 194/194 against a clean checkout of pinned Utils source.
-Default Detekt excludes this module; a forced scoped run still reports style
-and complexity debt. Exact-head Android CI and IAS validation are pending.
-This is not a cross-platform format, installer or enabled Drive backup.
+buffer is wiped. The preceding head passed 26/26 focused material tests and
+the full account module passed 194/194 against a clean checkout of pinned
+Utils source. This head adds a bounded `FPWMLE01` envelope grammar with
+byte-identical Android/iOS synthetic vectors and only a `localOpaque`
+derivation mode; its focused codec and draft tests pass 6/6. The new codec and
+test files pass forced scoped Detekt, while the existing draft test retains 11
+style findings. Default Detekt excludes this module. Exact-head Android CI and
+IAS validation are pending. This is not a cross-platform serializer, installer
+or enabled Drive backup.
 
 The latest pushed iOS candidate is
-`abf16a61fca9167f8212da1ac82817365c2917f3` on
+`2bfd45e54cf29c518c452a687666463f147cec9b` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its in-memory
 draft captures every known V2 root and chain-account Keychain slot, plus wallet
 identities, selection/order and the two historical Core Data display
@@ -86,9 +90,12 @@ capture and a final present/absent-slot reread detects stable substitutions;
 reflection is redacted. The draft now rejects mnemonic/path bytes that do not
 rederive the original Substrate root, advertised EVM root, or applicable generic
 chain public identity. It retains ambiguous historical seed bytes without
-guessing their derivation. The focused iOS simulator suite passed 22/22 and
-adjacent export suites passed 11/11; SwiftFormat and diff checks passed.
-Exact-head hosted checks are pending. A shared Core Data/Keychain writer lock,
+guessing their derivation. The preceding head passed 22/22 focused iOS
+simulator tests, 11/11 adjacent export tests and all hosted checks. This head
+adds a matching `FPWMLE01` envelope codec with 2/2 focused simulator tests,
+SwiftFormat and diff checks passing. Its iOS inventory subtype is reserved;
+no serializer or installer uses the grammar yet. Exact-head hosted checks are
+pending. A shared Core Data/Keychain writer lock,
 account-level export/reimport proof, specialized chain derivation proof and
 the shared serializer/installer remain required before backup completion.
 
