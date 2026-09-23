@@ -18,6 +18,9 @@ process.once('message', ({ path, audience, token, request, generationRequest, ac
       },
     });
     if (action === 'revoke-credential') core.revokeCredential(token, credentialId, true);
+    else if (action === 'claim-credential-mutation') {
+      core.claimChallengeCredentialMutation(token, request, Buffer.from(mutationBody, 'base64'));
+    }
     else if (action === 'commit-credential-mutation') {
       core.commitChallengeCredentialMutation(token, request, Buffer.from(mutationBody, 'base64'), mutationEvidence);
     }

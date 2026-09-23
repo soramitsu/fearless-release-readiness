@@ -24,12 +24,13 @@ function bound(kind, body) {
   return { bytes, request: { schemaVersion: 1, audience, method: 'POST', path: route[kind],
     bodySha256: hash(bytes), scope: scope[kind] } };
 }
-function registration(id) {
-  return bound('registration', { registrationId: 'reg:test', rpId: 'fearlesswallet.io', credential: register(id) });
+function registration(id, challengeId = 'reg:test') {
+  return bound('registration', { registrationId: challengeId, rpId: 'fearlesswallet.io', credential: register(id) });
 }
-function assertionRequest(id, handle) {
-  return bound('assertion', { assertionId: 'assert:test', rpId: 'fearlesswallet.io', credential: assertion(handle, id) });
+function assertionRequest(id, handle, challengeId = 'assert:test') {
+  return bound('assertion', { assertionId: challengeId, rpId: 'fearlesswallet.io', credential: assertion(handle, id) });
 }
+const legacyHandle = (storageKey) => hash(Buffer.from(`user\0${storageKey}`, 'utf8'));
 function revocation(id, storageKey = 'storage:wallet-test', confirm = true) {
   return bound('revoke', { storageKey, credentialId: id,
     rpId: 'fearlesswallet.io', schemaVersion: 1,
@@ -44,12 +45,37 @@ function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1) {
   const db = new DatabaseSync(path);
   try {
     db.exec('PRAGMA foreign_keys=ON');
+    db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(legacyHandle(storageKey), credentialId);
     db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
       storageKey, owner.subject, b64(seed), Buffer.alloc(32, seed).toString('hex'),
       Buffer.alloc(32, seed + 20).toString('hex'), 1);
     db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
       credentialId, storageKey, '00000000-0000-0000-0000-000000000000', null, 'android');
   } finally { db.close(); }
+}
+function bindStorageKey(path, owner, storageKey = 'storage:wallet-test') {
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(storageKey,
+      owner.subject, b64(1), Buffer.alloc(32, 1).toString('hex'),
+      Buffer.alloc(32, 21).toString('hex'), 1);
+  } finally { db.close(); }
+}
+function claimedRegistration(core, owner, id, storageKey = 'storage:wallet-test') {
+  const pending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'registration', storageKey });
+  const body = registration(id, pending.challengeId);
+  core.claimChallengeCredentialMutation(owner.sessionToken, body.request, body.bytes);
+  return { pending, body, evidence: { challengeNonce: pending.challenge, platform: pending.platform,
+    credential: record(id, pending.userHandle), aaguid: '00000000-0000-0000-0000-000000000000', transportsJson: null } };
+}
+function claimedAssertion(core, owner, id, storageKey = 'storage:wallet-test', directed = false, handle = legacyHandle(storageKey)) {
+  const pending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey, ...(directed ? { directedCredentialId: id } : {}) });
+  const body = assertionRequest(id, handle, pending.challengeId);
+  core.claimChallengeCredentialMutation(owner.sessionToken, body.request, body.bytes);
+  return { pending, body, evidence: { challengeNonce: pending.challenge, platform: pending.platform,
+    expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true } };
 }
 function record(id, handle) {
   return { id, publicKey: b64(31), userHandle: handle, counter: 0,
@@ -78,92 +104,242 @@ function child(message) {
 
 test('exact grant consumption and registration share one SQLite commit, including after restart', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(41);
-  const body = registration(id);
+  bindStorageKey(path, owner);
+  const { body, evidence } = claimedRegistration(core, owner, id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   const wrongBody = Buffer.from(body.bytes);
   wrongBody[wrongBody.length - 1] ^= 1;
   denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, wrongBody,
-    { credential: record(id, challenge.userHandle) }), 'invalid_request');
+    evidence), 'invalid_request');
   assert.equal(row(path, id), undefined);
   const committed = core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
-    { credential: record(id, challenge.userHandle) });
+    evidence);
   assert.deepEqual(committed, { status: 'registered', credentialId: id, generation: 1 });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    assert.deepEqual({ ...db.prepare('SELECT scope,storage_key FROM credential_scopes WHERE credential_id=?').get(id) },
+      { scope: 'storage', storage_key: 'storage:wallet-test' });
+    assert.equal(db.prepare('SELECT user_handle FROM credentials WHERE id=?').get(id).user_handle,
+      legacyHandle('storage:wallet-test'));
+    assert.equal(db.prepare('SELECT registration_platform FROM legacy_credential_metadata WHERE credential_id=?').get(id).registration_platform,
+      'android');
+  } finally { db.close(); }
   denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
-    { credential: record(id, challenge.userHandle) }), 'authorization_failed');
+    evidence), 'authorization_failed');
   denied(() => core.issueGrant(owner.sessionToken, body.request), 'authorization_failed');
   const restarted = open();
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
   denied(() => restarted.consumeGrant(grant.token, body.request), 'authorization_failed');
 });
 
-test('verified counter commit rejects stale counter, wrong handle and revoked credential', async (t) => {
+test('registration and assertion require a claimed SQLite challenge, not an adapter-selected ID', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const fake = assertionRequest(b64(2), legacyHandle('storage:wallet-test'));
+  const fakeGrant = core.issueGrant(owner.sessionToken, fake.request);
+  denied(() => core.commitChallengeCredentialMutation(fakeGrant.token, fake.request, fake.bytes,
+    { challengeNonce: b64(20), platform: 'android', expectedCounter: 0,
+      newCounter: 1, deviceType: 'multiDevice', backedUp: true,
+      directedCredentialId: b64(2) }), 'authorization_failed');
+  assert.equal(core.consumeGrant(fakeGrant.token, fake.request).active, true);
+  const pending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test', directedCredentialId: b64(2) });
+  const body = assertionRequest(b64(2), null, pending.challengeId);
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
+    { challengeNonce: pending.challenge, platform: pending.platform, expectedCounter: 0,
+      newCounter: 1, deviceType: 'multiDevice', backedUp: true }), 'authorization_failed');
+  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
+  assert.equal(row(path, b64(2)).counter, 0);
+});
+
+test('pending challenge cannot cross owner, wallet key, credential, nonce or platform', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const first = (await bootstrap()).owner;
+  const second = (await bootstrap(core, b64(3), b64(5))).owner;
+  bindLegacyCredential(path, first, 'storage:wallet-test', b64(2));
+  bindLegacyCredential(path, second, 'storage:other-wallet', b64(3), 2);
+  denied(() => core.beginChallengeCredentialMutation(second.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test' }), 'authorization_failed');
+  const pending = core.beginChallengeCredentialMutation(first.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test', directedCredentialId: b64(2) });
+  const wrongOwner = assertionRequest(b64(2), null, pending.challengeId);
+  denied(() => core.claimChallengeCredentialMutation(second.sessionToken,
+    wrongOwner.request, wrongOwner.bytes), 'authorization_failed');
+  const wrongCredential = assertionRequest(b64(3), null, pending.challengeId);
+  denied(() => core.claimChallengeCredentialMutation(first.sessionToken,
+    wrongCredential.request, wrongCredential.bytes), 'authorization_failed');
+  const body = wrongOwner;
+  core.claimChallengeCredentialMutation(first.sessionToken, body.request, body.bytes);
+  const grant = core.issueGrant(first.sessionToken, body.request);
+  const base = { challengeNonce: pending.challenge, platform: pending.platform, expectedCounter: 0,
+    newCounter: 1, deviceType: 'multiDevice', backedUp: true };
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
+    { ...base, challengeNonce: b64(89) }), 'verification_failed');
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
+    { ...base, platform: 'ios' }), 'verification_failed');
+  assert.equal(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, base).counter, 1);
+});
+
+test('one owner cannot assert a credential scoped to another of its proven wallet keys', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
+  const secondId = b64(55);
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+      secondId, owner.subject, b64(31), challenge.userHandle, 0, 'multiDevice', 1);
+  } finally { db.close(); }
+  bindLegacyCredential(path, owner, 'storage:first-wallet', b64(2), 1);
+  bindLegacyCredential(path, owner, 'storage:second-wallet', secondId, 2);
+  const pending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:first-wallet' });
+  const wrong = assertionRequest(secondId, legacyHandle('storage:second-wallet'), pending.challengeId);
+  denied(() => core.claimChallengeCredentialMutation(owner.sessionToken, wrong.request, wrong.bytes), 'verification_failed');
+  denied(() => core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:first-wallet', directedCredentialId: secondId }),
+  'authorization_failed');
+});
+
+test('wallet-key registration rejects an owner-wide handle and unknown storage key', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  denied(() => core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'registration', storageKey: 'storage:unproven-wallet' }), 'authorization_failed');
+  bindStorageKey(path, owner);
+  const id = b64(60);
+  const { body, evidence } = claimedRegistration(core, owner, id);
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  assert.notEqual(challenge.userHandle, evidence.credential.userHandle);
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
+    { ...evidence, credential: { ...evidence.credential, userHandle: challenge.userHandle } }),
+  'verification_failed');
+  assert.equal(row(path, id), undefined);
+  assert.equal(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence).status,
+    'registered');
+});
+
+test('claimed challenge survives restart but cannot be claimed or committed twice', async (t) => {
+  const { core, open, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const { body, evidence } = claimedAssertion(core, owner, b64(2));
+  denied(() => core.claimChallengeCredentialMutation(owner.sessionToken, body.request, body.bytes), 'authorization_failed');
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  core.close();
+  const restarted = open();
+  assert.equal(restarted.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence).counter, 1);
+  denied(() => restarted.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence), 'authorization_failed');
+  denied(() => restarted.claimChallengeCredentialMutation(owner.sessionToken, body.request, body.bytes), 'authorization_failed');
+});
+
+test('revocation generation and expiry invalidate claimed challenges without spending new grants', async (t) => {
+  const { core, path, bootstrap, clock } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const first = claimedAssertion(core, owner, b64(2));
+  const firstGrant = core.issueGrant(owner.sessionToken, first.body.request);
+  core.revokeSessions(owner.sessionToken);
+  denied(() => core.commitChallengeCredentialMutation(firstGrant.token,
+    first.body.request, first.body.bytes, first.evidence), 'authorization_failed');
+  const authentication = core.beginAuthentication('android');
+  const resumed = await core.completeAuthentication({ ceremonyId: authentication.ceremonyId,
+    credential: assertion(legacyHandle('storage:wallet-test')) });
+  const second = claimedAssertion(core, resumed, b64(2));
+  const secondGrant = core.issueGrant(resumed.sessionToken, second.body.request);
+  clock.mono += 121_000;
+  denied(() => core.commitChallengeCredentialMutation(secondGrant.token,
+    second.body.request, second.body.bytes, second.evidence), 'authorization_failed');
+  assert.equal(row(path, b64(2)).counter, 1);
+});
+
+test('separate SQLite writers permit only one claim of the same challenge', async (t) => {
+  const { core, path, clock, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const pending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test' });
+  const body = assertionRequest(b64(2), legacyHandle('storage:wallet-test'), pending.challengeId);
+  const jobs = await Promise.all([0, 1].map(() => child({ action: 'claim-credential-mutation',
+    path, audience, wall: clock.wall, token: owner.sessionToken,
+    request: body.request, mutationBody: body.bytes.toString('base64') })));
+  assert.equal(jobs.every((job) => job.code === 0), true, JSON.stringify(jobs));
+  assert.equal(jobs.filter((job) => job.result.accepted).length, 1, JSON.stringify(jobs));
+});
+
+test('verified counter commit rejects stale counter, wrong handle and revoked credential', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
-  const evidence = { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true };
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const { body, evidence } = claimedAssertion(core, owner, id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
-    assertionRequest(id, b64(50)).bytes, evidence), 'invalid_request');
+    assertionRequest(id, b64(50), JSON.parse(body.bytes).assertionId).bytes, evidence), 'invalid_request');
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence),
     { status: 'authenticated', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
-  const stale = core.issueGrant(owner.sessionToken, body.request);
-  denied(() => core.commitChallengeCredentialMutation(stale.token, body.request, body.bytes, evidence), 'credential_counter_replay');
+  const staleChallenge = claimedAssertion(core, owner, id);
+  const stale = core.issueGrant(owner.sessionToken, staleChallenge.body.request);
+  denied(() => core.commitChallengeCredentialMutation(stale.token, staleChallenge.body.request, staleChallenge.body.bytes,
+    { ...staleChallenge.evidence, expectedCounter: 0 }), 'credential_counter_replay');
   assert.equal(row(path, id).counter, 1);
-  const revoked = core.issueGrant(owner.sessionToken, body.request);
+  const revokedChallenge = claimedAssertion(core, owner, id);
+  const revoked = core.issueGrant(owner.sessionToken, revokedChallenge.body.request);
   core.revokeCredential(owner.sessionToken, id, true);
-  denied(() => core.commitChallengeCredentialMutation(revoked.token, body.request, body.bytes,
-    { ...evidence, expectedCounter: 1, newCounter: 2 }), 'authorization_failed');
+  denied(() => core.commitChallengeCredentialMutation(revoked.token, revokedChallenge.body.request, revokedChallenge.body.bytes,
+    { ...revokedChallenge.evidence, expectedCounter: 1, newCounter: 2 }), 'authorization_failed');
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 1, revoked: 1 });
 });
 
 test('atomic challenge counter commit accepts a proven legacy credential handle', async (t) => {
   const { core, path, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const legacyHandle = b64(72);
-  assert.notEqual(legacyHandle, challenge.userHandle);
+  const unrelatedHandle = b64(72);
+  assert.notEqual(unrelatedHandle, legacyHandle('storage:wallet-test'));
   // A future verified import retains the historical handle per credential.
   // This fixture does not admit a live legacy cohort or migrate either store.
-  const db = new DatabaseSync(path);
-  try { db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(legacyHandle, id); }
-  finally { db.close(); }
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  // The fixture's historical per-key handle is deterministic for this route.
 
-  const body = assertionRequest(id, legacyHandle);
+  const { body, evidence } = claimedAssertion(core, owner, id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
-    body.bytes, { expectedCounter: 0, newCounter: 1,
-      deviceType: 'multiDevice', backedUp: true }),
+    body.bytes, evidence),
   { status: 'authenticated', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
 
-  const wrong = assertionRequest(id, challenge.userHandle);
+  const wrongPending = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test' });
+  const wrong = assertionRequest(id, unrelatedHandle, wrongPending.challengeId);
   const wrongGrant = core.issueGrant(owner.sessionToken, wrong.request);
+  denied(() => core.claimChallengeCredentialMutation(owner.sessionToken, wrong.request, wrong.bytes), 'verification_failed');
   denied(() => core.commitChallengeCredentialMutation(wrongGrant.token, wrong.request,
-    wrong.bytes, { expectedCounter: 1, newCounter: 2,
-      deviceType: 'multiDevice', backedUp: true }), 'verification_failed');
+    wrong.bytes, { ...evidence, expectedCounter: 1, newCounter: 2 }), 'authorization_failed');
   assert.equal(row(path, id).counter, 1);
 });
 
-test('null assertion handle requires the trusted credential-directed challenge ID', async (t) => {
+test('null assertion handle requires a claimed server-owned credential-directed challenge', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, null);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const undirected = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'assertion', storageKey: 'storage:wallet-test' });
+  const wrong = assertionRequest(id, null, undirected.challengeId);
+  denied(() => core.claimChallengeCredentialMutation(owner.sessionToken, wrong.request, wrong.bytes), 'verification_failed');
+  const { body, evidence } = claimedAssertion(core, owner, id, 'storage:wallet-test', true, null);
   const grant = core.issueGrant(owner.sessionToken, body.request);
-  const evidence = { expectedCounter: 0, newCounter: 1,
-    deviceType: 'multiDevice', backedUp: true };
   denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
-    body.bytes, evidence), 'invalid_request');
-  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
-    body.bytes, { ...evidence, directedCredentialId: b64(7) }), 'verification_failed');
+    body.bytes, { ...evidence, directedCredentialId: id }), 'invalid_request');
   assert.equal(row(path, id).counter, 0);
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
-    body.bytes, { ...evidence, directedCredentialId: id }),
+    body.bytes, evidence),
   { status: 'authenticated', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
   denied(() => core.consumeGrant(grant.token, body.request), 'authorization_failed');
@@ -171,12 +347,13 @@ test('null assertion handle requires the trusted credential-directed challenge I
 
 test('counter evidence is copied once before validation and SQLite write', async (t) => {
   const { core, path, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const { body, evidence: baseEvidence } = claimedAssertion(core, owner, id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   let reads = 0;
-  const evidence = { expectedCounter: 0, deviceType: 'multiDevice', backedUp: true };
+  const evidence = { ...baseEvidence }; delete evidence.newCounter;
   Object.defineProperty(evidence, 'newCounter', { enumerable: true, get: () => (++reads === 1 ? 1 : 0) });
   assert.equal(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence).counter, 1);
   assert.equal(reads, 1);
@@ -259,14 +436,15 @@ test('an already revoked key credential can be retried without a second confirma
 
 test('separate-process counter commit and owner revoke serialize: no update after revocation', async (t) => {
   const { core, path, clock, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const { body, evidence } = claimedAssertion(core, owner, id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   const jobs = await Promise.all([
     child({ action: 'commit-credential-mutation', path, audience, wall: clock.wall, token: grant.token,
       request: body.request, mutationBody: body.bytes.toString('base64'),
-      mutationEvidence: { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true } }),
+      mutationEvidence: evidence }),
     child({ action: 'revoke-credential', path, audience, wall: clock.wall,
       token: owner.sessionToken, credentialId: id }),
   ]);
@@ -276,27 +454,30 @@ test('separate-process counter commit and owner revoke serialize: no update afte
   assert.equal(row(path, id).counter, jobs[0].result.accepted ? 1 : 0);
   const replay = child({ action: 'commit-credential-mutation', path, audience, wall: clock.wall, token: grant.token,
     request: body.request, mutationBody: body.bytes.toString('base64'),
-    mutationEvidence: { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true } });
+    mutationEvidence: evidence });
   assert.equal((await replay).result.accepted, false);
 });
 
 test('two processes cannot commit the same nonzero counter or replay either grant', async (t) => {
   const { core, path, clock, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
-  const evidence = { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true };
-  const grants = [core.issueGrant(owner.sessionToken, body.request), core.issueGrant(owner.sessionToken, body.request)];
-  const jobs = await Promise.all(grants.map(({ token }) => child({
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const attempts = [claimedAssertion(core, owner, id), claimedAssertion(core, owner, id)];
+  const grants = attempts.map(({ body }) => core.issueGrant(owner.sessionToken, body.request));
+  const jobs = await Promise.all(grants.map(({ token }, index) => child({
     action: 'commit-credential-mutation', path, audience, wall: clock.wall, token,
-    request: body.request, mutationBody: body.bytes.toString('base64'), mutationEvidence: evidence,
+    request: attempts[index].body.request,
+    mutationBody: attempts[index].body.bytes.toString('base64'), mutationEvidence: attempts[index].evidence,
   })));
   assert.equal(jobs.every((job) => job.code === 0), true, JSON.stringify(jobs));
   assert.equal(jobs.filter((job) => job.result.accepted).length, 1, JSON.stringify(jobs));
   assert.equal(row(path, id).counter, 1);
   const winningIndex = jobs.findIndex((job) => job.result.accepted);
-  denied(() => core.consumeGrant(grants[winningIndex].token, body.request), 'authorization_failed');
-  denied(() => core.commitChallengeCredentialMutation(grants[1 - winningIndex].token, body.request, body.bytes, evidence),
+  denied(() => core.consumeGrant(grants[winningIndex].token, attempts[winningIndex].body.request), 'authorization_failed');
+  const losing = attempts[1 - winningIndex];
+  denied(() => core.commitChallengeCredentialMutation(grants[1 - winningIndex].token,
+    losing.body.request, losing.body.bytes, losing.evidence),
     'credential_counter_replay');
 });
 
@@ -437,10 +618,10 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   const { core, open, path, bootstrap } = setup(t, {
     fault(stage) { if (stage === faultStage) throw Error('synthetic durability failure'); },
   });
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
-  const evidence = { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true };
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const { body, evidence } = claimedAssertion(core, owner, id);
   const first = core.issueGrant(owner.sessionToken, body.request);
   faultStage = 'beforeCommit';
   denied(() => core.commitChallengeCredentialMutation(first.token, body.request, body.bytes, evidence), 'store_unavailable');
@@ -449,29 +630,31 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   const recovered = open();
   assert.deepEqual(recovered.commitChallengeCredentialMutation(first.token, body.request, body.bytes, evidence),
     { status: 'authenticated', credentialId: id, counter: 1 });
-  const second = recovered.issueGrant(owner.sessionToken, body.request);
+  const secondAttempt = claimedAssertion(recovered, owner, id);
+  const second = recovered.issueGrant(owner.sessionToken, secondAttempt.body.request);
   faultStage = 'afterCommit';
-  denied(() => recovered.commitChallengeCredentialMutation(second.token, body.request, body.bytes,
-    { ...evidence, expectedCounter: 1, newCounter: 2 }), 'store_unavailable');
+  denied(() => recovered.commitChallengeCredentialMutation(second.token,
+    secondAttempt.body.request, secondAttempt.body.bytes,
+    { ...secondAttempt.evidence, expectedCounter: 1, newCounter: 2 }), 'store_unavailable');
   faultStage = undefined;
   assert.equal(row(path, id).counter, 2);
   const restarted = open();
-  denied(() => restarted.consumeGrant(second.token, body.request), 'authorization_failed');
+  denied(() => restarted.consumeGrant(second.token, secondAttempt.body.request), 'authorization_failed');
 });
 
-test('explicit v1-to-v4 owner migration retains existing credential and permits atomic counter commit', async (t) => {
+test('explicit v1-to-v5 owner migration retains existing credential and permits atomic counter commit', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
-  const { owner, challenge } = await bootstrap();
+  const { owner } = await bootstrap();
   const id = b64(2);
-  const body = assertionRequest(id, challenge.userHandle);
-  const grant = core.issueGrant(owner.sessionToken, body.request);
   core.close();
   downgradeStoreFixture(path, 1);
   denied(() => open(), 'store_unavailable');
   const migrated = open({ migrate: true });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
-  assert.deepEqual(migrated.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
-    { expectedCounter: 0, newCounter: 1, deviceType: 'multiDevice', backedUp: true }),
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const { body, evidence } = claimedAssertion(migrated, owner, id);
+  const grant = migrated.issueGrant(owner.sessionToken, body.request);
+  assert.deepEqual(migrated.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence),
   { status: 'authenticated', credentialId: id, counter: 1 });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 1, revoked: 0 });
 });

@@ -10,7 +10,7 @@ const digest = (value) => createHash('sha256').update(value).digest('hex');
 const denied = (action, code = 'store_unavailable') =>
   assert.throws(action, (error) => error?.code === code);
 
-test('explicit v2-to-v4 migration preserves credentials, grants, counters and backup head', async (t) => {
+test('explicit v2-to-v5 migration preserves credentials, grants, counters and backup head', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -37,19 +37,19 @@ test('explicit v2-to-v4 migration preserves credentials, grants, counters and ba
   assert.deepEqual(migrated.readBackupHead(owner.sessionToken), originalHead);
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
   denied(() => migrated.consumeGrant(grant.token, request()), 'authorization_failed');
-  const v4 = readOwnerCredentialSnapshot(path);
-  assert.equal(v4.schemaVersion, 4);
-  assert.deepEqual(v4.owners, v2.owners);
-  assert.deepEqual(v4.credentials, v2.credentials);
-  assert.deepEqual(v4.storageBindings, []);
-  assert.deepEqual(v4.legacyCredentialMetadata, []);
-  assert.deepEqual(v4.credentialScopes, [{ credential_id: b64(2), owner: owner.subject, scope: 'owner', storage_key: null }]);
+  const v5 = readOwnerCredentialSnapshot(path);
+  assert.equal(v5.schemaVersion, 5);
+  assert.deepEqual(v5.owners, v2.owners);
+  assert.deepEqual(v5.credentials, v2.credentials);
+  assert.deepEqual(v5.storageBindings, []);
+  assert.deepEqual(v5.legacyCredentialMetadata, []);
+  assert.deepEqual(v5.credentialScopes, [{ credential_id: b64(2), owner: owner.subject, scope: 'owner', storage_key: null }]);
   const db = new DatabaseSync(path, { readOnly: true });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
   db.close();
 });
 
-test('v4 stores exact historical public metadata, scoped credentials and empty owner tombstones', async (t) => {
+test('v5 stores exact historical public metadata, scoped credentials and empty owner tombstones', async (t) => {
   const { core, path, bootstrap, open } = setup(t);
   const first = (await bootstrap()).owner;
   const second = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -71,7 +71,7 @@ test('v4 stores exact historical public metadata, scoped credentials and empty o
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 4);
+  assert.equal(snapshot.schemaVersion, 5);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).user_handle, historicalHandle);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).counter, 7);
   assert.deepEqual(snapshot.storageBindings.map((row) => row.storage_key), [tombstone, storage]);
@@ -94,10 +94,10 @@ test('v4 stores exact historical public metadata, scoped credentials and empty o
   db.prepare('UPDATE credentials SET counter=8, revoked=1 WHERE id=?').run(b64(2));
   assert.equal(db.prepare('SELECT counter,revoked FROM credentials WHERE id=?').get(b64(2)).counter, 8);
   db.close();
-  open(); // The persisted tombstone and scope are valid for the v4 reader.
+  open(); // The persisted tombstone and scope are valid for the v5 reader.
 });
 
-test('explicit v3-to-v4 migration retains legacy wallet scope and owner-wide recovery scope', async (t) => {
+test('explicit v3-to-v5 migration retains legacy wallet scope and owner-wide recovery scope', async (t) => {
   const { core, path, open, bootstrap } = setup(t);
   const historical = (await bootstrap()).owner;
   const ownerWide = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -120,7 +120,7 @@ test('explicit v3-to-v4 migration retains legacy wallet scope and owner-wide rec
   denied(() => open());
   const migrated = open({ migrate: true });
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 4);
+  assert.equal(snapshot.schemaVersion, 5);
   assert.deepEqual(snapshot.credentials, previous.credentials);
   assert.deepEqual(snapshot.storageBindings, previous.storageBindings);
   assert.deepEqual(snapshot.legacyCredentialMetadata, previous.legacyCredentialMetadata);
@@ -131,7 +131,44 @@ test('explicit v3-to-v4 migration retains legacy wallet scope and owner-wide rec
   assert.equal(migrated.readBackupHead(historical.sessionToken).ownerSubject, historical.subject);
 });
 
-test('failed v2-to-v4 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
+test('explicit v4-to-v5 migration preserves authority and starts with no pending challenge', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const grant = core.issueGrant(owner.sessionToken, request());
+  const original = readOwnerCredentialSnapshot(path);
+  core.close();
+  downgradeStoreFixture(path, 4);
+  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 4);
+  denied(() => open());
+  const migrated = open({ migrate: true });
+  assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
+  const snapshot = readOwnerCredentialSnapshot(path);
+  assert.equal(snapshot.schemaVersion, 5);
+  assert.deepEqual(snapshot.owners, original.owners);
+  assert.deepEqual(snapshot.credentials, original.credentials);
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { assert.equal(db.prepare('SELECT count(*) AS n FROM pending_challenges').get().n, 0); }
+  finally { db.close(); }
+});
+
+test('v5 rejects missing challenge claim trigger and forged per-key handle', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const db = new DatabaseSync(path);
+  db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+    'storage:wallet-test', owner.subject, b64(9), digest('source'), digest('proof'), 1);
+  const issued = core.beginChallengeCredentialMutation(owner.sessionToken,
+    { kind: 'registration', storageKey: 'storage:wallet-test' });
+  assert.throws(() => db.prepare('UPDATE pending_challenges SET nonce=? WHERE id=?').run(b64(20), issued.challengeId),
+    /immutable pending challenge/);
+  core.close();
+  db.exec('DROP TRIGGER pending_challenge_claim_once');
+  db.close();
+  denied(() => open());
+  denied(() => readOwnerCredentialSnapshot(path));
+});
+
+test('failed v2-to-v5 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -148,7 +185,7 @@ test('failed v2-to-v4 migration rolls back all schema changes and remains explic
   db.close();
   const migrated = open({ migrate: true });
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
-  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 4);
+  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 5);
 });
 
 test('missing v4 immutability trigger rejects opening rather than silently running weaker schema', (t) => {

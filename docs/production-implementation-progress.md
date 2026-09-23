@@ -24,9 +24,50 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 ## Current checkpoint
 
-The program remains incomplete. The current Android candidate passes 221 scoped backup JVM tests and Detekt locally; its exact-head hosted build-and-test job passes. The current iOS disabled-path PRF verifier passes 24 focused Release simulator tests; its hosted build, Jenkins merge check, Codecov and release-safety checks pass. Earlier iOS key/sign/send qualification passed **463** Release tests on a different source head. Both app trees are committed and pushed on review branches, but independent security review, protected qualification and distribution acceptance remain outstanding.
+The program remains incomplete. The latest pushed Android and iOS source
+candidates are identified below. Earlier Android and iOS test and CI results
+qualify only their respective older commits; exact-head hosted checks for the
+latest app sources must complete. Both app trees are on review branches, and
+independent security review, protected qualification and distribution
+acceptance remain outstanding.
 
-The metadata-only owner/grant authority passes 75 local tests; the challenge service passes 112. They still have separate credential writers. First-owner wallet proof, verified legacy migration, one-writer live HTTP cutover, deployment and native Drive/PRF recovery remain unintegrated. The root source gate now selects the consolidated mobile worktrees and site-association PR #49. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
+The metadata-only owner/grant authority and challenge service still have
+separate credential writers. First-owner wallet proof, verified legacy
+migration, one-writer live HTTP cutover, deployment and native Drive/PRF
+recovery remain unintegrated. The root source gate selects the consolidated
+mobile worktrees and site-association PR #49. The complete frozen route
+inventory/unified manifest, transaction-byte/fee/hash/receipt qualification,
+general TON sends, production-service repairs and store/device acceptance
+remain open. No local or CI result substitutes for independent review,
+replacement-device recovery or capped funded evidence.
+
+## Candidate update — 2026-09-24
+
+The non-deployed owner authority now has SQLite schema v5: an explicit v4→v5
+migration and durable, single-use, key-bound registration/assertion challenges.
+Issuance requires an already proven storage-key→random-owner binding. A claim
+commits the exact response digest before asynchronous verification. Completion
+rechecks the claimed row, owner session/generation, exact grant, platform,
+nonce, per-key user handle and credential scope under the SQLite writer lock.
+Registration inserts the public credential, historical metadata and wallet-key
+scope atomically. A null assertion handle is allowed only for a challenge whose
+stored directed ID matches that credential. Restart, replay, expiry, generation,
+wrong-owner/key, concurrent claim, counter and durability cases pass locally.
+This is internal machinery only: there is no live HTTP composition, verified
+historical JSON import, qualified legacy-route verifier or owner admission.
+The protocol fence still rejects owner grants at the JSON writer; portable
+recovery remains disabled.
+
+The current pushed Android candidate is
+`7fbee1db9b00dcdf28c14385304c230e2b9f7971`, including exact amount-property
+integrity and confirmation/submission parity checks for XCM; its focused tests
+and Detekt pass locally. The
+current pushed iOS candidate is `33ab72ecbbc52e089278a883ef809475b6b88121`;
+102 impacted tests pass locally after the accessibility repair. Exact-head
+hosted qualification, independent review, distribution-signed upgrade and
+cross-device recovery evidence remain open. The shared-features candidate is
+`b7ef68761b7962fc06193b500467da7ba5498070`, and the website-association
+candidate is `fb824cf23ee4bb606f4a5168242da701b6ec78ac`.
 
 ## Source preservation
 

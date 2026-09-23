@@ -17,11 +17,14 @@ export const request = (path = Object.keys(SCOPES)[0], body = '{}') => ({ schema
 
 // Test-only reconstruction of a previous schema. No production downgrade exists.
 export function downgradeStoreFixture(path, version) {
-  if (![1, 2, 3].includes(version)) throw new Error('unsupported fixture version');
+  if (![1, 2, 3, 4].includes(version)) throw new Error('unsupported fixture version');
   const db = new DatabaseSync(path);
   try {
     db.exec(`
       BEGIN IMMEDIATE;
+      DROP TRIGGER pending_challenge_claim_once;
+      DROP TABLE pending_challenges;
+      ${version < 4 ? `
       DROP TRIGGER credential_identity_no_update;
       DROP TRIGGER legacy_credential_scope_insert;
       DROP TRIGGER credential_scope_no_delete;
@@ -29,6 +32,7 @@ export function downgradeStoreFixture(path, version) {
       DROP TRIGGER credential_scope_validate_insert;
       DROP TRIGGER credential_scope_insert;
       DROP TABLE credential_scopes;
+      ` : ''}
       ${version < 3 ? `
       DROP TRIGGER legacy_credential_identity_no_update;
       DROP TRIGGER legacy_credential_metadata_no_delete;

@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { constants, closeSync, fsyncSync, lstatSync, openSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
-import { AuthorityError, deny } from './validation.js';
+import { AuthorityError, base64, deny, hash, opaque } from './validation.js';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
  operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
@@ -114,9 +114,40 @@ const REQUIRED_SCOPE_TRIGGERS = [
   'credential_scope_validate_update', 'credential_scope_no_delete',
   'legacy_credential_scope_insert',
 ];
+// A claim is durable before WebAuthn verification, and completion can only
+// consume the exact claimed response. No client-supplied owner or key is stored.
+const PENDING_CHALLENGE_SCHEMA = `
+CREATE TABLE pending_challenges (
+ id TEXT PRIMARY KEY, version INTEGER NOT NULL CHECK(version=1),
+ kind TEXT NOT NULL CHECK(kind IN ('registration','assertion')),
+ storage_key TEXT NOT NULL REFERENCES storage_bindings(storage_key),
+ owner TEXT NOT NULL REFERENCES owners(subject), generation INTEGER NOT NULL CHECK(generation>=0),
+ session TEXT NOT NULL REFERENCES sessions(digest) ON DELETE CASCADE,
+ platform TEXT NOT NULL CHECK(platform IN ('android','ios')),
+ nonce TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL CHECK(expires>=0),
+ user_handle TEXT NOT NULL, directed_credential_id TEXT,
+ claimed INTEGER NOT NULL CHECK(claimed IN (0,1)),
+ body_hash TEXT, credential_id TEXT,
+ CHECK((claimed=0 AND body_hash IS NULL AND credential_id IS NULL) OR
+       (claimed=1 AND body_hash IS NOT NULL AND credential_id IS NOT NULL)),
+ CHECK(kind='assertion' OR directed_credential_id IS NULL)
+) STRICT;
+CREATE INDEX pending_challenges_expiry ON pending_challenges(expires);
+CREATE INDEX pending_challenges_owner ON pending_challenges(owner);
+CREATE TRIGGER pending_challenge_claim_once BEFORE UPDATE ON pending_challenges
+BEGIN
+ SELECT RAISE(ABORT,'immutable pending challenge') WHERE OLD.claimed!=0 OR
+  NEW.claimed!=1 OR NEW.id!=OLD.id OR NEW.version!=OLD.version OR NEW.kind!=OLD.kind OR
+  NEW.storage_key!=OLD.storage_key OR NEW.owner!=OLD.owner OR
+  NEW.generation!=OLD.generation OR NEW.session!=OLD.session OR
+  NEW.platform!=OLD.platform OR NEW.nonce!=OLD.nonce OR
+  NEW.expires!=OLD.expires OR NEW.user_handle!=OLD.user_handle OR
+  NEW.directed_credential_id IS NOT OLD.directed_credential_id;
+END;
+`;
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=4)) STRICT;
-INSERT INTO meta VALUES(1,0,0,4);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=5)) STRICT;
+INSERT INTO meta VALUES(1,0,0,5);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -152,7 +183,8 @@ ${BACKUP_HEAD_SCHEMA}
 ${LEGACY_COHORT_SCHEMA}
 ${CREDENTIAL_SCOPE_TABLE}
 ${CREDENTIAL_SCOPE_TRIGGERS}
-PRAGMA user_version=4;
+${PENDING_CHALLENGE_SCHEMA}
+PRAGMA user_version=5;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -182,6 +214,14 @@ DROP TABLE meta;
 ALTER TABLE meta_v4 RENAME TO meta;
 PRAGMA user_version=4;
 `;
+const MIGRATE_V4_TO_V5 = `
+${PENDING_CHALLENGE_SCHEMA}
+CREATE TABLE meta_v5 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=5)) STRICT;
+INSERT INTO meta_v5 SELECT id,wall,observed,5 FROM meta WHERE id=1 AND version=4;
+DROP TABLE meta;
+ALTER TABLE meta_v5 RENAME TO meta;
+PRAGMA user_version=5;
+`;
 
 function validateLegacyCohortSchema(db) {
   db.prepare('SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256,created FROM storage_bindings LIMIT 0').all();
@@ -204,6 +244,33 @@ function validateCredentialScopeSchema(db) {
     WHERE (s.scope='storage' AND (m.storage_key IS NULL OR m.storage_key!=s.storage_key)) OR
       (s.scope='storage' AND (b.owner IS NULL OR b.owner!=s.owner)) OR
       (s.scope='owner' AND m.credential_id IS NOT NULL) LIMIT 1`).get()) deny('store_invalid');
+}
+
+function validatePendingChallengeSchema(db) {
+  db.prepare(`SELECT id,version,kind,storage_key,owner,generation,session,platform,nonce,expires,
+    user_handle,directed_credential_id,claimed,body_hash,credential_id FROM pending_challenges LIMIT 0`).all();
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='pending_challenge_claim_once'").get()) deny('store_invalid');
+  if (db.prepare(`SELECT 1 FROM pending_challenges p JOIN storage_bindings b ON b.storage_key=p.storage_key
+    JOIN sessions s ON s.digest=p.session JOIN owners o ON o.subject=p.owner
+    WHERE b.owner!=p.owner OR s.owner!=p.owner OR s.generation!=p.generation OR
+    o.generation!=p.generation OR s.platform!=p.platform OR
+    (p.directed_credential_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM credential_scopes c WHERE c.credential_id=p.directed_credential_id
+        AND c.owner=p.owner AND c.scope='storage' AND c.storage_key=p.storage_key)) LIMIT 1`).get()) deny('store_invalid');
+  const pending = db.prepare(`SELECT id,storage_key,user_handle,nonce,directed_credential_id,
+    claimed,body_hash,credential_id FROM pending_challenges`).all();
+  if (pending.length > 256) deny('store_invalid');
+  for (const row of pending) {
+    opaque(row.id, 'pending.');
+    base64(row.nonce, 32, 32);
+    base64(row.user_handle, 32, 32);
+    if (row.directed_credential_id !== null) base64(row.directed_credential_id, 1, 384);
+    if (row.claimed === 1) {
+      base64(row.body_hash, 32, 32);
+      base64(row.credential_id, 1, 384);
+    }
+    if (row.user_handle !== hash(Buffer.from(`user\0${row.storage_key}`, 'utf8'))) deny('store_invalid');
+  }
 }
 
 function privateFile(path, directory = false) {
@@ -259,6 +326,11 @@ export class AuthorityStore {
         if (!create && migrate && oldVersion === 3 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 3) {
           this.#db.exec(MIGRATE_V3_TO_V4);
+          oldVersion = 4;
+        }
+        if (!create && migrate && oldVersion === 4 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 4) {
+          this.#db.exec(MIGRATE_V4_TO_V5);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -268,6 +340,7 @@ export class AuthorityStore {
         this.#db.prepare('SELECT owner, revision, operation_id FROM backup_operations LIMIT 0').all();
         validateLegacyCohortSchema(this.#db);
         validateCredentialScopeSchema(this.#db);
+        validatePendingChallengeSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -348,12 +421,13 @@ export function readOwnerCredentialSnapshot(path) {
     db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF;');
     db.exec('BEGIN');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-    if (![2, 3, SCHEMA_VERSION].includes(schemaVersion) ||
+    if (![2, 3, 4, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
     if (schemaVersion >= 3) validateLegacyCohortSchema(db);
-    if (schemaVersion === SCHEMA_VERSION) validateCredentialScopeSchema(db);
+    if (schemaVersion >= 4) validateCredentialScopeSchema(db);
+    if (schemaVersion === SCHEMA_VERSION) validatePendingChallengeSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()
@@ -364,7 +438,7 @@ export function readOwnerCredentialSnapshot(path) {
     const legacyCredentialMetadata = schemaVersion >= 3
       ? db.prepare('SELECT credential_id,storage_key,aaguid,transports_json,registration_platform FROM legacy_credential_metadata ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
-    const credentialScopes = schemaVersion === SCHEMA_VERSION
+    const credentialScopes = schemaVersion >= 4
       ? db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
