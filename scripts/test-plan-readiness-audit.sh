@@ -1249,7 +1249,11 @@ write_android_repo() {
     "class XcmTransferRequest(val executionSpec: XcmExecutionSpec)" \
     "interface XcmTransferEngine {" \
     "  val isAvailable: Boolean" \
+    "  val canSubmitNow: Boolean" \
     "  fun getOriginFee(originChain: Chain, originFeeAsset: Asset) = Unit" \
+    "}" \
+    "class MutationGuardedXcmTransferEngine {" \
+    "  val canSubmitNow = delegate.canSubmitNow && transfersEnabled && runCatching { mutationsEnabled() }.getOrDefault(false)" \
     "}" \
     "object UnavailableXcmTransferEngine : XcmTransferEngine {" \
     "  override val isAvailable: Boolean = false" \
@@ -1283,7 +1287,7 @@ write_android_repo() {
     "    require(amount > BigInteger.ZERO)" \
     "    require(amount >= minAmount)" \
     "    getExecutableRoute()" \
-    "    hasExecutableRouteAsset()" \
+    "    transferEngine.canSubmitNow" \
     "    println(\"ACCOUNT_KEY20 0x-prefixed 20-byte hex address\")" \
     "  }" \
     "  fun getXcmOriginFee(asset: Asset, originFeeAsset: Asset = asset) = transferEngine.getOriginFee(Chain(\"origin\"), originFeeAsset)" \
@@ -1327,6 +1331,7 @@ write_android_repo() {
     "  fun rejects_empty_sender_before_engine_call() = println(\"rejects empty sender before engine call\")" \
     "  fun rejects_same_origin_and_destination_before_engine_call() = println(\"rejects same origin and destination before engine call\")" \
     "  fun delegates_fee_estimation_when_engine_is_available() = println(\"delegates fee estimation when engine is available\")" \
+    "  fun submission_advertising() = println(\"submission support follows permission while quotes remain readable\")" \
     "  val originFeeAssetSymbol = \"DOT\"" \
     "  fun default_fail_closed() = println(\"UnavailableXcmTransferEngine\")" \
     "}"
