@@ -765,10 +765,9 @@ wallet cohort, leaving another wallet under the same owner intact. An unknown
 or mismatched binding fails without consuming the exact grant. These tests
 also deny an ambiguous revoke-all success when any live owner credential has
 no storage-key mapping. They seed public metadata fixtures; no verified legacy
-import exists, and
-registration/assertion still need trusted pending-challenge storage-key
-binding before the route cutover can run.
-The full owner suite now passes 82/82 with syntax and diff checks.
+import exists, and registration/assertion still need trusted pending-challenge
+storage-key binding before the route cutover can run. The full owner suite
+passed 82/82 with syntax and diff checks at this checkpoint.
 
 The selected site branch [PR #49](https://github.com/soramitsu/fearless-site-web/pull/49)
 contains the intended JSON association contracts and response headers. The
@@ -781,6 +780,43 @@ from source. The live development app ID is also the old
 `YLWWUD25VZ.jp.co.soramitsu.fearlesswallet.dev`. The source PR still needs
 review, deployment and exact Play-distributed certificate comparison before
 passkey recovery can be enabled.
+
+## Review follow-up and idempotent revoke guard — 2026-09-24
+
+Read-only review of the non-deployed owner core identified a further one-writer
+cutover blocker: the current HTTP registration route derives its WebAuthn user
+handle from the wallet storage key, while owner enrollment uses a random owner
+handle and the internal route mutation does not add a key mapping. The
+assertion completion body likewise cannot prove the pending challenge's wallet
+key or credential-directed selection. The required integration is a single
+SQLite-owned challenge claim with exact owner, key, nonce, platform, handle,
+credential selection and generation, followed by verification and mutation
+under that same writer. New owner-wide credentials also need explicit scope
+separate from proven legacy wallet-key credentials. This review was an internal
+code review, not independent production security approval.
+
+The internal mutation now accepts omitted final-route confirmation only for
+idempotent single-key retries or an empty, proven revoke-all scope. It still
+requires explicit `true` before removing a live credential; `false` remains
+invalid. Unknown storage-key ownership fails closed. Local owner tests pass
+85/85 with syntax and diff checks. No live HTTP route uses this code.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+has advanced to pushed source `49f58b42a8ca9f7c7ca8ffc3809ab78fb99f28ec`.
+Its new read-only wallet-material preflight checks every persisted wallet,
+independent EVM and native TON roots, and per-chain keys through validated
+repository access, rejecting missing/quarantined material and public metadata
+drift without returning secrets or reporting backup completion. The full
+account-module suite passes 177/177 and `detektAll` passes locally; exact-head
+Android CI and IAS remain in progress. V1-only/watch-only cohorts, the shared
+multi-wallet plaintext format, restore installer, and replacement-device
+acceptance remain open.
+
+The live passkey-service hostname `backup.fearlesswallet.io` did not resolve in
+the release workspace while `fearlesswallet.io` did. The health service and its
+deployment evidence remain absent; the Google Drive recovery feature stays
+disabled. The selected website source still differs from the live association
+files as recorded above.
 
 ## Completion record
 

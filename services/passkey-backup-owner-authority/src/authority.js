@@ -178,17 +178,25 @@ function challengeMutationRequest(request, rawBody) {
       ...(request.path === assertion ? { userHandle: response.response.userHandle } : {}) };
   }
   if (request.path === revoke) {
-    exact(body, ['storageKey', 'credentialId', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
-    if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
+    exact(body, body && Object.hasOwn(body, 'confirmFinalRecoveryRemoval')
+      ? ['storageKey', 'credentialId', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']
+      : ['storageKey', 'credentialId', 'rpId', 'schemaVersion']);
+    if (body.rpId !== RP_ID || body.schemaVersion !== 1 ||
+        (body.confirmFinalRecoveryRemoval !== undefined && body.confirmFinalRecoveryRemoval !== true)) deny('invalid_request');
     base64(body.credentialId, 1, 384);
     if (typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
-    return { kind: 'revoke', credentialId: body.credentialId, storageKey: body.storageKey };
+    return { kind: 'revoke', credentialId: body.credentialId, storageKey: body.storageKey,
+      confirmed: body.confirmFinalRecoveryRemoval === true };
   }
   if (request.path === revokeAll) {
-    exact(body, ['storageKey', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
-    if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
+    exact(body, body && Object.hasOwn(body, 'confirmFinalRecoveryRemoval')
+      ? ['storageKey', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']
+      : ['storageKey', 'rpId', 'schemaVersion']);
+    if (body.rpId !== RP_ID || body.schemaVersion !== 1 ||
+        (body.confirmFinalRecoveryRemoval !== undefined && body.confirmFinalRecoveryRemoval !== true)) deny('invalid_request');
     if (typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
-    return { kind: 'revoke-all', storageKey: body.storageKey };
+    return { kind: 'revoke-all', storageKey: body.storageKey,
+      confirmed: body.confirmFinalRecoveryRemoval === true };
   }
   deny('invalid_request');
 }
@@ -423,13 +431,20 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           result = { status: 'authenticated', credentialId: credential.id, counter: verified.newCounter };
         } else if (target.kind === 'revoke') {
           boundLegacyStorage(tx, target.storageKey, owner.subject);
-          activeCredential(tx, target.credentialId, owner.subject);
-          if (!tx.query('SELECT credential_id FROM legacy_credential_metadata WHERE credential_id=? AND storage_key=?',
-            target.credentialId, target.storageKey)) deny();
-          tx.run('UPDATE credentials SET revoked=1 WHERE id=?', target.credentialId);
+          const credential = tx.query('SELECT owner,revoked FROM credentials WHERE id=?', target.credentialId);
+          if (credential) {
+            if (credential.owner !== owner.subject || !tx.query(
+              'SELECT credential_id FROM legacy_credential_metadata WHERE credential_id=? AND storage_key=?',
+              target.credentialId, target.storageKey)) deny();
+            if (credential.revoked === 0) {
+              if (!target.confirmed) deny('final_recovery_route_confirmation_required');
+              tx.run('UPDATE credentials SET revoked=1 WHERE id=?', target.credentialId);
+            }
+          }
           const remaining = tx.query('SELECT count(*) AS n FROM credentials c JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE m.storage_key=? AND c.revoked=0', target.storageKey).n;
           result = { status: 'revoked', credentialId: target.credentialId,
-            remainingCredentials: remaining, generation: bumpGeneration(tx, owner).generation };
+            remainingCredentials: remaining,
+            generation: credential?.revoked === 0 ? bumpGeneration(tx, owner).generation : owner.generation };
         } else {
           boundLegacyStorage(tx, target.storageKey, owner.subject);
           // Legacy revoke-all is scoped to one storageKey, not the entire
@@ -437,6 +452,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           // would make a successful "all" response ambiguous, so deny it.
           if (tx.query('SELECT 1 FROM credentials c LEFT JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE c.owner=? AND c.revoked=0 AND m.credential_id IS NULL LIMIT 1',
             owner.subject)) deny();
+          const live = tx.query('SELECT count(*) AS n FROM credentials c JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE m.storage_key=? AND c.revoked=0', target.storageKey).n;
+          if (live > 0 && !target.confirmed) deny('final_recovery_route_confirmation_required');
           tx.run('UPDATE credentials SET revoked=1 WHERE owner=? AND id IN (SELECT credential_id FROM legacy_credential_metadata WHERE storage_key=?)',
             owner.subject, target.storageKey);
           result = { status: 'revoked-all', remainingCredentials: 0,

@@ -30,13 +30,15 @@ function registration(id) {
 function assertionRequest(id, handle) {
   return bound('assertion', { assertionId: 'assert:test', rpId: 'fearlesswallet.io', credential: assertion(handle, id) });
 }
-function revocation(id, storageKey = 'storage:wallet-test') {
+function revocation(id, storageKey = 'storage:wallet-test', confirm = true) {
   return bound('revoke', { storageKey, credentialId: id,
-    rpId: 'fearlesswallet.io', schemaVersion: 1, confirmFinalRecoveryRemoval: true });
+    rpId: 'fearlesswallet.io', schemaVersion: 1,
+    ...(confirm === null ? {} : { confirmFinalRecoveryRemoval: confirm }) });
 }
-function revokeAll(storageKey = 'storage:wallet-test') {
+function revokeAll(storageKey = 'storage:wallet-test', confirm = true) {
   return bound('revokeAll', { storageKey,
-    rpId: 'fearlesswallet.io', schemaVersion: 1, confirmFinalRecoveryRemoval: true });
+    rpId: 'fearlesswallet.io', schemaVersion: 1,
+    ...(confirm === null ? {} : { confirmFinalRecoveryRemoval: confirm }) });
 }
 function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1) {
   const db = new DatabaseSync(path);
@@ -198,6 +200,63 @@ test('grant-bound revocation bumps generation in the same commit and retains tom
   finally { db.close(); }
 });
 
+test('legacy revoke retries are idempotent but live removal needs explicit confirmation', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+
+  const unconfirmed = revocation(id, 'storage:wallet-test', null);
+  const unconfirmedGrant = core.issueGrant(owner.sessionToken, unconfirmed.request);
+  denied(() => core.commitChallengeCredentialMutation(unconfirmedGrant.token,
+    unconfirmed.request, unconfirmed.bytes, {}), 'final_recovery_route_confirmation_required');
+  assert.equal(row(path, id).revoked, 0);
+  assert.equal(core.consumeGrant(unconfirmedGrant.token, unconfirmed.request).active, true);
+
+  const explicitFalse = revocation(id, 'storage:wallet-test', false);
+  const falseGrant = core.issueGrant(owner.sessionToken, explicitFalse.request);
+  denied(() => core.commitChallengeCredentialMutation(falseGrant.token,
+    explicitFalse.request, explicitFalse.bytes, {}), 'invalid_request');
+  assert.equal(core.consumeGrant(falseGrant.token, explicitFalse.request).active, true);
+
+  const unknown = revocation(b64(59), 'storage:wallet-test', null);
+  const unknownGrant = core.issueGrant(owner.sessionToken, unknown.request);
+  assert.deepEqual(core.commitChallengeCredentialMutation(unknownGrant.token,
+    unknown.request, unknown.bytes, {}),
+  { status: 'revoked', credentialId: b64(59), remainingCredentials: 1, generation: 0 });
+  assert.equal(row(path, id).revoked, 0);
+
+  const confirmed = revocation(id);
+  const confirmedGrant = core.issueGrant(owner.sessionToken, confirmed.request);
+  assert.equal(core.commitChallengeCredentialMutation(confirmedGrant.token,
+    confirmed.request, confirmed.bytes, {}).generation, 1);
+  assert.equal(row(path, id).revoked, 1);
+});
+
+test('an already revoked key credential can be retried without a second confirmation', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const enrollment = core.beginEnrollment(owner.sessionToken);
+  const survivor = await core.completeEnrollment({ ceremonyId: enrollment.ceremonyId,
+    sessionToken: owner.sessionToken, credential: register(b64(60)) });
+
+  const first = revocation(id);
+  const firstGrant = core.issueGrant(survivor.sessionToken, first.request);
+  assert.equal(core.commitChallengeCredentialMutation(firstGrant.token,
+    first.request, first.bytes, {}).generation, 2);
+  const auth = core.beginAuthentication('android');
+  const renewed = await core.completeAuthentication({ ceremonyId: auth.ceremonyId,
+    credential: assertion(challenge.userHandle, b64(60)) });
+  const retry = revocation(id, 'storage:wallet-test', null);
+  const retryGrant = core.issueGrant(renewed.sessionToken, retry.request);
+  assert.deepEqual(core.commitChallengeCredentialMutation(retryGrant.token,
+    retry.request, retry.bytes, {}),
+  { status: 'revoked', credentialId: id, remainingCredentials: 0, generation: 2 });
+  assert.equal(row(path, b64(60)).revoked, 0);
+});
+
 test('separate-process counter commit and owner revoke serialize: no update after revocation', async (t) => {
   const { core, path, clock, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
@@ -272,6 +331,33 @@ test('grant-bound revoke-all is atomic and invalidates every owner grant', async
     { status: 'revoked-all', remainingCredentials: 0, generation: 1 });
   assert.equal(row(path, id).revoked, 1);
   denied(() => core.consumeGrant(pending.token, assertionRequest(id, b64(1)).request), 'authorization_failed');
+});
+
+test('legacy revoke-all needs confirmation only when its bound key has live credentials', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
+  const body = revokeAll('storage:wallet-test', null);
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  denied(() => core.commitChallengeCredentialMutation(grant.token,
+    body.request, body.bytes, {}), 'final_recovery_route_confirmation_required');
+  assert.equal(row(path, id).revoked, 0);
+  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
+
+  const emptyKey = 'storage:empty-wallet';
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+      emptyKey, owner.subject, b64(8), Buffer.alloc(32, 8).toString('hex'),
+      Buffer.alloc(32, 28).toString('hex'), 1);
+  } finally { db.close(); }
+  const empty = revokeAll(emptyKey, null);
+  const emptyGrant = core.issueGrant(owner.sessionToken, empty.request);
+  assert.deepEqual(core.commitChallengeCredentialMutation(emptyGrant.token,
+    empty.request, empty.bytes, {}),
+  { status: 'revoked-all', remainingCredentials: 0, generation: 1 });
+  assert.equal(row(path, id).revoked, 0);
 });
 
 test('legacy revocation is bound to the exact storage key and revoke-all cannot cross wallets', async (t) => {
