@@ -57,9 +57,13 @@ export function requestBinding(value, audience) {
 // or largeBlob extension output to an adapter. Native clients must strip it
 // BEFORE HTTP serialization; rejection here cannot undo transmission.
 export function credentialResponse(value, kind, { allowNullUserHandle = false } = {}) {
-  exact(value, ['id', 'rawId', 'type', 'response', 'clientExtensionResults']);
+  exact(value, Object.hasOwn(value ?? {}, 'authenticatorAttachment')
+    ? ['id', 'rawId', 'type', 'response', 'clientExtensionResults', 'authenticatorAttachment']
+    : ['id', 'rawId', 'type', 'response', 'clientExtensionResults']);
   base64(value.id, 1, 384);
   if (value.rawId !== value.id || value.type !== 'public-key') deny('invalid_request');
+  if (value.authenticatorAttachment !== undefined &&
+      !['platform', 'cross-platform'].includes(value.authenticatorAttachment)) deny('invalid_request');
   const extensionKeys = Object.keys(value.clientExtensionResults ?? {});
   if (extensionKeys.length === 0) exact(value.clientExtensionResults, []);
   else {
@@ -75,8 +79,24 @@ export function credentialResponse(value, kind, { allowNullUserHandle = false } 
       base64(value.response.userHandle, 1, 64);
     }
   } else {
-    exact(value.response, ['clientDataJSON', 'attestationObject']);
+    const fields = ['clientDataJSON', 'attestationObject'];
+    for (const field of ['authenticatorData', 'transports', 'publicKeyAlgorithm', 'publicKey']) {
+      if (Object.hasOwn(value.response ?? {}, field)) fields.push(field);
+    }
+    exact(value.response, fields);
     base64(value.response.attestationObject, 1, 16384);
+    if (value.response.authenticatorData !== undefined) base64(value.response.authenticatorData, 37, 8192);
+    if (value.response.publicKey !== undefined) base64(value.response.publicKey, 1, 6144);
+    if (value.response.publicKeyAlgorithm !== undefined &&
+        ![-7, -257].includes(value.response.publicKeyAlgorithm)) deny('invalid_request');
+    if (Object.hasOwn(value.response, 'transports')) {
+      const transports = value.response.transports;
+      if (!Array.isArray(transports) || transports.length > 7 ||
+          new Set(transports).size !== transports.length ||
+          transports.some((item) => !['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'].includes(item))) {
+        deny('invalid_request');
+      }
+    }
   }
   base64(value.response.clientDataJSON, 1, 8192);
   return structuredClone(value);

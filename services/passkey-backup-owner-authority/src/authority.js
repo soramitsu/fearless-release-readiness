@@ -20,6 +20,8 @@ const unavailableVerifier = Object.freeze({
   async bootstrap() { deny('verifier_unavailable'); },
   async authentication() { deny('verifier_unavailable'); },
   async enrollment() { deny('verifier_unavailable'); },
+  async challengeRegistration() { deny('verifier_unavailable'); },
+  async challengeAssertion() { deny('verifier_unavailable'); },
 });
 
 function prune(tx) {
@@ -216,7 +218,7 @@ function verifiedMutationEvidence(kind, evidence, credentialId, pending, userHan
     catch { deny('invalid_request'); }
     if (transports !== null && (!Array.isArray(transports) || transports.length > 8 ||
         new Set(transports).size !== transports.length ||
-        transports.some((value) => !['ble', 'hybrid', 'internal', 'nfc', 'usb'].includes(value)) ||
+        transports.some((value) => !['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'].includes(value)) ||
         JSON.stringify(transports) !== snapshot.transportsJson || snapshot.transportsJson.length > 256)) deny('invalid_request');
     return { record: credentialRecord(snapshot.credential, credentialId, pending.user_handle),
       aaguid: snapshot.aaguid, transportsJson: snapshot.transportsJson };
@@ -323,6 +325,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     return result;
   });
   const verify = async (kind, context) => {
+    if (typeof verifier[kind] !== 'function') deny('verifier_unavailable');
     try { return await verifier[kind](context); }
     catch (error) {
       if (error instanceof AuthorityError && error.code === 'verifier_unavailable') throw error;
@@ -330,7 +333,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     }
   };
 
-  return Object.freeze({
+  const api = {
     close: () => store.close(),
     beginBootstrap(requestedPlatform) { return challenge('bootstrap', platform(requestedPlatform)); },
     beginAuthentication(requestedPlatform) { return challenge('authentication', platform(requestedPlatform)); },
@@ -410,6 +413,24 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           credentialId: target.credentialId, registeredCredential: registeredCredential ?? null,
           expiresAt: pending.expires / 1000 });
       });
+    },
+    // This is the only intended server composition path for v5 registration
+    // and assertion. It burns the SQLite challenge before awaiting WebAuthn,
+    // then commits only the server verifier's public evidence with its grant.
+    async verifyAndCommitChallengeCredentialMutation(sessionToken, grantToken, request, rawBody) {
+      if (!(rawBody instanceof Uint8Array)) deny('invalid_request');
+      const bytes = Buffer.from(rawBody);
+      const binding = requestBinding(request, audience);
+      const target = challengeMutationRequest(binding, bytes);
+      if (!['registration', 'assertion'].includes(target.kind)) deny('invalid_request');
+      const kind = target.kind === 'registration' ? 'challengeRegistration' : 'challengeAssertion';
+      if (typeof verifier[kind] !== 'function') deny('verifier_unavailable');
+      const claimed = api.claimChallengeCredentialMutation(sessionToken, binding, bytes);
+      // Parsing is safe: challengeMutationRequest already validated these
+      // immutable bytes and rejected local extension secrets before claim.
+      const credential = JSON.parse(bytes).credential;
+      const evidence = await verify(kind, { ceremony: claimed, credential });
+      return api.commitChallengeCredentialMutation(grantToken, binding, bytes, evidence);
     },
     async completeBootstrap(input) {
       exact(input, ['ceremonyId', 'credential', 'walletProof']);
@@ -675,5 +696,6 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId)) };
       });
     },
-  });
+  };
+  return Object.freeze(api);
 }

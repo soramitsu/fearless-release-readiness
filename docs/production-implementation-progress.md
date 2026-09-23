@@ -53,8 +53,13 @@ Registration inserts the public credential, historical metadata and wallet-key
 scope atomically. A null assertion handle is allowed only for a challenge whose
 stored directed ID matches that credential. Restart, replay, expiry, generation,
 wrong-owner/key, concurrent claim, counter and durability cases pass locally.
-This is internal machinery only: there is no live HTTP composition, verified
-historical JSON import, qualified legacy-route verifier or owner admission.
+The internal verifier now claims before asynchronous WebAuthn work and checks
+the exact nonce, RP, qualified configured origin, UV/UP, stored assertion
+public key/counter and public registration AAGUID/transports. Synthetic signed
+iOS/Android credential tests cover success, tampering, replay, PRF rejection
+and owner revocation during verification. This is internal machinery only:
+there is no live HTTP composition, verified historical JSON import, native
+provider qualification or owner admission.
 The protocol fence still rejects owner grants at the JSON writer; portable
 recovery remains disabled.
 

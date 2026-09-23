@@ -24,14 +24,45 @@ export interface PublicCredentialResponse {
   readonly id: string;
   readonly rawId: string;
   readonly type: 'public-key';
+  readonly authenticatorAttachment?: 'platform' | 'cross-platform';
   readonly clientExtensionResults: Record<string, unknown>; // Runtime accepts only empty or public credProps.rk.
   readonly response: {
     readonly clientDataJSON: string;
     readonly attestationObject?: string;
+    readonly publicKeyAlgorithm?: -7 | -257;
+    readonly publicKey?: string;
+    readonly transports?: readonly ('ble' | 'cable' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb')[];
     readonly authenticatorData?: string;
     readonly signature?: string;
     readonly userHandle?: string;
   };
+}
+export interface ClaimedCredentialChallenge {
+  readonly challengeId: string; // Durable, claimed SQLite row ID.
+  readonly kind: 'registration' | 'assertion';
+  readonly challenge: string; // Exact 32-byte server nonce, base64url.
+  readonly rpId: 'fearlesswallet.io';
+  readonly platform: Platform; // Selected from the authenticated session.
+  readonly userHandle: string; // Historical per-storage-key handle.
+  readonly directedCredentialId: string | null;
+  readonly credentialId: string;
+  readonly registeredCredential: CredentialRecord | null; // Public verification key/counter for assertion.
+  readonly expiresAt: number;
+}
+export interface RegistrationMutationEvidence {
+  readonly challengeNonce: string;
+  readonly platform: Platform;
+  readonly credential: CredentialRecord;
+  readonly aaguid: string;
+  readonly transportsJson: string | null;
+}
+export interface AssertionMutationEvidence {
+  readonly challengeNonce: string;
+  readonly platform: Platform;
+  readonly expectedCounter: number;
+  readonly newCounter: number;
+  readonly deviceType: 'singleDevice' | 'multiDevice';
+  readonly backedUp: boolean;
 }
 export interface WalletProof {
   readonly scheme: 'ed25519' | 'sr25519' | 'secp256k1';
@@ -70,4 +101,17 @@ export interface CryptographicVerifier {
     readonly ceremony: Ceremony;
     readonly credential: PublicCredentialResponse;
   }): Promise<{ readonly credential: CredentialRecord }>;
+  /**
+   * Server-only v5 route adapters. The owner core durably claims the exact
+   * response first, invokes these methods, then rechecks claim/grant/credential
+   * under one SQLite writer lock. Direct adapter calls grant no authority.
+   */
+  challengeRegistration?(input: {
+    readonly ceremony: ClaimedCredentialChallenge;
+    readonly credential: PublicCredentialResponse;
+  }): Promise<RegistrationMutationEvidence>;
+  challengeAssertion?(input: {
+    readonly ceremony: ClaimedCredentialChallenge;
+    readonly credential: PublicCredentialResponse;
+  }): Promise<AssertionMutationEvidence>;
 }

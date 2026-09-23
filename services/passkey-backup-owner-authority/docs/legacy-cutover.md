@@ -95,9 +95,12 @@ and committing the mutation. A null response user handle is admissible only
 when the claimed challenge already names the same credential ID. An ID supplied
 by an adapter without the claimed server record is insufficient. Schema v5 now
 implements this **internal** issue/claim/commit state machine for an already
-proven storage binding. The live JSON HTTP routes do not call it; the
-cryptographic verification adapter and all-seven-route one-writer composition
-are still required before cutover.
+proven storage binding. The internal server-owned WebAuthn adapter now verifies
+the claimed nonce, RP, configured platform origin, UV/UP, registration
+metadata, stored assertion public key and counter before the same core commits
+typed public evidence. The live JSON HTTP routes do not call this path, and
+the all-seven-route one-writer composition and independently proven legacy
+owner admission are still required before cutover.
 
 The current HTTP registration challenge derives its user handle by hashing
 the UTF-8 bytes `user`, one NUL byte, then the storage key. Owner-native
