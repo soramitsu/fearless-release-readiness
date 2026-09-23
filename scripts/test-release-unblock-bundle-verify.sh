@@ -161,7 +161,7 @@ TSV
       "logFile": "passkey-backup-prerequisites.log"
     },
     {
-      "name": "Iroha/Nexus wallet coverage",
+      "name": "Iroha Taira/Nexus wallet coverage",
       "slug": "iroha-wallet-coverage",
       "status": "passed",
       "exitCode": 0,
@@ -196,7 +196,7 @@ TSV
       "logFile": "passkey-production-smoke.log"
     },
     {
-      "name": "Iroha/Nexus release prerequisites",
+      "name": "Iroha Taira/Nexus release prerequisites",
       "slug": "iroha-release-readiness",
       "status": "failed",
       "exitCode": 1,
@@ -317,7 +317,7 @@ JSON
       "evidencePreview": "GET /api/passkey-backup/v1/health request to https://backup.fearlesswallet.io failed"
     },
     {
-      "name": "Iroha/Nexus release prerequisites",
+      "name": "Iroha Taira/Nexus release prerequisites",
       "slug": "iroha-release-readiness",
       "exitCode": 1,
       "logFile": "iroha-release-readiness.log",
@@ -533,7 +533,7 @@ Evidence preview:
 GET /api/passkey-backup/v1/health request to https://backup.fearlesswallet.io failed
 \`\`\`
 
-### Iroha/Nexus release prerequisites
+### Iroha Taira/Nexus release prerequisites
 
 - Slug: \`iroha-release-readiness\`
 - Exit code: \`1\`
@@ -1416,8 +1416,8 @@ JSON
   printf '%s\n' "source publication readiness passed" > "$report_dir/source-publication-readiness.log"
   cat > "$workspace_dir/config/source-publication-readiness.tsv" <<'TSV'
 # path	repository	head	base	pull_request
-fearless-Android	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	1258
-fearless-iOS	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	1301
+fearless-Android-production-consolidated-20260731	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260
+fearless-iOS-production-consolidated-20260731	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304
 fearless-wallet-web	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062
 fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	45
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
@@ -1444,8 +1444,8 @@ const path = require('path')
 const [workspace, preflightOutput, output] = process.argv.slice(2)
 const sha = 'a'.repeat(40)
 const configured = [
-  ['fearless-Android', 'soramitsu/fearless-Android', 'codex/android-xcm-evidence-release-commit', 'develop', 1258],
-  ['fearless-iOS', 'soramitsu/fearless-iOS', 'codex/ios-transaction-builder-ci-gate', 'develop', 1301],
+  ['fearless-Android-production-consolidated-20260731', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', 1260],
+  ['fearless-iOS-production-consolidated-20260731', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', 1304],
   ['fearless-wallet-web', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-canonical-indexer-evidence', 'develop', 1062],
   ['fearless-site-web', 'soramitsu/fearless-site-web', 'codex/site-todo-debt-baseline-hardening', 'develop', 45],
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
@@ -2661,13 +2661,13 @@ rewrite_checksums
 expect_failure "source publication report totals drift fixture" "handoffs/source-publication-readiness-report.json.totals.passed mismatch"
 
 reset_bundle
-perl -0pi -e 's/codex\/android-xcm-evidence-release-commit/codex\/forged-head/' "$bundle_dir/handoffs/source-publication-readiness.tsv"
+perl -0pi -e 's/codex\/android-production-consolidated-20260731/codex\/forged-head/' "$bundle_dir/handoffs/source-publication-readiness.tsv"
 refresh_manifest_artifact "handoffs/source-publication-readiness.tsv"
 rewrite_checksums
 expect_failure "source publication config identity drift fixture" "handoffs/source-publication-readiness.tsv row 1 identity mismatch"
 
 reset_bundle
-perl -0pi -e 's/\t1258$/\t01258/m' "$bundle_dir/handoffs/source-publication-readiness.tsv"
+perl -0pi -e 's/\t1260$/\t01260/m' "$bundle_dir/handoffs/source-publication-readiness.tsv"
 refresh_manifest_artifact "handoffs/source-publication-readiness.tsv"
 rewrite_checksums
 expect_failure "source publication config noncanonical PR fixture" "handoffs/source-publication-readiness.tsv row 1 pull request must be canonical positive digits"

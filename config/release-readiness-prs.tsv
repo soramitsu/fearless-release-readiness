@@ -15,7 +15,7 @@ soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merg
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test
-# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	7398b61e1f0db4df3873128b245b35b8e140e088
+# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	20c0ac22cc66475702805094dda6b2a8d6131839
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	Validate IAS candidate; trusted develop dispatch may hand off	github-actions	15368	github-actions	323721421	.github/workflows/android-internal-app-sharing.yml
@@ -37,7 +37,7 @@ soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	vali
 soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
 # The September integration candidate contains the prior consolidated source plus
 # migration, TON, transport and final signing guards. Draft is not approval.
-# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	cb8ed64ce5e44a4e56f2309a6a1a37e3cb46d6d0
+# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	6f200597f1ec17ec296cd240e6adc77dba9f4121
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	release-contracts	github-actions	15368	github-actions	320731655	.github/workflows/ios-release-safety.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
