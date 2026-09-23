@@ -3007,6 +3007,12 @@ write_web_repo() {
     mkdir -p "$repo/$(dirname "$relative_path")"
     cp "$source_web/$relative_path" "$repo/$relative_path"
   done
+
+  # Local browser packaging experiments can leave this checkout dirty. The
+  # reviewed warning inventory and its build wiring are read from Git HEAD.
+  git -C "$source_web" show HEAD:scripts/build-extension.mjs > "$repo/scripts/build-extension.mjs"
+  git -C "$source_web" show HEAD:config/firefox-webext-warning-baseline.json > \
+    "$repo/config/firefox-webext-warning-baseline.json"
 }
 
 write_site_repo() {
@@ -9904,6 +9910,31 @@ write_root_readiness_scripts() {
     "echo 'summary verification command mismatch fixture'" \
     "echo 'summary non-failed unblock metadata fixture'"
 
+  # The fixture's synthetic runtime stubs model isolated negative cases. Static
+  # root contracts are copied from this checkout so the positive fixture tracks
+  # the same source that the production audit inspects. This imports source
+  # checks only; it does not turn blocked release evidence into ready evidence.
+  local current_contract
+  for current_contract in \
+    config/release-readiness-prs.tsv \
+    config/source-publication-readiness.tsv \
+    scripts/audit-github-governance.sh \
+    scripts/audit-source-publication-readiness.mjs \
+    scripts/test-source-publication-readiness-audit.sh \
+    scripts/audit-release-readiness.sh \
+    scripts/export-release-unblock-bundle.sh \
+    scripts/test-release-unblock-bundle-export.sh \
+    scripts/verify-release-unblock-bundle.sh \
+    scripts/test-release-unblock-bundle-verify.sh \
+    scripts/audit-iroha-production-send-readiness.sh \
+    services/passkey-backup-challenge-service/docs/production-deployment.md \
+    services/passkey-backup-challenge-service/docs/release-checklist.md \
+    services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json \
+    services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh \
+    services/passkey-backup-challenge-service/scripts/test-deployment-evidence-audit.sh; do
+    cp "$SCRIPT_DIR/../$current_contract" "$workspace/$current_contract"
+  done
+
   cp "$SCRIPT_DIR/audit-workflow-action-pins.sh" "$workspace/scripts/audit-workflow-action-pins.sh"
   cp "$SCRIPT_DIR/test-workflow-action-pins-audit.sh" "$workspace/scripts/test-workflow-action-pins-audit.sh"
   chmod +x "$workspace"/scripts/*.sh
@@ -9927,6 +9958,16 @@ write_all_repos() {
   write_polkaswap_repo "$parent/polkaswap-indexer"
   write_iroha_repo "$parent/iroha"
   write_iroha_browser_transaction_codec_fixture "$parent/iroha"
+
+  # The pin audit now inventories the consolidated candidates. Keep their
+  # workflow fixtures independent from the legacy migration repositories that
+  # the remainder of this mutation catalog still exercises.
+  mkdir -p "$workspace/fearless-Android-production-consolidated-20260731/.github" \
+    "$workspace/fearless-iOS-production-consolidated-20260731/.github"
+  cp -R "$workspace/fearless-Android/.github/workflows" \
+    "$workspace/fearless-Android-production-consolidated-20260731/.github/workflows"
+  cp -R "$workspace/fearless-iOS/.github/workflows" \
+    "$workspace/fearless-iOS-production-consolidated-20260731/.github/workflows"
 }
 
 run_audit() {
@@ -10046,7 +10087,7 @@ reset_fixture
 expect_success "complete fixture"
 
 reset_fixture
-perl -0pi -e 's#actions/checkout\@34e114876b0b11c390a56381ad16ebd13914f8d5#actions/checkout\@v4#' "$workspace/fearless-Android/.github/workflows/android-ci.yml"
+perl -0pi -e 's#actions/checkout\@34e114876b0b11c390a56381ad16ebd13914f8d5#actions/checkout\@v4#' "$workspace/fearless-Android-production-consolidated-20260731/.github/workflows/android-ci.yml"
 expect_failure "floating workflow action tag" "root workflow action pin audit execution failed"
 
 reset_fixture
@@ -10054,7 +10095,7 @@ perl -0pi -e 's#actions/setup-node\@49933ea5288caeca8642d1e84afbd3f7d6820020#act
 expect_failure "unreviewed workflow action SHA" "root workflow action pin audit execution failed"
 
 reset_fixture
-printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    uses: owner/reusable/.github/workflows/ci.yml@main' > "$workspace/fearless-iOS/.github/workflows/unsafe.yml"
+printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    uses: owner/reusable/.github/workflows/ci.yml@main' > "$workspace/fearless-iOS-production-consolidated-20260731/.github/workflows/unsafe.yml"
 expect_failure "branch-pinned reusable workflow" "root workflow action pin audit execution failed"
 
 reset_fixture
@@ -22766,7 +22807,7 @@ expect_failure "bundle verifier bare PI smoke command test removed" "root releas
 
 # Authoritative current plan truth for PI live state and verification totals.
 reset_fixture
-perl -0pi -e 's/Last updated: 2026-08-24/Last updated: 2026-08-23/' "$workspace/FEARLESS_PROJECT_PLAN.md"
+perl -0pi -e 's/Last updated: 2026-09-06/Last updated: 2026-09-05/' "$workspace/FEARLESS_PROJECT_PLAN.md"
 expect_failure "stale project plan update date" "project plan current update date missing"
 
 reset_fixture
@@ -26881,7 +26922,7 @@ perl -0pi -e 's#base/resources\.pb fearless-public fearless-attack project_id#ba
 expect_failure "Android IAS Firebase project-ID mutation anchor removed" "fearless-Android IAS project-ID-anchored Firebase mutation regression"
 
 reset_fixture
-perl -0pi -e 's/9f5fd7e909f95d458eed30eef2625ba7ffc90d61/8f5fd7e909f95d458eed30eef2625ba7ffc90d61/' "$workspace/config/release-readiness-prs.tsv"
+perl -0pi -e 's/0986721e5cb24e0177a067cecc443c1ec4b7d532/1986721e5cb24e0177a067cecc443c1ec4b7d532/' "$workspace/config/release-readiness-prs.tsv"
 expect_failure "current Android migration PR review pin drifted" "root release PR readiness consolidated Android production immutable review pin"
 
 reset_fixture
