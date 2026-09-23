@@ -103,6 +103,11 @@ configured web origins. Only the subject's domain-separated
 SHA-256 digest is stored. Registration/assertion challenge and completion calls
 must use separate one-time grants. There is no shared mobile secret and no
 production unauthenticated fallback.
+Production service calls require the introspected grant expiry to be current,
+and registration/assertion completion rechecks it immediately before changing
+credential state after asynchronous WebAuthn verification. This expiry check
+does not fence an owner revocation in the separate authority store; coordinated
+same-transaction lifecycle commits are still required before recovery is enabled.
 
 Credential listing returns at most 32 non-secret descriptors and never returns
 the stored public key, user handle, signature counter, or wallet-owner hash.

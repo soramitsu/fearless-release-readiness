@@ -62,7 +62,15 @@ function allowedOriginsForPlatform(allowedOrigins, platform) {
   );
 }
 
-function validateAuthorizationContext(authorization, allowInsecureTestAuthorization) {
+function requireCurrentAuthorization(authorization, allowInsecureTestAuthorization, now) {
+  if (authorization.expiresAt === undefined && allowInsecureTestAuthorization) return;
+  if (!Number.isSafeInteger(authorization.expiresAt) ||
+      authorization.expiresAt <= Math.floor(now() / 1000)) {
+    throw serviceError(401, 'request_authorization_failed', 'Request authorization failed');
+  }
+}
+
+function validateAuthorizationContext(authorization, allowInsecureTestAuthorization, now) {
   if (authorization === undefined && allowInsecureTestAuthorization) {
     return INSECURE_TEST_AUTHORIZATION;
   }
@@ -71,6 +79,7 @@ function validateAuthorizationContext(authorization, allowInsecureTestAuthorizat
       !AUTHORIZATION_PLATFORMS.has(authorization.platform)) {
     throw serviceError(401, 'request_authorization_failed', 'Request authorization failed');
   }
+  requireCurrentAuthorization(authorization, allowInsecureTestAuthorization, now);
   return authorization;
 }
 
@@ -98,10 +107,12 @@ export function createPasskeyBackupChallengeService({
   allowedOrigins = parseAllowedOrigins(),
   randomBytes = defaultRandomBytes,
   allowInsecureTestAuthorization = false,
+  now = () => Date.now(),
 } = {}) {
   if (allowInsecureTestAuthorization && process.env.NODE_ENV === 'production') {
     throw new Error('Insecure test authorization cannot be enabled in production');
   }
+  if (typeof now !== 'function') throw new Error('now must be a function');
   return {
     health() {
       return {
@@ -116,6 +127,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(
         request,
@@ -165,6 +177,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(request, ['registrationId', 'rpId', 'credential'], [], 'registration complete request');
       const registrationId = validateIdentifier(request.registrationId, 'registrationId');
@@ -201,6 +214,9 @@ export function createPasskeyBackupChallengeService({
           throw webAuthnVerificationError();
         }
 
+        // A one-use grant can expire while the WebAuthn verifier is awaiting
+        // cryptographic work. Never commit a credential under expired authority.
+        requireCurrentAuthorization(authorization, allowInsecureTestAuthorization, now);
         store.registerCredential(pending.storageKey, {
           id: registrationInfo.credential.id,
           publicKey: registrationInfo.credential.publicKey,
@@ -228,6 +244,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], ['credentialId'], 'assertion challenge request');
       const storageKey = validateIdentifier(request.storageKey, 'storageKey');
@@ -267,6 +284,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(request, ['assertionId', 'rpId', 'credential'], [], 'assertion complete request');
       const assertionId = validateIdentifier(request.assertionId, 'assertionId');
@@ -313,6 +331,7 @@ export function createPasskeyBackupChallengeService({
           authenticationInfo.rpID !== RP_ID || !authenticationInfo.userVerified) {
         throw webAuthnVerificationError();
       }
+      requireCurrentAuthorization(authorization, allowInsecureTestAuthorization, now);
       store.updateCredentialAfterAuthentication(pending.storageKey, credential.id, {
         newCounter: authenticationInfo.newCounter,
         deviceType: authenticationInfo.credentialDeviceType,
@@ -330,6 +349,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], [], 'credential list request');
       const storageKey = validateIdentifier(request.storageKey, 'storageKey');
@@ -348,6 +368,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(
         request,
@@ -378,6 +399,7 @@ export function createPasskeyBackupChallengeService({
       const authorization = validateAuthorizationContext(
         authorizationContext,
         allowInsecureTestAuthorization,
+        now,
       );
       validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], ['confirmFinalRecoveryRemoval'], 'credential revoke-all request');
       if (request.confirmFinalRecoveryRemoval !== undefined && request.confirmFinalRecoveryRemoval !== true) {

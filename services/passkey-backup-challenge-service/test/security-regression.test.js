@@ -526,11 +526,13 @@ test('stable authorization owner permits cross-platform ceremonies and rejects c
     allowedOrigins: new Set([ORIGIN, ANDROID_ORIGIN]),
   });
   const ownerHash = authorizationSubjectHash('fearless-wallet-owner:cross-platform');
-  const android = { subjectHash: ownerHash, platform: 'android' };
-  const ios = { subjectHash: ownerHash, platform: 'ios' };
+  const expiresAt = Math.floor(Date.now() / 1000) + 60;
+  const android = { subjectHash: ownerHash, platform: 'android', expiresAt };
+  const ios = { subjectHash: ownerHash, platform: 'ios', expiresAt };
   const attacker = {
     subjectHash: authorizationSubjectHash('fearless-wallet-owner:attacker'),
     platform: 'ios',
+    expiresAt,
   };
   const authenticator = createAuthenticator('cross-platform-owner');
   const registration = service.createRegistrationChallenge(registrationRequest(), android);
@@ -604,7 +606,7 @@ test('authorization platform is cryptographically bound to its WebAuthn origin f
       store: new InMemoryPasskeyChallengeStore(),
       allowedOrigins: new Set([ORIGIN, ANDROID_ORIGIN]),
     });
-    const authorization = { subjectHash: ownerHash, platform };
+    const authorization = { subjectHash: ownerHash, platform, expiresAt: Math.floor(Date.now() / 1000) + 60 };
     const registration = service.createRegistrationChallenge(registrationRequest(), authorization);
 
     await assert.rejects(
@@ -629,8 +631,9 @@ test('completion authorization is bound to the subject and platform that opened 
     allowedOrigins: new Set([ORIGIN, ANDROID_ORIGIN]),
   });
   const subjectHash = authorizationSubjectHash('fearless-wallet-owner:ceremony-binding');
-  const android = { subjectHash, platform: 'android' };
-  const ios = { subjectHash, platform: 'ios' };
+  const expiresAt = Math.floor(Date.now() / 1000) + 60;
+  const android = { subjectHash, platform: 'android', expiresAt };
+  const ios = { subjectHash, platform: 'ios', expiresAt };
   const registration = service.createRegistrationChallenge(registrationRequest(), android);
   const authenticator = createAuthenticator('authorization-claim-retry');
   await assert.rejects(

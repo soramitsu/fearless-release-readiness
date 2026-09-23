@@ -72,7 +72,7 @@ test('v3 migration preserves every credential field and empty-owner tombstone, t
   assert.equal(identified.credential.userId, stored.userId);
   assert.equal(identified.credential.counter, 13);
   const service = createPasskeyBackupChallengeService({ store, allowedOrigins: new Set([origin]) });
-  const authorization = { subjectHash: owner, platform: 'ios' };
+  const authorization = { subjectHash: owner, platform: 'ios', expiresAt: Math.floor(Date.now() / 1000) + 60 };
   const assertion = service.createAssertionChallenge({ storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION }, authorization);
   await service.completeAssertion({
     assertionId: assertion.assertionId,

@@ -563,6 +563,64 @@ test('revocation wins safely against pending assertion and in-flight registratio
   assert.deepEqual(service.listCredentials(lifecycleRequest, owner).credentials, []);
 });
 
+test('production authorization must carry a live expiry and is rechecked before registration commit', async () => {
+  let clock = 1_700_000_000_000;
+  const expiresAt = Math.floor(clock / 1000) + 60;
+  const owner = { ...authorization('fearless-wallet-owner:registration-expiry'), expiresAt };
+  const store = new InMemoryPasskeyChallengeStore();
+  const service = createPasskeyBackupChallengeService({
+    store, allowedOrigins: new Set([ANDROID_ORIGIN]), now: () => clock,
+  });
+  assertServiceError(
+    () => service.createRegistrationChallenge(registrationRequest(), authorization('fearless-wallet-owner:registration-expiry')),
+    'request_authorization_failed',
+    401,
+  );
+  const pending = service.createRegistrationChallenge(registrationRequest(), owner);
+  const consume = store.consumeRegistration.bind(store);
+  store.consumeRegistration = (...arguments_) => {
+    const claimed = consume(...arguments_);
+    clock = expiresAt * 1000;
+    return claimed;
+  };
+  await assertServiceRejects(
+    service.completeRegistration(registrationCompletion(pending, createAuthenticator()), owner),
+    'request_authorization_failed',
+    401,
+  );
+  assert.equal(store.hasAnyCredential(pending.storageKey), false);
+});
+
+test('production authorization expiry during assertion verification does not update the credential counter', async () => {
+  let clock = 1_700_000_000_000;
+  const expiresAt = Math.floor(clock / 1000) + 60;
+  const owner = { ...authorization('fearless-wallet-owner:assertion-expiry'), expiresAt };
+  const store = new InMemoryPasskeyChallengeStore();
+  const service = createPasskeyBackupChallengeService({
+    store, allowedOrigins: new Set([ANDROID_ORIGIN]), now: () => clock,
+  });
+  const registered = await registerCredentialAs(service, owner, createAuthenticator('assertion-expiry'));
+  const credentialId = base64UrlEncode(registered.authenticator.credentialId);
+  const originalCounter = store.getCredential(registered.result.storageKey, credentialId).counter;
+  const pending = service.createAssertionChallenge({
+    storageKey: registered.result.storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION,
+  }, owner);
+  const consume = store.consumeAssertion.bind(store);
+  store.consumeAssertion = (...arguments_) => {
+    const claimed = consume(...arguments_);
+    clock = expiresAt * 1000;
+    return claimed;
+  };
+  await assertServiceRejects(
+    service.completeAssertion(assertionCompletion(
+      pending, registered.authenticator, registered.registration.userId, { counter: originalCounter + 1 },
+    ), owner),
+    'request_authorization_failed',
+    401,
+  );
+  assert.equal(store.getCredential(registered.result.storageKey, credentialId).counter, originalCounter);
+});
+
 test('unknown-owner revoke-all cannot interfere with another subject claimed registration', async () => {
   const service = makeService();
   const owner = authorization('fearless-wallet-owner:lifecycle-first-inflight');

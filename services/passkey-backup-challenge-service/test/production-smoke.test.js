@@ -20,6 +20,7 @@ async function withServer(t, handler, { requestAuthorizer } = {}) {
         return {
           subjectHash: 'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI',
           platform: 'android',
+          expiresAt: Math.floor(Date.now() / 1000) + 60,
         };
       },
     },
@@ -177,7 +178,7 @@ test('production smoke detects rotating authorization subjects and consumes its 
     async authorize() {
       const subjectHash = subjects[authorizationCalls % subjects.length];
       authorizationCalls += 1;
-      return { subjectHash, platform: 'android' };
+      return { subjectHash, platform: 'android', expiresAt: Math.floor(Date.now() / 1000) + 60 };
     },
   };
 
