@@ -1052,6 +1052,38 @@ required. The owner-authority tests pass 115/115 with syntax checks. The root
 source and bundle inventories now include the quarantine files and the
 previously omitted owner HTTP composition source and test.
 
+## Shared wallet-material byte contract candidate — 2026-09-24
+
+The [candidate semantic-material contract](portable-wallet-semantic-v1.md)
+specifies a bounded, canonical `FPWMSM01` plaintext payload under the existing
+encrypted backup envelope. It includes separately signed Substrate, EVM and
+native TON roots, per-chain keys, explicitly non-signable watch identities,
+presentation metadata and lossless historical source slots. The format preserves
+wallet order and selection and binds auxiliary bytes to their matching wallet,
+root or exact chain account. A parser is only a structural check: cryptographic
+identity validation, original-key signing/export proof and atomic installation
+are still required before cross-platform recovery may be enabled.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+now points to pushed head `08ed3f0779891c1a3ada0bcb59b99d67c5a2b924`.
+Its pure semantic codec validates the candidate wire grammar and exact EVM,
+multi-root and full-metadata vectors. The `FPWMLE01` container recognizes the
+portable source/mode pair for either platform while retaining the local-opaque
+pairs. Focused tests pass 11/11 with the clean pinned Android dependency
+checkouts; a forced four-file Detekt/format run has zero findings. This codec
+has no capture, Drive upload, backup-completion or installer call site.
+Watch-only cohorts still fail in the Android local draft capture, and no
+Android adapter yet converts that draft to the shared format.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+points to pushed head `e8b7878553297d3f027b8c25ff2a976e1e176f9a`.
+Its `FPWMLE01` header recognizes the same portable pair; the focused iOS
+Simulator envelope suite passes 3/3. This header alone does not decode or
+install semantic material. The matching iOS codec is still in progress.
+Neither platform has replacement-device recovery evidence or an enabled
+portable backup path. The exact Android and iOS heads still need hosted CI
+completion and independent review.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
