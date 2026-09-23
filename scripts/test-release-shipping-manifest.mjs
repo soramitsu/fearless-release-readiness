@@ -72,7 +72,8 @@ function git(directory, ...args) {
 }
 function commit(directory) {
   git(directory, 'add', '.');
-  git(directory, '-c', 'user.name=Manifest Test', '-c', 'user.email=manifest-test@example.invalid',
+  git(directory, '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
+    '-c', 'user.name=Manifest Test', '-c', 'user.email=manifest-test@example.invalid',
     'commit', '-m', 'Synthetic source for manifest audit');
   return git(directory, 'rev-parse', 'HEAD');
 }
@@ -163,7 +164,7 @@ test('detached manifest binds clean exact source, dependency, file, artifact and
     f.manifest.artifacts.find((row) => row.kind === 'iroha-ios-sdk').sourceCommit = HEX40;
     f.save();
     assert.throws(() => auditReleaseShippingManifest(f.root), /iroha-ios-sdk source binding mismatch/u);
-  } finally { rmSync(f.sandbox, { recursive: true, force: true }); }
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
 
 test('dirty checkout and substituted Iroha branch fail before shipping', () => {
@@ -175,7 +176,7 @@ test('dirty checkout and substituted Iroha branch fail before shipping', () => {
     f.manifest.repositories[7].head = 'codex/other-iroha-branch';
     f.save();
     assert.throws(() => auditReleaseShippingManifest(f.root), /source selection substituted/u);
-  } finally { rmSync(f.sandbox, { recursive: true, force: true }); }
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
 
 test('manifest requires canonical unique-key bytes and complete release inputs', () => {
@@ -195,7 +196,7 @@ test('manifest requires canonical unique-key bytes and complete release inputs',
     f.manifest.featurePolicies.rootPasskeySha256 = HEX64;
     f.save();
     assert.throws(() => auditReleaseShippingManifest(f.root), /passkey-policy digest mismatch/u);
-  } finally { rmSync(f.sandbox, { recursive: true, force: true }); }
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
 
 test('checkout symlink substitution is rejected even when its Git commit is identical', () => {
@@ -206,5 +207,5 @@ test('checkout symlink substitution is rejected even when its Git commit is iden
     renameSync(original, moved);
     symlinkSync(moved, original);
     assert.throws(() => auditReleaseShippingManifest(f.root), /checkout path is substituted/u);
-  } finally { rmSync(f.sandbox, { recursive: true, force: true }); }
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
