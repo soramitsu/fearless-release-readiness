@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { b64, audience, setup } from './fixtures.js';
+import { b64, audience, request, setup } from './fixtures.js';
 
 const denies = (action, code) => assert.throws(action, (error) => error.code === code);
 function candidate(owner, overrides = {}) {
@@ -12,6 +12,10 @@ function candidate(owner, overrides = {}) {
     bundleSha256: 'a'.repeat(64), keyEpoch: '1', driveFileId: 'drive-file-one',
     storageAccountBinding: 'b'.repeat(64), ...overrides,
   };
+}
+function commit(core, sessionToken, input) {
+  const grant = core.issueGenerationGrant(sessionToken, input);
+  return core.commitGenerationMetadata(grant.token, input);
 }
 function worker(message) {
   return new Promise((resolve, reject) => {
@@ -33,7 +37,7 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
     schemaVersion: 1, ownerSubject: owner.subject, backupNamespace: owner.namespace, head: null, previous: null,
   });
   const first = candidate(owner);
-  const accepted = core.commitGenerationMetadata(owner.sessionToken, first);
+  const accepted = commit(core, owner.sessionToken, first);
   assert.equal(accepted.status, 'committed');
   assert.equal(accepted.descriptor.headRevision, '1');
   assert.equal(accepted.descriptor.parentHeadRevision, '0');
@@ -43,7 +47,7 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
     operationId: b64(23), generationId: b64(24), expectedHeadRevision: '1',
     expectedHeadSha256: first.bundleSha256, bundleSha256: 'c'.repeat(64), driveFileId: 'drive-file-two',
   });
-  core.commitGenerationMetadata(owner.sessionToken, second);
+  commit(core, owner.sessionToken, second);
   const current = core.readBackupHead(owner.sessionToken);
   assert.equal(current.head.generationId, second.generationId);
   assert.equal(current.head.parentHeadRevision, '1');
@@ -53,31 +57,63 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
   const restarted = open();
   assert.deepEqual(restarted.readBackupHead(owner.sessionToken), current);
   // The original exact operation remains reconcilable after a later head update.
-  assert.deepEqual(restarted.commitGenerationMetadata(owner.sessionToken, { ...first }), accepted);
+  assert.deepEqual(commit(restarted, owner.sessionToken, { ...first }), accepted);
   assert.equal(restarted.backupOperationStatus(owner.sessionToken, second.operationId).descriptor.parentHeadSha256,
     first.bundleSha256);
   assert.equal(restarted.backupOperationStatus(owner.sessionToken, b64(99)).status, 'absent');
+});
+
+test('head mutation needs its own exact single-use grant, never a session or seven-route grant', async (t) => {
+  const { core, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const first = candidate(owner);
+  const generationGrant = core.issueGenerationGrant(owner.sessionToken, first);
+  const routeGrant = core.issueGrant(owner.sessionToken, request());
+  denies(() => core.commitGenerationMetadata(owner.sessionToken, first), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(routeGrant.token, first), 'authorization_failed');
+  denies(() => core.consumeGrant(generationGrant.token, request()), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(generationGrant.token,
+    { ...first, bundleSha256: 'c'.repeat(64) }), 'authorization_failed');
+  assert.equal(core.readBackupHead(owner.sessionToken).head, null);
+  assert.equal(core.commitGenerationMetadata(generationGrant.token, first).descriptor.headRevision, '1');
+  denies(() => core.commitGenerationMetadata(generationGrant.token, first), 'authorization_failed');
+  assert.equal(core.consumeGrant(routeGrant.token, request()).active, true);
+  assert.equal(commit(core, owner.sessionToken, first).descriptor.headRevision, '1');
+});
+
+test('expired or revoked generation grants cannot change a head', async (t) => {
+  const { core, open, clock, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const first = candidate(owner);
+  const expired = core.issueGenerationGrant(owner.sessionToken, first);
+  clock.mono += 61_000;
+  denies(() => core.commitGenerationMetadata(expired.token, first), 'authorization_failed');
+  denies(() => open().commitGenerationMetadata(expired.token, first), 'authorization_failed');
+  const revoked = core.issueGenerationGrant(owner.sessionToken, first);
+  core.revokeSessions(owner.sessionToken);
+  denies(() => core.commitGenerationMetadata(revoked.token, first), 'authorization_failed');
+  denies(() => core.readBackupHead(owner.sessionToken), 'authorization_failed');
 });
 
 test('stale parent, changed operation, epoch increase and Drive-account switch cannot change the head', async (t) => {
   const { core, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const first = candidate(owner);
-  core.commitGenerationMetadata(owner.sessionToken, first);
-  denies(() => core.commitGenerationMetadata(owner.sessionToken,
+  commit(core, owner.sessionToken, first);
+  denies(() => commit(core, owner.sessionToken,
     candidate(owner, { operationId: b64(25), generationId: b64(26), driveFileId: 'different-file' })), 'head_conflict');
-  denies(() => core.commitGenerationMetadata(owner.sessionToken,
+  denies(() => commit(core, owner.sessionToken,
     { ...first, bundleSha256: 'd'.repeat(64) }), 'operation_conflict');
   const next = candidate(owner, {
     operationId: b64(25), generationId: b64(26), expectedHeadRevision: '1',
     expectedHeadSha256: first.bundleSha256, bundleSha256: 'd'.repeat(64), driveFileId: 'different-file',
   });
-  denies(() => core.commitGenerationMetadata(owner.sessionToken, { ...next, keyEpoch: '2' }), 'key_epoch_transition_required');
-  denies(() => core.commitGenerationMetadata(owner.sessionToken,
+  denies(() => commit(core, owner.sessionToken, { ...next, keyEpoch: '2' }), 'key_epoch_transition_required');
+  denies(() => commit(core, owner.sessionToken,
     { ...next, storageAccountBinding: 'e'.repeat(64) }), 'storage_account_changed');
-  denies(() => core.commitGenerationMetadata(owner.sessionToken,
+  denies(() => commit(core, owner.sessionToken,
     { ...next, generationId: first.generationId }), 'generation_conflict');
-  denies(() => core.commitGenerationMetadata(owner.sessionToken,
+  denies(() => commit(core, owner.sessionToken,
     { ...next, driveFileId: first.driveFileId }), 'generation_conflict');
   assert.equal(core.readBackupHead(owner.sessionToken).head.generationId, first.generationId);
 });
@@ -89,24 +125,44 @@ test('two separate writers cannot both commit the same expected head', async (t)
     operationId: b64(27), generationId: b64(28), bundleSha256: 'c'.repeat(64), driveFileId: 'drive-file-two',
   })];
   const results = await Promise.all(attempts.map((generationRequest) => worker({
-    path, audience, token: owner.sessionToken, generationRequest, wall: clock.wall,
+    path, audience, token: core.issueGenerationGrant(owner.sessionToken, generationRequest).token,
+    generationRequest, wall: clock.wall,
   })));
   assert.equal(results.every((result) => result.code === 0), true, JSON.stringify(results));
   assert.equal(results.filter((result) => result.result?.accepted).length, 1);
   assert.equal(core.readBackupHead(owner.sessionToken).head.headRevision, '1');
 });
 
+test('two separate processes racing the same generation grant commit only once', async (t) => {
+  const { core, path, clock, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const generationRequest = candidate(owner);
+  const grant = core.issueGenerationGrant(owner.sessionToken, generationRequest);
+  const results = await Promise.all(Array.from({ length: 8 }, () => worker({
+    path, audience, token: grant.token, generationRequest, wall: clock.wall,
+  })));
+  assert.equal(results.every((result) => result.code === 0), true, JSON.stringify(results));
+  assert.equal(results.filter((result) => result.result?.accepted).length, 1);
+  assert.equal(core.readBackupHead(owner.sessionToken).head.headRevision, '1');
+  assert.equal(core.backupOperationStatus(owner.sessionToken, generationRequest.operationId).status, 'committed');
+});
+
 test('commit ambiguity is reconciled by operation ID after process crash', async (t) => {
   const { core, open, path, clock, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const before = candidate(owner);
-  assert.equal((await worker({ path, audience, token: owner.sessionToken, generationRequest: before,
+  const beforeGrant = core.issueGenerationGrant(owner.sessionToken, before);
+  assert.equal((await worker({ path, audience, token: beforeGrant.token, generationRequest: before,
     wall: clock.wall, action: 'crash-before' })).code, 81);
   assert.equal(core.backupOperationStatus(owner.sessionToken, before.operationId).status, 'absent');
+  assert.equal(core.commitGenerationMetadata(beforeGrant.token, before).descriptor.headRevision, '1');
   const after = candidate(owner, { operationId: b64(30), generationId: b64(31), driveFileId: 'drive-file-after' });
-  assert.equal((await worker({ path, audience, token: owner.sessionToken, generationRequest: after,
+  const afterRequest = { ...after, expectedHeadRevision: '1', expectedHeadSha256: before.bundleSha256 };
+  const afterGrant = core.issueGenerationGrant(owner.sessionToken, afterRequest);
+  assert.equal((await worker({ path, audience, token: afterGrant.token, generationRequest: afterRequest,
     wall: clock.wall, action: 'crash-after' })).code, 82);
-  assert.equal(open().backupOperationStatus(owner.sessionToken, after.operationId).descriptor.headRevision, '1');
+  assert.equal(open().backupOperationStatus(owner.sessionToken, after.operationId).descriptor.headRevision, '2');
+  denies(() => core.commitGenerationMetadata(afterGrant.token, afterRequest), 'authorization_failed');
   assert.equal(core.readBackupHead(owner.sessionToken).head.driveFileId, 'drive-file-after');
 });
 
@@ -115,15 +171,15 @@ test('revoked session credential and wrong owner cannot read or commit another b
   const { owner: first } = await bootstrap();
   const { owner: second } = await bootstrap(core, b64(6), b64(10));
   const firstRequest = candidate(first);
-  core.commitGenerationMetadata(first.sessionToken, firstRequest);
-  denies(() => core.commitGenerationMetadata(second.sessionToken, firstRequest), 'authorization_failed');
+  commit(core, first.sessionToken, firstRequest);
+  denies(() => commit(core, second.sessionToken, firstRequest), 'authorization_failed');
   assert.equal(core.readBackupHead(second.sessionToken).head, null);
   const db = new DatabaseSync(path);
   db.prepare('UPDATE credentials SET revoked=1 WHERE owner=?').run(first.subject);
   db.close();
   denies(() => core.readBackupHead(first.sessionToken), 'authorization_failed');
   denies(() => core.backupOperationStatus(first.sessionToken, firstRequest.operationId), 'authorization_failed');
-  denies(() => core.commitGenerationMetadata(first.sessionToken, firstRequest), 'authorization_failed');
+  denies(() => commit(core, first.sessionToken, firstRequest), 'authorization_failed');
 });
 
 test('version-one store migration is explicit and preserves existing owner credentials', async (t) => {
@@ -144,7 +200,7 @@ test('version-one store migration is explicit and preserves existing owner crede
   denies(() => open(), 'store_unavailable');
   const migrated = open({ migrate: true });
   assert.equal(migrated.readBackupHead(owner.sessionToken).ownerSubject, owner.subject);
-  assert.equal(migrated.commitGenerationMetadata(owner.sessionToken, candidate(owner)).descriptor.headRevision, '1');
+  assert.equal(commit(migrated, owner.sessionToken, candidate(owner)).descriptor.headRevision, '1');
 });
 
 test('closed request rejects secret fields, noncanonical integers and digest substitution', async (t) => {
@@ -157,6 +213,6 @@ test('closed request rejects secret fields, noncanonical integers and digest sub
     { ...base, expectedHeadSha256: 'a'.repeat(64) }, { ...base, bundleSha256: 'A'.repeat(64) },
     { ...base, operationId: `${base.operationId}=` }, { ...base, driveFileId: '../other' },
     { ...base, generationId: base.operationId },
-  ]) denies(() => core.commitGenerationMetadata(owner.sessionToken, invalid), 'invalid_request');
+  ]) denies(() => commit(core, owner.sessionToken, invalid), 'invalid_request');
   assert.equal(core.readBackupHead(owner.sessionToken).head, null);
 });

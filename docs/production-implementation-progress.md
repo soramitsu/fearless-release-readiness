@@ -26,7 +26,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. Android's latest scoped backup run passes 205 JVM tests; its preceding journal head passed two API 36 emulator filesystem cases. iOS's latest Drive coordinator passes 49 selected Release simulator tests, while an earlier broader key/sign/send candidate passed **463 Release integration tests**, zero failures/skips. These are development checks at different source heads. Both app source trees are committed and pushed on review branches, but exact-head hosted checks for the newest increments, independent security review, protected qualification and distribution acceptance remain outstanding.
 
-The owner/grant authority core and its optional existing-owner WebAuthn verifier pass 52 tests on each of two Node runtimes; first-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
+The owner/grant authority core and its optional existing-owner WebAuthn verifier now pass 55 local tests; an earlier 52-test revision passed on each of two Node runtimes. First-owner bootstrap, legacy credential transactions, deployment and native Drive/PRF recovery remain unintegrated. Iroha source/build inventory has identified concrete packaging/CI fixes and protocol migration requirements. The complete frozen route inventory/unified manifest, transaction-byte/fee/hash/receipt qualification, general TON sends, production-service repairs and store/device acceptance remain open. No local or CI result substitutes for independent review, replacement-device recovery or capped funded evidence.
 
 ## Source preservation
 
@@ -314,6 +314,20 @@ recovery stays disabled. The root route-manifest commit
 hosted jobs, including the 88-case source-publication fixture suite locally.
 Mobile exact-head hosted CI and reviewer decisions must be rechecked after the
 new pushes.
+
+## Owner backup-head authorization — 2026-09-23
+
+The non-deployed owner authority now mints an internal 60-second grant bound
+to one canonical generation request, owner session/generation and audience.
+Its SQLite head-CAS transaction checks and consumes that grant atomically with
+the metadata update. A session token, any of the existing seven-route grants,
+an altered body, an expired grant or a revoked session cannot advance the head;
+successful operation replays require a fresh grant. The seven-route challenge
+grant contract remains unchanged. All 55 owner-service tests pass locally,
+including separate-process same-grant races and before/after-commit crash
+reconciliation. This adds no HTTP service, native decrypt verifier, owner
+lifecycle integration or permission to enable recovery. Exact-head hosted CI
+and independent review remain required after publication.
 
 ## Current local access check
 

@@ -7,6 +7,10 @@ import {
 const CEREMONY_MS = 120_000;
 const SESSION_MS = 600_000;
 const GRANT_MS = 60_000;
+// Internal metadata mutation only. This is deliberately outside the seven
+// challenge-service routes and cannot be consumed by their introspection API.
+const GENERATION_COMMIT_PATH = '/internal/passkey-backup/v1/generations/commit';
+const GENERATION_COMMIT_SCOPE = 'passkey.backup.generation.commit';
 const MAX_BACKUP_GENERATIONS = 256;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{1,256}$/;
@@ -114,6 +118,20 @@ function generationRequest(input) {
     keyEpoch: input.keyEpoch, driveFileId: input.driveFileId,
     storageAccountBinding: input.storageAccountBinding,
   };
+}
+function generationBinding(request, audience) {
+  return { audience, method: 'POST', path: GENERATION_COMMIT_PATH,
+    bodySha256: hash(JSON.stringify(request)), scope: GENERATION_COMMIT_SCOPE };
+}
+function mintGrant(tx, current, binding) {
+  if (tx.query('SELECT count(*) AS n FROM grants WHERE session=?', current.digest).n >= 64 ||
+      tx.query('SELECT count(*) AS n FROM grants').n >= 100_000) deny('capacity_exceeded');
+  const grant = random('grant.');
+  const expires = Math.floor(Math.min(current.expires, tx.now + GRANT_MS) / 1000) * 1000;
+  if (expires <= tx.now) deny();
+  tx.run('INSERT INTO grants VALUES(?,?,?,?,?,?,?,?,?,?)', hash(grant), current.digest, current.owner, current.generation,
+    binding.audience, binding.method, binding.path, binding.bodySha256, binding.scope, expires);
+  return { token: grant, expiresAt: expires / 1000 };
 }
 function generationDescriptor(tx, row) {
   if (!row) return null;
@@ -276,14 +294,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       return store.transaction((tx) => {
         prune(tx);
         const current = session(tx, token);
-        if (tx.query('SELECT count(*) AS n FROM grants WHERE session=?', current.digest).n >= 64 ||
-            tx.query('SELECT count(*) AS n FROM grants').n >= 100_000) deny('capacity_exceeded');
-        const grant = random('grant.');
-        const expires = Math.floor(Math.min(current.expires, tx.now + GRANT_MS) / 1000) * 1000;
-        if (expires <= tx.now) deny();
-        tx.run('INSERT INTO grants VALUES(?,?,?,?,?,?,?,?,?,?)', hash(grant), current.digest, current.owner, current.generation,
-          binding.audience, binding.method, binding.path, binding.bodySha256, binding.scope, expires);
-        return { token: grant, expiresAt: expires / 1000 };
+        return mintGrant(tx, current, binding);
       });
     },
     consumeGrant(token, request) {
@@ -342,19 +353,40 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         return operation ? { status: 'committed', descriptor: generationDescriptor(tx, operation) } : { status: 'absent' };
       });
     },
+    issueGenerationGrant(token, input) {
+      const request = generationRequest(input);
+      const binding = generationBinding(request, audience);
+      return store.transaction((tx) => {
+        prune(tx);
+        const current = session(tx, token);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        if (request.backupNamespace !== owner.namespace) deny();
+        return mintGrant(tx, current, binding);
+      });
+    },
     // Metadata CAS only. The caller must have uploaded, downloaded, unwrapped,
     // decrypted and checked the exact immutable bytes before invoking this.
     // This core has no HTTP route and does not claim to verify that device work.
-    commitGenerationMetadata(token, input) {
+    commitGenerationMetadata(grantToken, input) {
       const request = generationRequest(input);
-      const requestHash = hash(JSON.stringify(request));
+      const binding = generationBinding(request, audience);
+      const requestHash = binding.bodySha256;
       return store.transaction((tx) => {
-        const current = session(tx, token);
+        const grantDigest = hash(opaque(grantToken, 'grant.'));
+        const grant = tx.query('SELECT * FROM grants WHERE digest=?', grantDigest);
+        if (!grant || grant.expires <= tx.now || grant.audience !== binding.audience ||
+            grant.method !== binding.method || grant.path !== binding.path ||
+            grant.body_hash !== binding.bodySha256 || grant.scope !== binding.scope) deny();
+        const current = tx.query('SELECT * FROM sessions WHERE digest=?', grant.session);
+        if (!current || current.expires <= tx.now || current.owner !== grant.owner ||
+            current.generation !== grant.generation) deny();
+        activeCredential(tx, current.credential, grant.owner);
         const owner = activeOwner(tx, current.owner, current.generation);
         if (request.backupNamespace !== owner.namespace) deny();
         const priorOperation = tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId);
         if (priorOperation) {
           if (priorOperation.owner !== owner.subject || priorOperation.request_hash !== requestHash) deny('operation_conflict');
+          tx.run('DELETE FROM grants WHERE digest=?', grantDigest);
           return { status: 'committed', descriptor: generationDescriptor(tx, priorOperation) };
         }
         const state = backupHead(tx, owner);
@@ -376,6 +408,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           request.storageAccountBinding);
         tx.run('INSERT INTO backup_heads VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision, operation_id=excluded.operation_id',
           owner.subject, revision, request.operationId);
+        tx.run('DELETE FROM grants WHERE digest=?', grantDigest);
         return { status: 'committed', descriptor: generationDescriptor(tx,
           tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId)) };
       });
