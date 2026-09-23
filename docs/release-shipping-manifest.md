@@ -36,7 +36,8 @@ the audit script:
 | `googleApplicationId`, `passkeyConfigSha256` | One Google application identity and the exact root passkey production-policy bytes. |
 
 Artifact and evidence paths must be regular nonsymlink files under
-`build/reports/`; the manifest references their bytes by SHA-256. The source
+`build/reports/`; a retained path cannot represent more than one artifact or
+evidence kind. The manifest references their bytes by SHA-256. The source
 publication and platform artifact audits must independently establish that the
 named builds came from those commits and that the compiled-route/policy files
 were actually extracted from the exact distributed artifacts. This validator

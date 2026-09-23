@@ -197,8 +197,11 @@ export function validateShippingManifestShape(manifest, sourceRows) {
   for (const row of manifest.files) assert.equal(row.path, FILES.get(row.kind), 'release file substituted');
   rows(manifest.artifacts, ARTIFACTS, 'artifact', true);
   rows(manifest.evidence, EVIDENCE, 'evidence');
+  const retainedPaths = new Set();
   for (const row of [...manifest.artifacts, ...manifest.evidence]) {
     assert.ok(row.path.startsWith('build/reports/'), 'artifact/evidence must stay under build/reports');
+    assert.ok(!retainedPaths.has(row.path), 'artifact/evidence path is reused');
+    retainedPaths.add(row.path);
   }
   keys(manifest.routeInventories, ['androidSha256', 'iosSha256'], 'route inventories');
   matches(manifest.routeInventories.androidSha256, DIGEST, 'Android route digest');

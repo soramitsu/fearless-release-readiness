@@ -209,3 +209,13 @@ test('checkout symlink substitution is rejected even when its Git commit is iden
     assert.throws(() => auditReleaseShippingManifest(f.root), /checkout path is substituted/u);
   } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
+
+test('one retained file cannot stand in for two independent evidence kinds', () => {
+  const f = fixture();
+  try {
+    f.manifest.evidence[1].path = f.manifest.evidence[0].path;
+    f.manifest.evidence[1].sha256 = f.manifest.evidence[0].sha256;
+    f.save();
+    assert.throws(() => auditReleaseShippingManifest(f.root), /artifact\/evidence path is reused/u);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});

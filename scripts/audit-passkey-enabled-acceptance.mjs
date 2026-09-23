@@ -167,8 +167,15 @@ function validateDates(payload, now) {
   assert.ok(expires - completed <= 14 * 24 * 60 * 60_000, 'acceptance lifetime exceeds 14 days');
 }
 
-function validateEvidence(root, evidence) {
+function validateEvidence(root, evidence, manifest) {
   assert.ok(Array.isArray(evidence) && evidence.length === EVIDENCE_KINDS.length, 'complete raw evidence set required');
+  assert.ok(Array.isArray(manifest.evidence), 'shipping manifest evidence is required');
+  const shippingRows = new Map();
+  for (const row of manifest.evidence) {
+    assert.ok(row && typeof row === 'object' && typeof row.kind === 'string' &&
+      !shippingRows.has(row.kind), 'shipping manifest evidence is ambiguous');
+    shippingRows.set(row.kind, row);
+  }
   const kinds = new Set();
   const paths = new Set();
   for (const row of evidence) {
@@ -177,7 +184,10 @@ function validateEvidence(root, evidence) {
     assert.ok(typeof row.path === 'string' && row.path.startsWith(EVIDENCE_DIR), 'raw evidence must stay under acceptance evidence directory');
     assert.ok(!paths.has(row.path), 'one raw file cannot substitute for multiple evidence kinds');
     requireDigest(row.sha256, 'raw evidence digest');
-    assert.equal(sha256File(regularFile(root, row.path)), row.sha256, `raw evidence digest mismatch: ${row.kind}`);
+    const actualDigest = sha256File(regularFile(root, row.path));
+    assert.deepEqual(shippingRows.get(row.kind), row,
+      `acceptance evidence differs from shipping manifest: ${row.kind}`);
+    assert.equal(actualDigest, row.sha256, `raw evidence digest mismatch: ${row.kind}`);
     kinds.add(row.kind);
     paths.add(row.path);
   }
@@ -246,7 +256,7 @@ export function auditPasskeyEnabledAcceptance(root = PRODUCTION_ROOT, now = Date
   requireKeys(payload.checks, CHECKS, 'enabled-feature checks');
   for (const check of CHECKS) assert.equal(payload.checks[check], true, `${check} requires affirmative device/review evidence`);
   validateDates(payload, now);
-  validateEvidence(root, payload.evidence);
+  validateEvidence(root, payload.evidence, manifest);
   validateTrustAndSignatures(trust, payload, attestation.signatures);
   return { releaseManifestSha256: payload.releaseManifestSha256, acceptedAt: new Date(now).toISOString() };
 }

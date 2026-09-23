@@ -62,7 +62,6 @@ function fixture() {
   };
   write(root, 'config/passkey-backup-production.json', config);
   manifest.passkeyConfigSha256 = sha(readFileSync(path.join(root, 'config/passkey-backup-production.json')));
-  write(root, 'config/release-shipping-manifest.json', manifest);
   write(root, 'config/passkey-enabled-acceptance-trust.json', {
     schemaVersion: 1,
     keys: Object.fromEntries(Object.entries(keys).map(([role, pair]) => [role, {
@@ -76,6 +75,8 @@ function fixture() {
     write(root, relative, raw);
     return { kind, path: relative, sha256: sha(raw) };
   });
+  manifest.evidence = structuredClone(evidence);
+  write(root, 'config/release-shipping-manifest.json', manifest);
   const payload = {
     releaseManifestSha256: sha(readFileSync(path.join(root, 'config/release-shipping-manifest.json'))),
     android: manifest.android,
@@ -193,6 +194,18 @@ inFixture('missing evidence category', (input) => {
   input.payload.evidence.pop();
   input.save();
 }, /complete raw evidence set/u);
+inFixture('signed raw evidence differs from the reviewed shipping manifest', (input) => {
+  const relative = `${RAW_DIR}/substituted-traffic.json`;
+  const raw = JSON.stringify({ kind: 'sanitized-network-traffic', replacement: true });
+  write(input.root, relative, raw);
+  input.payload.evidence.find((row) => row.kind === 'sanitized-network-traffic').path = relative;
+  input.payload.evidence.find((row) => row.kind === 'sanitized-network-traffic').sha256 = sha(raw);
+  input.save();
+}, /acceptance evidence differs from shipping manifest/u);
+inFixture('duplicate shipping evidence kind is ambiguous', (input) => {
+  input.manifest.evidence.push(structuredClone(input.manifest.evidence[0]));
+  input.rebindManifest();
+}, /shipping manifest evidence is ambiguous/u);
 inFixture('path traversal', (input) => {
   input.payload.evidence[0].path = `${RAW_DIR}/../../../../outside.json`;
   input.save();
