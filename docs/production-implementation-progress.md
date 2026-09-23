@@ -1077,13 +1077,18 @@ Watch-only cohorts still fail in the Android local draft capture, and no
 Android adapter yet converts that draft to the shared format.
 
 iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
-points to pushed head `e8b7878553297d3f027b8c25ff2a976e1e176f9a`.
-Its `FPWMLE01` header recognizes the same portable pair; the focused iOS
-Simulator envelope suite passes 3/3. This header alone does not decode or
-install semantic material. The matching iOS codec is still in progress.
-Neither platform has replacement-device recovery evidence or an enabled
-portable backup path. The exact Android and iOS heads still need hosted CI
-completion and independent review.
+points to pushed head `a63592e218ac86c4dd2fbf3e3e74771140dbee7b`.
+Its `FPWMLE01` header recognizes the same portable pair, and its independent
+`FPWMSM01` codec decodes and reencodes Android's exact EVM bytes while matching
+the Android multi-root and nine-metadata SHA-256 vectors. Signed and watch TON
+records require the released V4R2 code. The focused iPhone 15 Simulator suite
+passes 13/13 (10 semantic codec, three envelope), with scoped SwiftFormat,
+strict SwiftLint, source typecheck, project lint and diff checks passing. Swift
+buffer cleanup is best effort because prior copy-on-write copies may remain.
+This is still an unwired structural parser, not an original-key verifier or
+restore installer. Neither platform has replacement-device recovery evidence
+or an enabled portable backup path. The exact Android and iOS heads still need
+hosted CI completion and independent review.
 
 ## Completion record
 

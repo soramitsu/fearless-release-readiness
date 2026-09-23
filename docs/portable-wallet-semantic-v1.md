@@ -53,7 +53,7 @@ favorites, 128 watch identities and 1,024 auxiliary sources per wallet.
 | --- | --- |
 | 1 | Asset keys order: `u16 count` followed by `text[count]`. |
 | 2 | Unused chain IDs: the same ordered string-list encoding. |
-| 3 | Selected currency: raw strict UTF-8 (empty allowed). |
+| 3 | Selected currency identifier: raw strict UTF-8. A restoring app must resolve it in its current currency catalog; it must not silently select another currency. The codec accepts empty bytes only for legacy parsing; capture must omit this item when no identifier exists. |
 | 4 | Network management filter: raw strict UTF-8 (empty allowed). |
 | 5 | Asset visibility: `u16 count`, then ascending unique nonempty `text assetId, u8 hidden` pairs. |
 | 6 | Favorite chain IDs: ordered string list; mutually exclusive with role 6 slots. |
