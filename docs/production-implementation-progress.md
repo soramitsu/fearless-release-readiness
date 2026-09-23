@@ -45,13 +45,17 @@ replacement-device recovery or capped funded evidence.
 ## Current source checkpoint — 2026-09-24
 
 The latest pushed Android candidate is
-`c705fe7baf216dc89fdc8947d1da856661b20997` on
+`86b498992bacd39a96d089e3356b77b3ff476cdf` on
 [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). Its
-Android-local draft captures validated V3 Substrate/EVM/TON and V2 chain-account
-bytes across multiple wallets. Account JVM tests passed 186/186, the focused
-material tests passed 18/18, and Detekt passed locally. Exact-head Android CI
-and IAS validation are still running. This is not a cross-platform format,
-installer or enabled Drive backup.
+Android-local draft captures validated V3 Substrate/EVM/TON, V2 chain-account
+and separately guarded V1 source material across multiple wallets. Active V1
+aliases without one durable wallet owner, malformed aliases and inventory
+changes block capture without deleting the source; its plaintext staging
+buffer is wiped. Focused material tests passed 26/26 and the full account
+module passed 194/194 against a clean checkout of pinned Utils source.
+Default Detekt excludes this module; a forced scoped run still reports style
+and complexity debt. Exact-head Android CI and IAS validation are pending.
+This is not a cross-platform format, installer or enabled Drive backup.
 
 The latest pushed iOS candidate is
 `abf16a61fca9167f8212da1ac82817365c2917f3` on
