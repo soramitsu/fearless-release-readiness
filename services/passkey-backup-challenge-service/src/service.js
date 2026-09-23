@@ -229,7 +229,7 @@ export function createPasskeyBackupChallengeService({
         authorizationContext,
         allowInsecureTestAuthorization,
       );
-      validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], [], 'assertion challenge request');
+      validateExactObject(request, ['storageKey', 'rpId', 'schemaVersion'], ['credentialId'], 'assertion challenge request');
       const storageKey = validateIdentifier(request.storageKey, 'storageKey');
       validateRpId(request.rpId);
       validateSchemaVersion(request.schemaVersion);
@@ -240,11 +240,17 @@ export function createPasskeyBackupChallengeService({
       if (!store.isStorageOwner(storageKey, authorization.subjectHash)) {
         throw serviceError(403, 'request_authorization_failed', 'Request authorization failed');
       }
+      // A credential-directed ceremony may omit userHandle under WebAuthn. Bind
+      // the exact allowCredentials ID before issuing its one-use challenge.
+      const credentialId = request.credentialId === undefined
+        ? undefined : validateCredentialId(request.credentialId);
+      if (credentialId !== undefined) store.getCredential(storageKey, credentialId);
 
       const assertion = {
         assertionId: randomToken('assert', randomBytes),
         challenge: challenge(randomBytes),
         storageKey,
+        ...(credentialId === undefined ? {} : { credentialId }),
         rpId: RP_ID,
         schemaVersion: SCHEMA_VERSION,
       };
@@ -271,9 +277,14 @@ export function createPasskeyBackupChallengeService({
         allowedOrigins,
         pending.authorizationPlatform,
       );
-      const credential = validateCredentialResponse(request.credential, 'authentication');
+      const credential = validateCredentialResponse(request.credential, 'authentication', {
+        allowNullUserHandle: pending.credentialId !== undefined,
+      });
+      if (pending.credentialId !== undefined && credential.id !== pending.credentialId) {
+        throw serviceError(403, 'credential_not_registered', 'Credential is not registered for this challenge');
+      }
       const registeredCredential = store.getCredential(pending.storageKey, credential.id);
-      if (credential.response.userHandle === undefined || credential.response.userHandle === null ||
+      if (credential.response.userHandle !== null &&
           credential.response.userHandle !== registeredCredential.userId) {
         throw serviceError(403, 'credential_user_mismatch', 'Credential userHandle does not match this storageKey');
       }

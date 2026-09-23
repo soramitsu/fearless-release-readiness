@@ -207,6 +207,40 @@ test('registration and assertion verify real ES256 WebAuthn cryptography', async
   assert.deepEqual(assertionResult, result);
 });
 
+test('credential-directed assertion accepts null userHandle only for its bound credential', async () => {
+  const service = makeService();
+  const { registration, result, authenticator } = await registerCredential(service);
+  const credentialId = base64UrlEncode(authenticator.credentialId);
+  const request = {
+    storageKey: result.storageKey,
+    credentialId,
+    rpId: RP_ID,
+    schemaVersion: SCHEMA_VERSION,
+  };
+  const assertion = service.createAssertionChallenge(request);
+  assert.equal(assertion.credentialId, credentialId);
+  assert.deepEqual(
+    await service.completeAssertion(assertionCompletion(assertion, authenticator, null)),
+    result,
+  );
+
+  const wrongId = base64UrlEncode(Buffer.alloc(32, 0xfa));
+  assertServiceError(() => service.createAssertionChallenge({ ...request, credentialId: wrongId }),
+    'credential_not_registered', 403);
+  const substituted = service.createAssertionChallenge(request);
+  await assertServiceRejects(service.completeAssertion(assertionCompletion(
+    substituted, authenticator, registration.userId, { credentialId: Buffer.alloc(32, 0xfa) },
+  )), 'credential_not_registered', 403);
+
+  const discoverable = service.createAssertionChallenge({
+    storageKey: result.storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION,
+  });
+  assert.equal(Object.hasOwn(discoverable, 'credentialId'), false);
+  await assertServiceRejects(service.completeAssertion(assertionCompletion(
+    discoverable, authenticator, null,
+  )), 'invalid_credential', 400);
+});
+
 test('registration and assertion verify real RS256 WebAuthn cryptography', async () => {
   const service = makeService();
   const authenticator = createAuthenticator('fearless-test-rs256-passkey', { algorithm: -257 });

@@ -336,7 +336,7 @@ function validateCredentialEnvelope(value) {
   };
 }
 
-export function validateCredentialResponse(value, ceremonyType) {
+export function validateCredentialResponse(value, ceremonyType, { allowNullUserHandle = false } = {}) {
   const credential = validateCredentialEnvelope(value);
 
   if (ceremonyType === 'registration') {
@@ -395,13 +395,15 @@ export function validateCredentialResponse(value, ceremonyType) {
     validateBase64UrlBlob(value.response.clientDataJSON, 'credential.response.clientDataJSON', 8192);
     validateBase64UrlBlob(value.response.authenticatorData, 'credential.response.authenticatorData');
     validateBase64UrlBlob(value.response.signature, 'credential.response.signature');
-    const userHandle = validateBase64UrlBlob(
-      value.response.userHandle,
-      'credential.response.userHandle',
-      43,
-    );
-    if (userHandle.length !== 32 || value.response.userHandle.length !== 43) {
-      invalidCredential('credential.response.userHandle must be a 32-byte user identifier');
+    if (value.response.userHandle !== null || !allowNullUserHandle) {
+      const userHandle = validateBase64UrlBlob(
+        value.response.userHandle,
+        'credential.response.userHandle',
+        43,
+      );
+      if (userHandle.length !== 32 || value.response.userHandle.length !== 43) {
+        invalidCredential('credential.response.userHandle must be a 32-byte user identifier');
+      }
     }
 
     return {

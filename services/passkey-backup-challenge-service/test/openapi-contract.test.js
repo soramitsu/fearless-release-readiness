@@ -43,6 +43,13 @@ test('OpenAPI requires one-time Bearer grants and exact hardened POST response m
 test('OpenAPI user handle and generic error envelope match runtime validation', () => {
   assert.equal(spec.components.schemas.Base64UrlUserId.pattern, '^[A-Za-z0-9_-]{43}$');
   assert.ok(spec.components.schemas.AssertionAuthenticatorResponse.required.includes('userHandle'));
+  assert.deepEqual(spec.components.schemas.AssertionAuthenticatorResponse.properties.userHandle.oneOf, [
+    { $ref: '#/components/schemas/Base64UrlUserId' }, { type: 'null' },
+  ]);
+  assert.equal(spec.components.schemas.AssertionChallengeRequest.properties.credentialId.$ref,
+    '#/components/schemas/Base64UrlCredentialId');
+  assert.equal(spec.components.schemas.AssertionChallengeResponse.properties.credentialId.$ref,
+    '#/components/schemas/Base64UrlCredentialId');
   assert.deepEqual(spec.components.schemas.ErrorResponse.required, [
     'ok', 'service', 'error', 'rpId', 'schemaVersion',
   ]);

@@ -21,6 +21,13 @@ credential signatures, user handles, and signature counters. It stores only
 short-lived ceremonies and the public verification records required for later
 assertions. Encrypted wallet backup payloads remain in platform cloud storage.
 
+An assertion challenge may include an exact registered `credentialId` for a
+credential-directed PRF ceremony. The challenge echoes and stores that ID, and
+completion rejects a different credential. Only that directed ceremony accepts
+WebAuthn's nullable `userHandle`; a discoverable challenge without `credentialId`
+still requires the exact stored user handle. This does not provide owner
+bootstrap, cross-device recovery, or approval to enable the backup feature.
+
 ## Environment
 
 | Variable | Default | Purpose |

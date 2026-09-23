@@ -377,6 +377,10 @@
         "required": ["storageKey", "rpId", "schemaVersion"],
         "properties": {
           "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "credentialId": {
+            "$ref": "#/components/schemas/Base64UrlCredentialId",
+            "description": "Optional exact allowCredentials ID. When omitted, the discoverable assertion must return its stored userHandle."
+          },
           "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
           "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
         }
@@ -389,6 +393,10 @@
           "assertionId": { "$ref": "#/components/schemas/CeremonyId" },
           "challenge": { "$ref": "#/components/schemas/Base64UrlChallenge" },
           "storageKey": { "$ref": "#/components/schemas/StorageKey" },
+          "credentialId": {
+            "$ref": "#/components/schemas/Base64UrlCredentialId",
+            "description": "Echoed only for a credential-directed challenge; clients must constrain allowCredentials to this ID."
+          },
           "rpId": { "$ref": "#/components/schemas/RelyingPartyId" },
           "schemaVersion": { "$ref": "#/components/schemas/SchemaVersion" }
         }
@@ -617,7 +625,13 @@
           "clientDataJSON": { "$ref": "#/components/schemas/Base64UrlBlob" },
           "authenticatorData": { "$ref": "#/components/schemas/Base64UrlBlob" },
           "signature": { "$ref": "#/components/schemas/Base64UrlBlob" },
-          "userHandle": { "$ref": "#/components/schemas/Base64UrlUserId" }
+          "userHandle": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/Base64UrlUserId" },
+              { "type": "null" }
+            ],
+            "description": "Null is accepted only for an assertion whose challenge was bound to an exact credentialId."
+          }
         }
       }
     }
