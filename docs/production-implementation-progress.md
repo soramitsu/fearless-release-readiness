@@ -67,8 +67,14 @@ The current pushed Android candidate is
 `7fbee1db9b00dcdf28c14385304c230e2b9f7971`, including exact amount-property
 integrity and confirmation/submission parity checks for XCM; its focused tests
 and Detekt pass locally. The
-current pushed iOS candidate is `33ab72ecbbc52e089278a883ef809475b6b88121`;
-102 impacted tests pass locally after the accessibility repair. Exact-head
+current pushed iOS candidate is `d4e60ce4a1124a60787cfb7a1de5004b5e9c8dcc`;
+102 impacted tests passed locally at the earlier accessibility checkpoint.
+At the current iOS head, a focused iOS 18.1 simulator preflight suite passes
+14/14: it locally signs and verifies ED25519/ECDSA Substrate, EVM and explicit
+chain keys. SR25519 portable qualification remains blocked at the pinned
+native C/Rust signer boundary, which aborted on a malformed 64-byte key in an
+earlier test. Recovery remains disabled; this preflight cannot establish
+cross-device restoration. Exact-head
 hosted qualification, independent review, distribution-signed upgrade and
 cross-device recovery evidence remain open. The shared-features candidate is
 `b7ef68761b7962fc06193b500467da7ba5498070`, and the website-association
