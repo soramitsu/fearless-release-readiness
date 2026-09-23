@@ -272,6 +272,23 @@ function validateTransports(value) {
   return transports;
 }
 
+function validateServerExtensionResults(value) {
+  // Native clients must extract PRF output into a local-only typed result before
+  // serializing the credential. Do not accept arbitrary WebAuthn toJSON output:
+  // PRF and large-blob extension results can contain wallet recovery material.
+  // This is a second boundary, not a substitute for client-side sanitization.
+  if (!isPlainObject(value) || Object.keys(value).some((key) => key !== 'credProps')) {
+    invalidCredential('credential.clientExtensionResults contains unsupported extension data');
+  }
+  if (!Object.prototype.hasOwnProperty.call(value, 'credProps')) return {};
+  const properties = value.credProps;
+  if (!isPlainObject(properties) || Object.keys(properties).length !== 1 ||
+      !Object.prototype.hasOwnProperty.call(properties, 'rk') || typeof properties.rk !== 'boolean') {
+    invalidCredential('credential.clientExtensionResults contains invalid public credential properties');
+  }
+  return { credProps: { rk: properties.rk } };
+}
+
 function validateCredentialEnvelope(value) {
   try {
     validateExactObject(
@@ -299,9 +316,7 @@ function validateCredentialEnvelope(value) {
   if (value.type !== 'public-key') {
     invalidCredential('credential.type must be public-key');
   }
-  if (!isPlainObject(value.clientExtensionResults)) {
-    invalidCredential('credential.clientExtensionResults must be an object');
-  }
+  const clientExtensionResults = validateServerExtensionResults(value.clientExtensionResults);
   if (value.authenticatorAttachment !== undefined &&
       !CREDENTIAL_ATTACHMENTS.has(value.authenticatorAttachment)) {
     invalidCredential('credential.authenticatorAttachment is unsupported');
@@ -314,7 +329,7 @@ function validateCredentialEnvelope(value) {
     id: value.id,
     rawId: value.rawId,
     type: value.type,
-    clientExtensionResults: value.clientExtensionResults,
+    clientExtensionResults,
     ...(value.authenticatorAttachment === undefined
       ? {}
       : { authenticatorAttachment: value.authenticatorAttachment }),

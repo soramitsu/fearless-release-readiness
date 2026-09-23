@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${RELEASE_PR_MERGE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="${RELEASE_PR_MERGE_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 CONFIG_FILE="${RELEASE_PR_MERGE_CONFIG:-$ROOT_DIR/config/release-readiness-prs.tsv}"
+READINESS_AUDIT="$SCRIPT_DIR/audit-release-pr-readiness.sh"
 GH_BIN="${GH_BIN:-gh}"
 MODE="dry-run"
 MERGE_METHOD="${RELEASE_PR_MERGE_METHOD:-merge}"
@@ -17,8 +19,10 @@ config/release-readiness-prs.tsv. Default mode is --dry-run.
 The script refuses to merge draft PRs, unapproved PRs, non-clean merge states,
 missing/incomplete/ambiguous required checks, unresolved review conversations,
 branch-ref drift, closed-unmerged PRs, malformed GitHub responses, and duplicate
-config rows. Apply mode uses gh pr merge with --match-head-commit and never uses
-administrator bypass.
+config rows. Every locally discovered candidate must also pass the central typed
+check-authority audit for its exact reviewed PR number and head SHA. Apply mode
+repeats that authoritative preflight immediately before gh pr merge, uses
+--match-head-commit, and never uses administrator bypass.
 
 Apply mode requires:
 
@@ -78,6 +82,7 @@ case "$MERGE_METHOD" in
 esac
 
 [[ -f "$CONFIG_FILE" ]] || fail "Required PR config missing: $CONFIG_FILE"
+[[ -f "$READINESS_AUDIT" && ! -L "$READINESS_AUDIT" ]] || fail "Authoritative release PR readiness auditor missing or aliased: $READINESS_AUDIT"
 command -v "$GH_BIN" >/dev/null 2>&1 || fail "gh CLI not found. Install GitHub CLI or set GH_BIN."
 
 tmp_dir="$(mktemp -d)"
@@ -95,6 +100,30 @@ already_merged_count=0
 record_failure() {
   failures+=("$1")
   warn "$1"
+}
+
+verify_authoritative_open_candidate() {
+  local repo="$1"
+  local head="$2"
+  local base="$3"
+  local number="$4"
+  local sha="$5"
+  local output
+
+  if ! output="$(
+    RELEASE_PR_READINESS_ROOT="$ROOT_DIR" \
+    RELEASE_PR_READINESS_CONFIG="$CONFIG_FILE" \
+    RELEASE_PR_READINESS_REPORT= \
+    GH_BIN="$GH_BIN" \
+      bash "$READINESS_AUDIT" \
+        --config "$CONFIG_FILE" \
+        --verify-open-candidate "$repo" "$head" "$base" "$number" "$sha" 2>&1
+  )"; then
+    if [[ -n "$output" ]]; then
+      printf '%s\n' "$output" >&2
+    fi
+    return 1
+  fi
 }
 
 is_safe_branch_ref() {
@@ -565,9 +594,13 @@ NODE
   IFS=$'\t' read -r row_type row_repo row_number row_url row_head row_base row_sha row_checks <<< "$node_output"
   case "$row_type" in
     candidate)
+      if ! verify_authoritative_open_candidate "$row_repo" "$row_head" "$row_base" "$row_number" "$row_sha"; then
+        record_failure "$row_repo#$row_number at $row_sha failed authoritative protected-merge preflight"
+        continue
+      fi
       candidate_count=$((candidate_count + 1))
       printf '%s\n' "$node_output" >> "$candidates_tsv"
-      log "Ready to merge $row_repo#$row_number head=$row_sha base=$row_base checks=$row_checks"
+      log "Ready to merge authoritative reviewed candidate $row_repo#$row_number head=$row_sha base=$row_base checks=$row_checks"
       ;;
     merged)
       already_merged_count=$((already_merged_count + 1))
@@ -609,6 +642,9 @@ fi
 
 log "Applying protected-branch merge for $candidate_count release PR(s) with method '$MERGE_METHOD'."
 while IFS=$'\t' read -r row_type repo number url head base sha checks; do
+  if ! verify_authoritative_open_candidate "$repo" "$head" "$base" "$number" "$sha"; then
+    fail "authoritative protected-merge preflight changed before apply for $repo#$number at $sha"
+  fi
   if ! "$GH_BIN" pr merge "$number" \
     --repo "$repo" \
     "$merge_flag" \

@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "test": "node --test",
     "audit:dependencies": "npm audit --omit=dev",
-    "lint:syntax": "node --check src/base64url.js && node --check src/errors.js && node --check src/validation.js && node --check src/authorization.js && node --check src/store.js && node --check src/service.js && node --check src/server.js && node --check scripts/production-smoke.mjs && node --check test/webauthn-fixture.js && node --check test/service.test.js && node --check test/authorization.test.js && node --check test/security-regression.test.js && node --check test/openapi-contract.test.js && node --check test/deployment-manifest.test.js && node --check test/production-smoke.test.js",
+    "lint:syntax": "node --check src/base64url.js && node --check src/errors.js && node --check src/validation.js && node --check src/authorization.js && node --check src/store.js && node --check src/service.js && node --check src/server.js && node --check scripts/production-smoke.mjs && node --check test/webauthn-fixture.js && node --check test/service.test.js && node --check test/authorization.test.js && node --check test/security-regression.test.js && node --check test/openapi-contract.test.js && node --check test/deployment-manifest.test.js && node --check test/production-smoke.test.js && node --check test/credential-owner-index.test.js",
     "smoke:production": "node scripts/production-smoke.mjs",
     "audit:deployment-evidence": "bash scripts/audit-deployment-evidence.sh",
     "generate:deployment-evidence-template": "bash scripts/generate-deployment-evidence-template.sh",

@@ -5,10 +5,17 @@ ROOT_DIR="${RELEASE_PR_READINESS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 CONFIG_FILE="${RELEASE_PR_READINESS_CONFIG:-$ROOT_DIR/config/release-readiness-prs.tsv}"
 GH_BIN="${GH_BIN:-gh}"
 REPORT_FILE="${RELEASE_PR_READINESS_REPORT:-}"
+ALLOW_READY_OPEN=0
+VERIFY_OPEN_CANDIDATE_REPO=""
+VERIFY_OPEN_CANDIDATE_HEAD=""
+VERIFY_OPEN_CANDIDATE_BASE=""
+VERIFY_OPEN_CANDIDATE_PR_NUMBER=""
+VERIFY_OPEN_CANDIDATE_HEAD_SHA=""
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/audit-release-pr-readiness.sh [--config FILE] [--write-report FILE]
+       scripts/audit-release-pr-readiness.sh --config FILE --verify-open-candidate REPO HEAD BASE PR_NUMBER HEAD_SHA
 
 Checks the implementation PRs that must be merged before the Fearless release can
 be considered ready. The input is a tab-separated file:
@@ -25,17 +32,29 @@ Every requirement must also have one immutable evidence line in the same file:
 The reviewed pull request number and exact 40-character lowercase head commit are
 mandatory even when the remote topic branch has already been deleted.
 
-If GitHub reports a required check name more than once, that requirement must
-also pin the GitHub Actions workflow allowed to emit the duplicate rows:
+Every required check must pin the authority allowed to emit it:
 
-  # duplicate_check_provenance_pin<TAB>repo<TAB>head<TAB>base<TAB>check_name<TAB>app_id<TAB>app_slug<TAB>workflow_id<TAB>workflow_path
+  # required_check_provenance_pin<TAB>repo<TAB>head<TAB>base<TAB>check_name<TAB>kind<TAB>actor_id<TAB>actor_slug<TAB>authority_id<TAB>authority_value
 
-Duplicate rows are accepted only when every row is bound to the reviewed head
-SHA, emitted by the pinned GitHub Actions app/workflow, and has complete
-check-suite and Actions-run provenance. Outcomes are evaluated only for
-pull_request runs whose Actions head branch exactly matches the configured PR
-head. Same-SHA runs from another branch or from a post-merge push cannot satisfy
-or invalidate that PR; at least one exact-head pull_request run must exist.
+Supported authority kinds are github-actions, check-run-app, and commit-status.
+GitHub Actions pins bind the canonical Actions app plus an exact workflow ID and
+path. Check-run app pins bind an exact app ID and slug. Commit-status pins bind
+an exact creator ID/login and canonical HTTPS target origin. When GitHub
+explicitly returns a null status creator, commit-status pins use - for both
+actor fields and remain bound to the exact canonical HTTPS target origin. Every matching row
+must use the pinned source kind and authority. GitHub Actions outcomes are
+evaluated only for pull_request runs whose Actions head branch exactly matches
+the configured PR head. Same-SHA runs from another branch or post-merge pushes
+cannot satisfy or invalidate that PR; at least one exact-head pull_request run
+must exist.
+
+--verify-open-candidate is a non-mutating, candidate-bound handoff mode for the
+protected merge helper. It accepts open pinned PRs only when their exact heads,
+typed check authorities, successful outcomes, approvals, clean merge states,
+and closed review-conversation inventories all pass. The requested repo, head,
+base, PR number, and head SHA must identify exactly one verified open candidate.
+This mode never writes a release-readiness report. Normal release readiness
+still requires every configured PR to be merged.
 
 Environment:
   RELEASE_PR_READINESS_ROOT    Workspace root.
@@ -55,6 +74,19 @@ while (($#)); do
       REPORT_FILE="$2"
       shift 2
       ;;
+    --verify-open-candidate)
+      if (($# < 6)); then
+        echo "[release-pr-readiness][error] --verify-open-candidate requires REPO HEAD BASE PR_NUMBER HEAD_SHA" >&2
+        exit 2
+      fi
+      ALLOW_READY_OPEN=1
+      VERIFY_OPEN_CANDIDATE_REPO="$2"
+      VERIFY_OPEN_CANDIDATE_HEAD="$3"
+      VERIFY_OPEN_CANDIDATE_BASE="$4"
+      VERIFY_OPEN_CANDIDATE_PR_NUMBER="$5"
+      VERIFY_OPEN_CANDIDATE_HEAD_SHA="$6"
+      shift 6
+      ;;
     -h|--help)
       usage
       exit 0
@@ -66,6 +98,25 @@ while (($#)); do
       ;;
   esac
 done
+
+if [[ "$ALLOW_READY_OPEN" == "1" ]]; then
+  if [[ -n "$REPORT_FILE" ]]; then
+    echo "[release-pr-readiness][error] --verify-open-candidate cannot write a release-readiness report" >&2
+    exit 2
+  fi
+  if [[ ! "$VERIFY_OPEN_CANDIDATE_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "[release-pr-readiness][error] --verify-open-candidate requires a canonical repo" >&2
+    exit 2
+  fi
+  if [[ ! "$VERIFY_OPEN_CANDIDATE_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[release-pr-readiness][error] --verify-open-candidate requires a canonical PR number" >&2
+    exit 2
+  fi
+  if [[ ! "$VERIFY_OPEN_CANDIDATE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "[release-pr-readiness][error] --verify-open-candidate requires an exact lowercase head SHA" >&2
+    exit 2
+  fi
+fi
 
 log() { echo "[release-pr-readiness] $*"; }
 warn() { echo "[release-pr-readiness][warn] $*" >&2; }
@@ -97,6 +148,17 @@ is_safe_branch_ref() {
   [[ ! "$ref" =~ (^|/)[^/]*\.lock($|/) ]] || return 1
   return 0
 }
+
+if [[ "$ALLOW_READY_OPEN" == "1" ]]; then
+  if ! is_safe_branch_ref "$VERIFY_OPEN_CANDIDATE_HEAD"; then
+    echo "[release-pr-readiness][error] --verify-open-candidate requires a canonical head branch" >&2
+    exit 2
+  fi
+  if ! is_safe_branch_ref "$VERIFY_OPEN_CANDIDATE_BASE"; then
+    echo "[release-pr-readiness][error] --verify-open-candidate requires a canonical base branch" >&2
+    exit 2
+  fi
+fi
 
 init_report() {
   [[ -n "$REPORT_FILE" ]] || return 0
@@ -327,7 +389,7 @@ console.log(`${matches[0].reviewedPrNumber}\t${matches[0].reviewedHeadSha}`)
 NODE
 }
 
-load_duplicate_check_provenance_pins() {
+load_required_check_provenance_pins() {
   node - "$CONFIG_FILE" <<'NODE'
 const fs = require('fs')
 const file = process.argv[2]
@@ -355,48 +417,93 @@ function validWorkflowPath(value) {
   return !segments.some((segment) => segment === '.' || segment === '..')
 }
 
+function validActorSlug(value) {
+  return /^[A-Za-z0-9][A-Za-z0-9._\[\]-]*$/.test(value)
+}
+
+function validHttpsOrigin(value) {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'https:' &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.pathname === '/' &&
+      parsed.search === '' &&
+      parsed.hash === '' &&
+      parsed.origin === value
+  } catch (_) {
+    return false
+  }
+}
+
 for (const [index, line] of lines.entries()) {
   const lineNumber = index + 1
   if (!line || /^\s*$/.test(line)) continue
-  if (line.startsWith('# duplicate_check_provenance_pin\t')) {
+  if (line.startsWith('# required_check_provenance_pin\t')) {
     const fields = line.split('\t')
     if (
-      fields.length === 9 &&
+      fields.length === 10 &&
       fields[1] === 'repo' &&
       fields[2] === 'head' &&
       fields[3] === 'base' &&
       fields[4] === 'check_name' &&
-      fields[5] === 'app_id' &&
-      fields[6] === 'app_slug' &&
-      fields[7] === 'workflow_id' &&
-      fields[8] === 'workflow_path'
+      fields[5] === 'kind' &&
+      fields[6] === 'actor_id' &&
+      fields[7] === 'actor_slug' &&
+      fields[8] === 'authority_id' &&
+      fields[9] === 'authority_value'
     ) {
       continue
     }
-    if (fields.length !== 9 || fields.some((field) => field.trim() !== field || field === '')) {
-      fail(`${file}:${lineNumber}: invalid duplicate required-check provenance pin`)
+    if (fields.length !== 10 || fields.some((field) => field.trim() !== field || field === '')) {
+      fail(`${file}:${lineNumber}: invalid required-check provenance pin`)
     }
-    const [, repo, head, base, checkName, appIdRaw, appSlug, workflowIdRaw, workflowPath] = fields
+    const [, repo, head, base, checkName, kind, actorIdRaw, actorSlug, authorityIdRaw, authorityValue] = fields
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid repo`)
+      fail(`${file}:${lineNumber}: required-check provenance pin has invalid repo`)
     }
     if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(head) || !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(base)) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid branch ref`)
+      fail(`${file}:${lineNumber}: required-check provenance pin has invalid branch ref`)
     }
-    if (/[\u0000-\u001f\u007f]/.test(checkName)) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid check name`)
+    if (checkName === '' || /[\u0000-\u001f\u007f]/.test(checkName)) {
+      fail(`${file}:${lineNumber}: required-check provenance pin has invalid check name`)
     }
-    if (!/^[1-9][0-9]*$/.test(appIdRaw) || !Number.isSafeInteger(Number(appIdRaw))) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid app id`)
+    if (!['github-actions', 'check-run-app', 'commit-status'].includes(kind)) {
+      fail(`${file}:${lineNumber}: required-check provenance pin has unsupported authority kind`)
     }
-    if (Number(appIdRaw) !== 15368 || appSlug !== 'github-actions') {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin must use the canonical GitHub Actions app`)
+    const nullCommitStatusCreator = kind === 'commit-status' && actorIdRaw === '-' && actorSlug === '-'
+    if (!nullCommitStatusCreator) {
+      if (!/^[1-9][0-9]*$/.test(actorIdRaw) || !Number.isSafeInteger(Number(actorIdRaw))) {
+        fail(`${file}:${lineNumber}: required-check provenance pin has invalid actor id`)
+      }
+      if (!validActorSlug(actorSlug)) {
+        fail(`${file}:${lineNumber}: required-check provenance pin has invalid actor slug`)
+      }
     }
-    if (!/^[1-9][0-9]*$/.test(workflowIdRaw) || !Number.isSafeInteger(Number(workflowIdRaw))) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid workflow id`)
-    }
-    if (!validWorkflowPath(workflowPath)) {
-      fail(`${file}:${lineNumber}: duplicate required-check provenance pin has invalid workflow path`)
+
+    let authorityId = null
+    if (kind === 'github-actions') {
+      if (Number(actorIdRaw) !== 15368 || actorSlug !== 'github-actions') {
+        fail(`${file}:${lineNumber}: GitHub Actions required-check provenance pin must use the canonical GitHub Actions app`)
+      }
+      if (!/^[1-9][0-9]*$/.test(authorityIdRaw) || !Number.isSafeInteger(Number(authorityIdRaw))) {
+        fail(`${file}:${lineNumber}: GitHub Actions required-check provenance pin has invalid workflow id`)
+      }
+      if (!validWorkflowPath(authorityValue)) {
+        fail(`${file}:${lineNumber}: GitHub Actions required-check provenance pin has invalid workflow path`)
+      }
+      authorityId = Number(authorityIdRaw)
+    } else if (kind === 'check-run-app') {
+      if (Number(actorIdRaw) === 15368 || actorSlug === 'github-actions') {
+        fail(`${file}:${lineNumber}: canonical GitHub Actions checks must use github-actions authority kind`)
+      }
+      if (authorityIdRaw !== '-' || authorityValue !== '-') {
+        fail(`${file}:${lineNumber}: check-run app required-check provenance pin must not name a workflow authority`)
+      }
+    } else {
+      if (authorityIdRaw !== '-' || !validHttpsOrigin(authorityValue)) {
+        fail(`${file}:${lineNumber}: commit-status required-check provenance pin must name a canonical HTTPS target origin`)
+      }
     }
     const identity = pinKey(repo, head, base, checkName)
     if (pins.has(identity)) {
@@ -407,10 +514,11 @@ for (const [index, line] of lines.entries()) {
       head,
       base,
       checkName,
-      appId: Number(appIdRaw),
-      appSlug,
-      workflowId: Number(workflowIdRaw),
-      workflowPath,
+      kind,
+      actorId: nullCommitStatusCreator ? null : Number(actorIdRaw),
+      actorSlug,
+      authorityId,
+      authorityValue,
       configLine: lineNumber,
     })
     continue
@@ -435,10 +543,18 @@ const requirementsByKey = new Map(requirements.map((requirement) => [
 for (const pin of pins.values()) {
   const requirement = requirementsByKey.get(requirementKey(pin.repo, pin.head, pin.base))
   if (!requirement) {
-    fail(`${file}:${pin.configLine}: duplicate required-check provenance pin has no matching release PR requirement for ${pin.repo}:${pin.head} -> ${pin.base}`)
+    fail(`${file}:${pin.configLine}: required-check provenance pin has no matching release PR requirement for ${pin.repo}:${pin.head} -> ${pin.base}`)
   }
   if (!requirement.requiredChecks.includes(pin.checkName)) {
-    fail(`${file}:${pin.configLine}: duplicate required-check provenance pin names an unrequired check for ${pin.repo}:${pin.head} -> ${pin.base}:${pin.checkName}`)
+    fail(`${file}:${pin.configLine}: required-check provenance pin names an unrequired check for ${pin.repo}:${pin.head} -> ${pin.base}:${pin.checkName}`)
+  }
+}
+
+for (const requirement of requirements) {
+  for (const checkName of requirement.requiredChecks) {
+    if (checkName === '' || !pins.has(pinKey(requirement.repo, requirement.head, requirement.base, checkName))) {
+      fail(`${file}:${requirement.configLine}: missing required-check provenance pin for ${requirement.repo}:${requirement.head} -> ${requirement.base}:${checkName || 'empty'}`)
+    }
   }
 }
 
@@ -446,7 +562,7 @@ console.log(JSON.stringify([...pins.values()]))
 NODE
 }
 
-duplicate_check_provenance_for_requirement() {
+required_check_provenance_for_requirement() {
   local raw_pins="$1"
   local repo="$2"
   local head="$3"
@@ -542,6 +658,7 @@ NODE
 
 PINNED_CHECK_RUNS_JSON=""
 PINNED_COMMIT_STATUS_JSON=""
+PINNED_COMMIT_STATUS_DETAILS_JSON="[]"
 PINNED_CHECK_SUITES_JSON="[]"
 PINNED_CHECK_WORKFLOWS_JSON="[]"
 CHECK_EVIDENCE_ERROR=""
@@ -550,10 +667,12 @@ load_pinned_check_evidence() {
   local repo="$1"
   local reviewed_head_sha="$2"
   local required_checks="$3"
-  local suite_ids suite_id suite_json duplicate_suite_ids workflow_json
+  local required_check_provenance_json="$4"
+  local suite_ids suite_id suite_json workflow_suite_ids workflow_json
 
   PINNED_CHECK_RUNS_JSON=""
   PINNED_COMMIT_STATUS_JSON=""
+  PINNED_COMMIT_STATUS_DETAILS_JSON="[]"
   PINNED_CHECK_SUITES_JSON="[]"
   PINNED_CHECK_WORKFLOWS_JSON="[]"
   CHECK_EVIDENCE_ERROR=""
@@ -565,6 +684,17 @@ load_pinned_check_evidence() {
   if ! PINNED_COMMIT_STATUS_JSON="$("$GH_BIN" api "repos/$repo/commits/$reviewed_head_sha/status?per_page=100" 2>&1)"; then
     CHECK_EVIDENCE_ERROR="commit-status request failed; GitHub response details suppressed"
     return 1
+  fi
+
+  if node - "$required_check_provenance_json" 2>/dev/null <<'NODE'
+const pins = JSON.parse(process.argv[2])
+process.exit(Array.isArray(pins) && pins.some((pin) => pin && pin.kind === 'commit-status') ? 0 : 1)
+NODE
+  then
+    if ! PINNED_COMMIT_STATUS_DETAILS_JSON="$("$GH_BIN" api "repos/$repo/commits/$reviewed_head_sha/statuses?per_page=100" --paginate --slurp 2>&1)"; then
+      CHECK_EVIDENCE_ERROR="commit-status provenance request failed; GitHub response details suppressed"
+      return 1
+    fi
   fi
 
   if ! suite_ids="$(node - "$PINNED_CHECK_RUNS_JSON" "$required_checks" 2>/dev/null <<'NODE'
@@ -603,32 +733,27 @@ NODE
     fi
   done <<< "$suite_ids"
 
-  if ! duplicate_suite_ids="$(node - "$PINNED_CHECK_RUNS_JSON" "$PINNED_COMMIT_STATUS_JSON" "$required_checks" 2>/dev/null <<'NODE'
-const [rawRuns, rawStatuses, rawRequired] = process.argv.slice(2)
+  if ! workflow_suite_ids="$(node - "$PINNED_CHECK_RUNS_JSON" "$required_check_provenance_json" 2>/dev/null <<'NODE'
+const [rawRuns, rawPins] = process.argv.slice(2)
 const runs = JSON.parse(rawRuns)
-const statuses = JSON.parse(rawStatuses)
-const required = new Set(rawRequired.split(',').map((value) => value.trim()).filter(Boolean))
+const pins = JSON.parse(rawPins)
 if (!runs || !Array.isArray(runs.check_runs)) process.exit(1)
-const statusEntries = statuses && Array.isArray(statuses.statuses) ? statuses.statuses : []
-const counts = new Map()
-for (const run of runs.check_runs) {
-  if (!run || !required.has(run.name)) continue
-  counts.set(run.name, (counts.get(run.name) || 0) + 1)
-}
-for (const status of statusEntries) {
-  if (!status || !required.has(status.context)) continue
-  counts.set(status.context, (counts.get(status.context) || 0) + 1)
-}
+if (!Array.isArray(pins)) process.exit(1)
+const githubActionsChecks = new Set(
+  pins
+    .filter((pin) => pin && pin.kind === 'github-actions' && typeof pin.checkName === 'string')
+    .map((pin) => pin.checkName)
+)
 const ids = new Set()
 for (const run of runs.check_runs) {
-  if (!run || !required.has(run.name) || (counts.get(run.name) || 0) < 2) continue
+  if (!run || !githubActionsChecks.has(run.name)) continue
   const id = run.check_suite && run.check_suite.id
   if (Number.isSafeInteger(id) && id > 0) ids.add(id)
 }
 for (const id of [...ids].sort((a, b) => a - b)) console.log(String(id))
 NODE
 )"; then
-    CHECK_EVIDENCE_ERROR="duplicate check provenance inventory was malformed; response details suppressed"
+    CHECK_EVIDENCE_ERROR="required check provenance inventory was malformed; response details suppressed"
     return 1
   fi
 
@@ -648,11 +773,12 @@ NODE
       CHECK_EVIDENCE_ERROR="Actions workflow provenance response could not be retained safely"
       return 1
     fi
-  done <<< "$duplicate_suite_ids"
+  done <<< "$workflow_suite_ids"
 }
 
 line_number=0
 checked_count=0
+verified_open_candidate_count=0
 requirement_keys=()
 
 init_report
@@ -675,8 +801,8 @@ if ! review_pins_json="$(load_review_pins 2>&1)"; then
   exit 1
 fi
 
-if ! duplicate_check_provenance_pins_json="$(load_duplicate_check_provenance_pins 2>&1)"; then
-  echo "[release-pr-readiness][error] $duplicate_check_provenance_pins_json" >&2
+if ! required_check_provenance_pins_json="$(load_required_check_provenance_pins 2>&1)"; then
+  echo "[release-pr-readiness][error] $required_check_provenance_pins_json" >&2
   write_report "failed"
   exit 1
 fi
@@ -742,7 +868,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
   IFS=$'\t' read -r reviewed_pr_number reviewed_head_sha <<< "$review_pin"
-  duplicate_check_provenance_json="$(duplicate_check_provenance_for_requirement "$duplicate_check_provenance_pins_json" "$repo" "$head" "$base")"
+  required_check_provenance_json="$(required_check_provenance_for_requirement "$required_check_provenance_pins_json" "$repo" "$head" "$base")"
 
   checked_count=$((checked_count + 1))
   log "Checking pinned $repo#$reviewed_pr_number at $reviewed_head_sha from head '$head' into '$base' with required checks '$required_checks'"
@@ -771,7 +897,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
 
-  if ! load_pinned_check_evidence "$repo" "$reviewed_head_sha" "$required_checks"; then
+  if ! load_pinned_check_evidence "$repo" "$reviewed_head_sha" "$required_checks" "$required_check_provenance_json"; then
     failure="$repo:$head -> $base: unable to query SHA-bound required check evidence for reviewedHeadSha=$reviewed_head_sha: $CHECK_EVIDENCE_ERROR"
     record_failure "$failure"
     append_report_record "failed" "$line_number" "$repo" "$head" "$base" "$required_state" "$required_checks" "$failure"
@@ -816,7 +942,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
 
   set +e
-  node_output="$(node - "$repo" "$head" "$base" "$required_checks" "$reviewed_pr_number" "$reviewed_head_sha" "$pr_json" "$ref_json" "$review_threads_json" "$PINNED_CHECK_RUNS_JSON" "$PINNED_COMMIT_STATUS_JSON" "$PINNED_CHECK_SUITES_JSON" "$PINNED_CHECK_WORKFLOWS_JSON" "$duplicate_check_provenance_json" 2>&1 <<'NODE'
+  node_output="$(node - "$repo" "$head" "$base" "$required_checks" "$reviewed_pr_number" "$reviewed_head_sha" "$pr_json" "$ref_json" "$review_threads_json" "$PINNED_CHECK_RUNS_JSON" "$PINNED_COMMIT_STATUS_JSON" "$PINNED_COMMIT_STATUS_DETAILS_JSON" "$PINNED_CHECK_SUITES_JSON" "$PINNED_CHECK_WORKFLOWS_JSON" "$required_check_provenance_json" "$ALLOW_READY_OPEN" "$VERIFY_OPEN_CANDIDATE_REPO" "$VERIFY_OPEN_CANDIDATE_HEAD" "$VERIFY_OPEN_CANDIDATE_BASE" "$VERIFY_OPEN_CANDIDATE_PR_NUMBER" "$VERIFY_OPEN_CANDIDATE_HEAD_SHA" 2>&1 <<'NODE'
 const [
   repo,
   head,
@@ -829,9 +955,16 @@ const [
   rawReviewThreads,
   rawCheckRuns,
   rawCommitStatus,
+  rawCommitStatusDetails,
   rawCheckSuites,
   rawCheckWorkflows,
-  rawDuplicateCheckProvenancePins,
+  rawRequiredCheckProvenancePins,
+  allowReadyOpenRaw,
+  requestedCandidateRepo,
+  requestedCandidateHead,
+  requestedCandidateBase,
+  requestedCandidatePrNumberRaw,
+  requestedCandidateHeadSha,
 ] = process.argv.slice(2)
 
 function fail(message) {
@@ -860,6 +993,23 @@ function parseRequiredChecks(rawChecks) {
 }
 
 const requiredChecks = parseRequiredChecks(requiredChecksRaw)
+if (allowReadyOpenRaw !== '0' && allowReadyOpenRaw !== '1') {
+  fail(`${repo}:${head} -> ${base}: invalid allow-ready-open authority`)
+}
+const allowReadyOpen = allowReadyOpenRaw === '1'
+const requestedCandidatePrNumber = Number(requestedCandidatePrNumberRaw)
+if (allowReadyOpen) {
+  if (
+    requestedCandidateRepo === '' ||
+    requestedCandidateHead === '' ||
+    requestedCandidateBase === '' ||
+    !Number.isSafeInteger(requestedCandidatePrNumber) ||
+    requestedCandidatePrNumber <= 0 ||
+    !/^[0-9a-f]{40}$/.test(requestedCandidateHeadSha)
+  ) {
+    fail(`${repo}:${head} -> ${base}: invalid verify-open-candidate identity`)
+  }
+}
 const reviewedPrNumber = Number(reviewedPrNumberRaw)
 if (!Number.isSafeInteger(reviewedPrNumber) || reviewedPrNumber <= 0) {
   fail(`${repo}:${head} -> ${base}: reviewed PR number pin is invalid`)
@@ -926,9 +1076,10 @@ function analyzeChecks() {
   const entries = []
   const checkRuns = parseJsonEvidence(rawCheckRuns, 'check-runs')
   const commitStatus = parseJsonEvidence(rawCommitStatus, 'commit-status')
+  const commitStatusDetailPages = parseJsonEvidence(rawCommitStatusDetails, 'commit-status-details')
   const suiteEntries = parseJsonEvidence(rawCheckSuites, 'check-suites')
   const workflowEntries = parseJsonEvidence(rawCheckWorkflows, 'actions-workflows')
-  const duplicateProvenancePins = parseJsonEvidence(rawDuplicateCheckProvenancePins, 'duplicate-check-provenance-pins')
+  const requiredProvenancePins = parseJsonEvidence(rawRequiredCheckProvenancePins, 'required-check-provenance-pins')
 
   if (!checkRuns || !Array.isArray(checkRuns.check_runs)) {
     malformed.push('check-runs-response-shape')
@@ -940,9 +1091,15 @@ function analyzeChecks() {
   } else if (!Number.isSafeInteger(commitStatus.total_count) || commitStatus.total_count < 0 || commitStatus.total_count !== commitStatus.statuses.length) {
     malformed.push('commit-status-pagination-incomplete')
   }
+  if (
+    !Array.isArray(commitStatusDetailPages) ||
+    commitStatusDetailPages.some((page) => !Array.isArray(page))
+  ) {
+    malformed.push('commit-status-details-response-shape')
+  }
   if (!Array.isArray(suiteEntries)) malformed.push('check-suites-response-shape')
   if (!Array.isArray(workflowEntries)) malformed.push('actions-workflows-response-shape')
-  if (!Array.isArray(duplicateProvenancePins)) malformed.push('duplicate-check-provenance-pins-response-shape')
+  if (!Array.isArray(requiredProvenancePins)) malformed.push('required-check-provenance-pins-response-shape')
 
   const suites = new Map()
   if (Array.isArray(suiteEntries)) {
@@ -990,28 +1147,32 @@ function analyzeChecks() {
     }
   }
 
-  const duplicatePinsByName = new Map()
-  if (Array.isArray(duplicateProvenancePins)) {
-    for (const pin of duplicateProvenancePins) {
+  const requiredPinsByName = new Map()
+  if (Array.isArray(requiredProvenancePins)) {
+    for (const pin of requiredProvenancePins) {
       if (
         !pin ||
         pin.repo !== repo ||
         pin.head !== head ||
         pin.base !== base ||
         typeof pin.checkName !== 'string' ||
-        !Number.isSafeInteger(pin.appId) ||
-        typeof pin.appSlug !== 'string' ||
-        !Number.isSafeInteger(pin.workflowId) ||
-        typeof pin.workflowPath !== 'string'
+        !['github-actions', 'check-run-app', 'commit-status'].includes(pin.kind) ||
+        !(
+          Number.isSafeInteger(pin.actorId) ||
+          (pin.kind === 'commit-status' && pin.actorId === null && pin.actorSlug === '-')
+        ) ||
+        typeof pin.actorSlug !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(pin, 'authorityId') ||
+        typeof pin.authorityValue !== 'string'
       ) {
-        malformed.push('duplicate-check-provenance-pin-envelope')
+        malformed.push('required-check-provenance-pin-envelope')
         continue
       }
-      if (duplicatePinsByName.has(pin.checkName)) {
-        malformed.push('duplicate-check-provenance-pin-identity')
+      if (requiredPinsByName.has(pin.checkName)) {
+        malformed.push('required-check-provenance-pin-identity')
         continue
       }
-      duplicatePinsByName.set(pin.checkName, pin)
+      requiredPinsByName.set(pin.checkName, pin)
     }
   }
 
@@ -1021,6 +1182,19 @@ function analyzeChecks() {
   }
 
   const requiredNames = new Set(requiredChecks)
+  const commitStatusDetailsById = new Map()
+  if (Array.isArray(commitStatusDetailPages)) {
+    for (const page of commitStatusDetailPages) {
+      if (!Array.isArray(page)) continue
+      for (const status of page) {
+        const id = status && status.id
+        if (!Number.isSafeInteger(id) || id <= 0) continue
+        const bucket = commitStatusDetailsById.get(id) || []
+        bucket.push(status)
+        commitStatusDetailsById.set(id, bucket)
+      }
+    }
+  }
   if (checkRuns && Array.isArray(checkRuns.check_runs)) {
     for (const run of checkRuns.check_runs) {
       const name = run && typeof run.name === 'string' ? run.name : ''
@@ -1074,6 +1248,8 @@ function analyzeChecks() {
       const check = {
         kind: 'commit-status',
         name,
+        statusEntry,
+        detailedStatusEntries: commitStatusDetailsById.get(statusEntry && statusEntry.id) || [],
         ok: state === 'SUCCESS',
         outcome: `STATUS/${state || 'PENDING'}`,
         summary: `${name}:STATUS/${state || 'PENDING'}`,
@@ -1104,31 +1280,88 @@ function analyzeChecks() {
     for (const entry of bucket) addProvenanceError(entry, 'duplicate-check-run-id')
   }
 
-  function validateDuplicateProvenance(name, matches) {
-    const pin = duplicatePinsByName.get(name)
+  function validateRequiredProvenance(name, matches) {
+    const pin = requiredPinsByName.get(name)
     if (!pin) {
-      for (const entry of matches) addProvenanceError(entry, 'duplicate-check-provenance-pin-missing')
+      for (const entry of matches) addProvenanceError(entry, 'required-check-provenance-pin-missing')
       return { valid: false, authoritativeMatches: [] }
     }
 
     let valid = true
     const authoritativeMatches = []
     for (const entry of matches) {
+      if (pin.kind === 'commit-status') {
+        if (entry.kind !== 'commit-status') {
+          addProvenanceError(entry, 'required-check-source-kind-mismatch')
+          valid = false
+          continue
+        }
+        const detailMatches = entry.detailedStatusEntries
+        if (!Array.isArray(detailMatches) || detailMatches.length !== 1) {
+          addProvenanceError(
+            entry,
+            Array.isArray(detailMatches) && detailMatches.length > 1
+              ? 'commit-status-detail-ambiguous'
+              : 'commit-status-detail-missing'
+          )
+          valid = false
+          continue
+        }
+        const detailedStatus = detailMatches[0]
+        if (
+          detailedStatus.context !== entry.statusEntry.context ||
+          detailedStatus.state !== entry.statusEntry.state ||
+          detailedStatus.target_url !== entry.statusEntry.target_url
+        ) {
+          addProvenanceError(entry, 'commit-status-detail-mismatch')
+          valid = false
+          continue
+        }
+        const creator = detailedStatus.creator
+        const creatorMatches = pin.actorId === null
+          ? creator === null
+          : Boolean(creator && creator.id === pin.actorId && creator.login === pin.actorSlug)
+        if (!creatorMatches) {
+          addProvenanceError(entry, 'commit-status-creator-mismatch')
+          valid = false
+        }
+        let targetOrigin = ''
+        try {
+          const target = new URL(entry.statusEntry && entry.statusEntry.target_url)
+          if (target.protocol === 'https:' && target.username === '' && target.password === '') {
+            targetOrigin = target.origin
+          }
+        } catch (_) {
+          targetOrigin = ''
+        }
+        if (targetOrigin !== pin.authorityValue) {
+          addProvenanceError(entry, 'commit-status-target-origin-mismatch')
+          valid = false
+        }
+        if (entry.errors.length === 0) authoritativeMatches.push(entry)
+        continue
+      }
+
       if (entry.kind !== 'check-run') {
-        addProvenanceError(entry, 'duplicate-check-source-not-github-actions')
+        addProvenanceError(entry, 'required-check-source-kind-mismatch')
         valid = false
         continue
       }
 
       const run = entry.run
       const suite = suites.get(entry.suiteId)
-      if (!run.app || run.app.id !== pin.appId || run.app.slug !== pin.appSlug) {
+      if (!run.app || run.app.id !== pin.actorId || run.app.slug !== pin.actorSlug) {
         addProvenanceError(entry, 'check-run-app-mismatch')
         valid = false
       }
-      if (!suite || !suite.app || suite.app.id !== pin.appId || suite.app.slug !== pin.appSlug) {
+      if (!suite || !suite.app || suite.app.id !== pin.actorId || suite.app.slug !== pin.actorSlug) {
         addProvenanceError(entry, 'check-suite-app-mismatch')
         valid = false
+      }
+
+      if (pin.kind === 'check-run-app') {
+        if (entry.errors.length === 0) authoritativeMatches.push(entry)
+        continue
       }
 
       const workflowPayload = workflows.get(entry.suiteId)
@@ -1167,11 +1400,11 @@ function analyzeChecks() {
         addProvenanceError(entry, 'actions-workflow-head-sha-mismatch')
         valid = false
       }
-      if (workflowRun.workflow_id !== pin.workflowId) {
+      if (workflowRun.workflow_id !== pin.authorityId) {
         addProvenanceError(entry, 'actions-workflow-id-mismatch')
         valid = false
       }
-      if (workflowRun.path !== pin.workflowPath) {
+      if (workflowRun.path !== pin.authorityValue) {
         addProvenanceError(entry, 'actions-workflow-path-mismatch')
         valid = false
       }
@@ -1211,7 +1444,12 @@ function analyzeChecks() {
     }
     if (authoritativeMatches.length === 0) {
       for (const entry of matches) {
-        addProvenanceError(entry, 'actions-workflow-required-head-pull-request-missing')
+        addProvenanceError(
+          entry,
+          pin.kind === 'github-actions'
+            ? 'actions-workflow-required-head-pull-request-missing'
+            : 'required-check-authoritative-match-missing'
+        )
       }
       valid = false
     }
@@ -1232,24 +1470,21 @@ function analyzeChecks() {
       missing.push(name)
       continue
     }
-    if (matches.length > 1) {
-      const duplicateResolution = validateDuplicateProvenance(name, matches)
-      if (!duplicateResolution.valid) {
+    const provenanceResolution = validateRequiredProvenance(name, matches)
+    if (!provenanceResolution.valid) {
+      if (matches.length > 1) {
         duplicate.push(name)
-        continue
       }
-      const authoritativeMatches = duplicateResolution.authoritativeMatches
-      const outcomes = new Set(authoritativeMatches.map((entry) => entry.outcome))
-      if (outcomes.size !== 1) {
-        conflicting.push(name)
-        continue
-      }
-      selected.push(authoritativeMatches[0])
-      if (!authoritativeMatches[0].ok) incomplete.push(authoritativeMatches[0].summary)
       continue
     }
-    selected.push(matches[0])
-    if (!matches[0].ok) incomplete.push(matches[0].summary)
+    const authoritativeMatches = provenanceResolution.authoritativeMatches
+    const outcomes = new Set(authoritativeMatches.map((entry) => entry.outcome))
+    if (outcomes.size !== 1) {
+      conflicting.push(name)
+      continue
+    }
+    selected.push(authoritativeMatches[0])
+    if (!authoritativeMatches[0].ok) incomplete.push(authoritativeMatches[0].summary)
   }
 
   return {
@@ -1308,6 +1543,9 @@ function reviewThreadParts(rawThreads) {
   if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
     return ['reviewThreadsQuery=malformed:missing reviewThreads.nodes']
   }
+  if (!reviewThreads.pageInfo || typeof reviewThreads.pageInfo.hasNextPage !== 'boolean') {
+    return ['reviewThreadsQuery=malformed:missing reviewThreads.pageInfo.hasNextPage']
+  }
 
   let unresolved = 0
   let current = 0
@@ -1345,7 +1583,7 @@ function reviewThreadParts(rawThreads) {
     }
   }
 
-  const hasNextPage = Boolean(reviewThreads.pageInfo && reviewThreads.pageInfo.hasNextPage)
+  const hasNextPage = reviewThreads.pageInfo.hasNextPage
   const suffix = hasNextPage ? '+' : ''
   const parts = [
     `unresolvedReviewThreads=${unresolved}${suffix}`,
@@ -1463,6 +1701,67 @@ if (reviewedState === 'OPEN') {
   const open = reviewed
   const { analysis, parts: requiredCheckParts } = requiredCheckFailureParts()
 
+  if (allowReadyOpen) {
+    const blockers = []
+    const hasCurrentHeadApproval = Array.isArray(open.reviews) && open.reviews.some((review) => {
+      const approvalCommit = review && review.commit && typeof review.commit.oid === 'string'
+        ? review.commit.oid.trim().toLowerCase()
+        : ''
+      return review && review.state === 'APPROVED' && approvalCommit === reviewedHeadSha
+    })
+    if (open.isDraft !== false) {
+      blockers.push(`isDraft=${open.isDraft === true ? 'true' : 'UNKNOWN'}`)
+    }
+    if (open.reviewDecision !== 'APPROVED' || !hasCurrentHeadApproval) {
+      if (open.reviewDecision !== 'APPROVED') {
+        blockers.push(`reviewDecision=${open.reviewDecision || 'UNKNOWN'}`)
+      }
+      blockers.push(...reviewApprovalParts(open))
+      if (open.reviewDecision === 'APPROVED' && !hasCurrentHeadApproval) {
+        blockers.push('protectedMergeCurrentHeadApprovalRequired=true')
+        blockers.push('freshApprovalRequired=true')
+      }
+    }
+    if (open.mergeStateStatus !== 'CLEAN') {
+      blockers.push(`mergeStateStatus=${open.mergeStateStatus || 'UNKNOWN'}`)
+    }
+    if (!currentHeadOid) {
+      blockers.push(`current branch ref refs/heads/${head} is missing`)
+    } else if (currentHeadOid.toLowerCase() !== reviewedHeadSha) {
+      blockers.push(`head branch moved after PR query currentHeadOid=${currentHeadOid} headRefOid=${reviewedHeadSha}`)
+    }
+    blockers.push(...requiredCheckParts)
+    blockers.push(
+      ...reviewThreadParts(rawReviewThreads).filter((part) => ![
+        'unresolvedReviewThreads=0',
+        'currentUnresolvedReviewThreads=0',
+        'outdatedUnresolvedReviewThreads=0',
+      ].includes(part))
+    )
+    if (analysis.allIncomplete.length > 0) {
+      blockers.push(`checks=${analysis.allIncomplete.join(',')}`)
+    }
+    if (!rawReviewThreads || rawReviewThreads === '{}') {
+      blockers.push('reviewThreadsQuery=missing:protected merge requires an exact open-PR thread inventory')
+    }
+    if (blockers.length === 0) {
+      const isRequestedCandidate =
+        repo === requestedCandidateRepo &&
+        head === requestedCandidateHead &&
+        base === requestedCandidateBase &&
+        reviewedPrNumber === requestedCandidatePrNumber &&
+        reviewedHeadSha === requestedCandidateHeadSha
+      console.log(isRequestedCandidate
+        ? '__VERIFIED_OPEN_MERGE_CANDIDATE__'
+        : `${repo}#${reviewedPrNumber} is independently open and ready for protected merge with authoritative required checks ${requiredChecks.join(',')}: ${reviewedUrl}`)
+      process.exit(0)
+    }
+    fail([
+      `${repo}#${reviewedPrNumber} is open and is not ready for protected merge: ${reviewedUrl}`,
+      ...blockers,
+    ].join(' '))
+  }
+
   const parts = [
     `${repo}#${reviewedPrNumber} is open and is not release-ready: ${reviewedUrl}`,
     `isDraft=${open.isDraft === true ? 'true' : 'false'}`,
@@ -1509,8 +1808,13 @@ NODE
   set -e
 
   if [[ "$node_status" -eq 0 && -n "$node_output" ]]; then
-    printf '%s\n' "$node_output"
-    append_report_record "passed" "$line_number" "$repo" "$head" "$base" "$required_state" "$required_checks" "$node_output"
+    if [[ "$ALLOW_READY_OPEN" == "1" && "$node_output" == "__VERIFIED_OPEN_MERGE_CANDIDATE__" ]]; then
+      verified_open_candidate_count=$((verified_open_candidate_count + 1))
+      log "Authoritative protected-merge preflight passed for $repo#$reviewed_pr_number at $reviewed_head_sha"
+    else
+      printf '%s\n' "$node_output"
+      append_report_record "passed" "$line_number" "$repo" "$head" "$base" "$required_state" "$required_checks" "$node_output"
+    fi
   fi
 
   if [[ "$node_status" -ne 0 ]]; then
@@ -1530,6 +1834,11 @@ if [[ "$checked_count" -eq 0 ]]; then
   append_report_record "failed" "0" "" "" "" "" "" "$failure"
 fi
 
+if [[ "$ALLOW_READY_OPEN" == "1" && "$verified_open_candidate_count" -ne 1 ]]; then
+  failure="requested protected-merge candidate did not match exactly one verified open reviewed PR"
+  record_failure "$failure"
+fi
+
 if ((${#failures[@]} > 0)); then
   write_report "failed"
   echo "[release-pr-readiness][error] Release PR readiness audit failed:" >&2
@@ -1537,5 +1846,9 @@ if ((${#failures[@]} > 0)); then
   exit 1
 fi
 
-write_report "passed"
-log "Release PR readiness audit passed for $checked_count requirement(s)."
+if [[ "$ALLOW_READY_OPEN" == "1" ]]; then
+  log "Protected-merge candidate verification passed against $checked_count pinned requirement(s)."
+else
+  write_report "passed"
+  log "Release PR readiness audit passed for $checked_count requirement(s)."
+fi

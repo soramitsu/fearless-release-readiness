@@ -157,6 +157,59 @@ test('registration rejects clientDataJSON containing malformed UTF-8', async () 
   );
 });
 
+test('registration rejects local PRF, blob and arbitrary extension output without retaining a credential', async () => {
+  const store = new InMemoryPasskeyChallengeStore();
+  const service = createPasskeyBackupChallengeService({
+    store, allowedOrigins: new Set([ANDROID_ORIGIN]), allowInsecureTestAuthorization: true,
+  });
+  const authenticator = createAuthenticator();
+  const localOnly = 'SYNTHETIC-LOCAL-PRF-OUTPUT-MUST-NOT-BE-SERIALIZED';
+  for (const extensions of [
+    { prf: { results: { first: localOnly } } },
+    { prf: { enabled: true } },
+    { largeBlob: { blob: localOnly } },
+    { credProps: { rk: true, prf: localOnly } },
+    { credProps: { rk: localOnly } },
+    { [localOnly]: 'unreviewed-extension' },
+    [],
+    null,
+  ]) {
+    const pending = service.createRegistrationChallenge(registrationRequest());
+    const credential = registrationCredential(pending.challenge, authenticator, { origin: ANDROID_ORIGIN });
+    credential.clientExtensionResults = extensions;
+    await assert.rejects(() => service.completeRegistration({
+      registrationId: pending.registrationId, rpId: RP_ID, credential,
+    }), (error) => {
+      assert.equal(error.code, 'invalid_credential');
+      assert.equal(error.status, 400);
+      assert.equal(error.message.includes(localOnly), false);
+      return true;
+    });
+    assert.equal(store.hasAnyCredential(pending.storageKey), false);
+    assert.equal(store.credentialOwnersById.size, 0);
+  }
+});
+
+test('sanitized public registration properties are accepted, while assertions reject local extension output', async () => {
+  const service = makeService();
+  const authenticator = createAuthenticator();
+  const pending = service.createRegistrationChallenge(registrationRequest());
+  const credential = registrationCredential(pending.challenge, authenticator, { origin: ANDROID_ORIGIN });
+  credential.clientExtensionResults = { credProps: { rk: true } };
+  const result = await service.completeRegistration({ registrationId: pending.registrationId, rpId: RP_ID, credential });
+  for (const extensions of [{ prf: { results: { first: 'synthetic-local-only' } } }, { unexpected: true }]) {
+    const assertion = service.createAssertionChallenge({ storageKey: result.storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION });
+    const response = authenticationCredential(assertion.challenge, authenticator, pending.userId, { origin: ANDROID_ORIGIN });
+    response.clientExtensionResults = extensions;
+    await assert.rejects(() => service.completeAssertion({ assertionId: assertion.assertionId, rpId: RP_ID, credential: response }), {
+      code: 'invalid_credential', status: 400,
+    });
+  }
+  const assertion = service.createAssertionChallenge({ storageKey: result.storageKey, rpId: RP_ID, schemaVersion: SCHEMA_VERSION });
+  const response = authenticationCredential(assertion.challenge, authenticator, pending.userId, { origin: ANDROID_ORIGIN });
+  assert.deepEqual(await service.completeAssertion({ assertionId: assertion.assertionId, rpId: RP_ID, credential: response }), result);
+});
+
 test('concurrent assertion replay permits one claimant only', async () => {
   const service = makeService();
   const authenticator = createAuthenticator('concurrent-assertion');

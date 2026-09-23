@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, '..');
 const EXPECTED_REPOSITORIES = new Map([
-  ['fearless-Android', { repository: 'soramitsu/fearless-Android', head: 'codex/android-xcm-evidence-release-commit', base: 'develop', prNumber: 1258 }],
-  ['fearless-iOS', { repository: 'soramitsu/fearless-iOS', head: 'codex/ios-transaction-builder-ci-gate', base: 'develop', prNumber: 1301 }],
+  ['fearless-Android-production-consolidated-20260731', { repository: 'soramitsu/fearless-Android', head: 'codex/android-production-consolidated-20260731', base: 'develop', prNumber: 1260 }],
+  ['fearless-iOS-production-consolidated-20260731', { repository: 'soramitsu/fearless-iOS', head: 'codex/testflight-redesign-2026.8.17', base: 'develop', prNumber: 1304 }],
   ['fearless-wallet-web', { repository: 'soramitsu/fearless-wallet-web', head: 'codex/web-bitcoin-canonical-indexer-evidence', base: 'develop', prNumber: 1062 }],
   ['fearless-site-web', { repository: 'soramitsu/fearless-site-web', head: 'codex/site-todo-debt-baseline-hardening', base: 'develop', prNumber: 45 }],
   ['../ton-indexer', { repository: 'tonswap-org/ton-indexer', head: 'codex/ti-smoke-body-preview-tests', base: 'develop', prNumber: 13 }],
@@ -45,13 +45,33 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-challenge-service/package-lock.json',
   'services/passkey-backup-challenge-service/package.json',
   'services/passkey-backup-challenge-service/src/server.js',
+  'services/passkey-backup-owner-authority/README.md',
+  'services/passkey-backup-owner-authority/package.json',
+  'services/passkey-backup-owner-authority/package-lock.json',
+  'services/passkey-backup-owner-authority/src/authority.js',
+  'services/passkey-backup-owner-authority/src/store.js',
+  'services/passkey-backup-owner-authority/src/validation.js',
+  'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
+  'services/passkey-backup-owner-authority/test/authority.test.js',
+  'services/passkey-backup-owner-authority/test/fixtures.js',
+  'services/passkey-backup-owner-authority/test/process-worker.js',
 ];
 const ROOT_OWNER_BLOCKER = 'canonical-root-source-owner-unassigned';
-const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 2;
+const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 3;
 const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SAFE_REF = /^(?![./])(?!.*(?:\.\.|\/\/|@\{|\\))[A-Za-z0-9._/-]+(?<![./])$/u;
 const SHA1 = /^[0-9a-f]{40}$/u;
-const WORKSPACE_NESTED_REPOSITORIES = ['fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web'];
+const SHA256 = /^[0-9a-f]{64}$/u;
+// The historical checkouts remain preserved in this workspace but cannot satisfy
+// the source rows above. Only the consolidated paths are audited as candidates.
+const WORKSPACE_NESTED_REPOSITORIES = [
+  'fearless-Android',
+  'fearless-iOS',
+  'fearless-Android-production-consolidated-20260731',
+  'fearless-iOS-production-consolidated-20260731',
+  'fearless-wallet-web',
+  'fearless-site-web',
+];
 const SOURCE_PHASES = new Set(['standalone', 'preflight', 'postflight']);
 const MAX_PREFLIGHT_AGE_MS = 6 * 60 * 60 * 1000;
 const TOOL_TIMEOUT_MS = 30_000;
@@ -171,6 +191,8 @@ if (reportTarget && preflightReportFile && reportTarget === preflightReportFile)
 earlyReportContext = {
   generatedAt,
   checkRemote,
+  phase,
+  preflightReportSha256: null,
   root,
   parent,
   configFile,
@@ -201,7 +223,8 @@ const configRows = parseSourceConfig(configFile);
 const rootOwner = parseRootOwnerConfig(rootOwnerConfigFile);
 const releasePrRows = parseReleasePrConfig(releasePrConfigFile);
 validateConfigCoverage(configRows, rootOwner, releasePrRows);
-const preflightReport = preflightReportFile ? parsePreflightReport(preflightReportFile) : null;
+const preflightSnapshot = preflightReportFile ? parsePreflightReport(preflightReportFile) : null;
+const preflightReport = preflightSnapshot?.report ?? null;
 
 const workspaceSource = inspectWorkspaceSource(rootOwner, releasePrRows);
 const repositories = [];
@@ -228,6 +251,8 @@ const totals = [workspaceSource, ...repositories].reduce(
 
 const report = {
   schemaVersion: SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION,
+  phase,
+  preflightReportSha256: preflightSnapshot?.sha256 ?? null,
   generatedAt,
   status: failures.length === 0 ? 'passed' : 'failed',
   checkRemote,
@@ -476,6 +501,10 @@ function prepareReportOutput(target, workspaceRoot, testMode) {
 
 function tryWriteEarlyFailureReport(message) {
   if (!earlyReportContext?.reportTarget || !earlyReportContext.reportSafe || writingEarlyReport) return;
+  if (
+    earlyReportContext.phase === 'postflight' &&
+    !SHA256.test(earlyReportContext.preflightReportSha256 ?? '')
+  ) return;
   writingEarlyReport = true;
   try {
     const rows = [...EXPECTED_REPOSITORIES.entries()].map(([repoPath, expected]) => ({
@@ -494,6 +523,8 @@ function tryWriteEarlyFailureReport(message) {
     });
     const value = {
       schemaVersion: SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION,
+      phase: earlyReportContext.phase,
+      preflightReportSha256: earlyReportContext.preflightReportSha256,
       generatedAt: earlyReportContext.generatedAt,
       status: 'failed',
       checkRemote: earlyReportContext.checkRemote,
@@ -671,9 +702,23 @@ function parsePreflightReport(target) {
       usage(`production preflight report must be named source-publication-preflight-report.json inside ${allowedRoot}`);
     }
   }
+  let rawReport;
+  try {
+    rawReport = fs.readFileSync(target);
+  } catch (error) {
+    usage(`source publication preflight report could not be read: ${error.message}`);
+  }
+  const sha256 = crypto.createHash('sha256').update(rawReport).digest('hex');
+  earlyReportContext.preflightReportSha256 = sha256;
+  const reportText = rawReport.toString('utf8');
+  if (!Buffer.from(reportText, 'utf8').equals(rawReport)) {
+    usage('source publication preflight report must be valid UTF-8');
+  }
+  if (reportText.includes('\0')) usage('source publication preflight report must not contain NUL bytes');
+  if (reportText.includes('\r')) usage('source publication preflight report must use LF line endings');
   let report;
   try {
-    report = JSON.parse(readTextFile(target, 'source publication preflight report'));
+    report = JSON.parse(reportText);
   } catch (error) {
     usage(`source publication preflight report must be valid JSON: ${error.message}`);
   }
@@ -684,6 +729,32 @@ function parsePreflightReport(target) {
     report.schemaVersion !== SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION
   ) {
     usage(`source publication preflight report schemaVersion must be ${SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION}`);
+  }
+  const expectedFields = [
+    'schemaVersion',
+    'phase',
+    'preflightReportSha256',
+    'generatedAt',
+    'status',
+    'checkRemote',
+    'workspaceRoot',
+    'workspaceParent',
+    'configFile',
+    'rootOwnerConfigFile',
+    'releasePrConfigFile',
+    'totals',
+    'workspaceSource',
+    'repositories',
+  ];
+  if (
+    Object.keys(report).length !== expectedFields.length ||
+    expectedFields.some((field) => !Object.prototype.hasOwnProperty.call(report, field))
+  ) {
+    usage('source publication preflight report fields mismatch');
+  }
+  if (report.phase !== 'preflight') usage('source publication preflight report phase must be preflight');
+  if (report.preflightReportSha256 !== null) {
+    usage('source publication preflight report must not bind another preflight report');
   }
   if (report.checkRemote !== true) usage('source publication preflight report must include authoritative remote checks');
   if (report.workspaceRoot !== root || report.workspaceParent !== parent) usage('source publication preflight workspace identity mismatch');
@@ -757,7 +828,7 @@ function parsePreflightReport(target) {
   ) {
     usage('source publication preflight totals/status mismatch');
   }
-  return report;
+  return { report, sha256 };
 }
 
 function parseCanonicalUtcTimestamp(value, label) {
@@ -1178,13 +1249,14 @@ function isAllowedIgnoredPath(source, ignoredPath) {
 
   const cachePrefixes = {
     '.': ['services/passkey-backup-challenge-service/node_modules'],
-    'fearless-Android': ['.gradle', '.kotlin', 'buildSrc/.gradle', 'buildSrc/.kotlin'],
-    'fearless-iOS': [
+    'fearless-Android-production-consolidated-20260731': ['.gradle', '.kotlin', 'buildSrc/.gradle', 'buildSrc/.kotlin'],
+    'fearless-iOS-production-consolidated-20260731': [
       '.build',
       '.bundle',
       'Packages/FearlessDependencies/.build',
       'Packages/FearlessDependencies/.swiftpm',
       'Packages/FearlessUtilsCompat/.swiftpm',
+      'Packages/ton-swift/.swiftpm',
       'Pods',
       'SourcePackages',
       'vendor/bundle',
@@ -1202,13 +1274,13 @@ function isAllowedIgnoredPath(source, ignoredPath) {
 function isAllowedPostflightGeneratedPath(source, ignoredPath) {
   if (phase !== 'postflight') return false;
 
-  if (source.path === 'fearless-Android') {
+  if (source.path === 'fearless-Android-production-consolidated-20260731') {
     if (matchesPathPrefix(ignoredPath, 'build')) return true;
     return /^(?:app|buildSrc|common|core-api|core-db|feature-[A-Za-z0-9-]+|public-[A-Za-z0-9-]+|runtime(?:-permission)?|test-shared)\/(?:build|coverage)(?:\/|$)/u.test(ignoredPath);
   }
   const outputPrefixes = {
     '.': ['build', 'services/passkey-backup-challenge-service/build'],
-    'fearless-iOS': ['build'],
+    'fearless-iOS-production-consolidated-20260731': ['build'],
     'fearless-wallet-web': ['build', 'coverage', 'dist'],
     'fearless-site-web': ['.nuxt', '.output'],
     '../ton-indexer': ['build', 'dist'],
@@ -1216,7 +1288,7 @@ function isAllowedPostflightGeneratedPath(source, ignoredPath) {
     '../polkaswap-indexer': ['build', 'dist'],
   }[source.path] ?? [];
   if (outputPrefixes.some((prefix) => matchesPathPrefix(ignoredPath, prefix))) return true;
-  return source.path === 'fearless-iOS' && (ignoredPath === 'CIKeys.generated.swift' || ignoredPath === 'R.generated.swift');
+  return source.path === 'fearless-iOS-production-consolidated-20260731' && (ignoredPath === 'CIKeys.generated.swift' || ignoredPath === 'R.generated.swift');
 }
 
 function isAllowedYarnCacheEntry(value) {

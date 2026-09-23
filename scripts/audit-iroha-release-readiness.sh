@@ -15,6 +15,8 @@ IROHA_RELEASE_CONFIG_FILE="${IROHA_RELEASE_CONFIG_FILE:-$ROOT_DIR/config/iroha-r
 NEXUS_PRODUCTION_EVIDENCE_FILE="${NEXUS_PRODUCTION_EVIDENCE_FILE:-$ROOT_DIR/config/nexus-production-evidence.json}"
 NEXUS_PRODUCTION_EVIDENCE_AUDIT="${NEXUS_PRODUCTION_EVIDENCE_AUDIT:-$SCRIPT_DIR/audit-nexus-production-evidence.sh}"
 NEXUS_PRODUCTION_EVIDENCE_TEST="${NEXUS_PRODUCTION_EVIDENCE_TEST:-$SCRIPT_DIR/test-nexus-production-evidence-audit.sh}"
+TAIRA_RELEASE_AUDIT="${TAIRA_RELEASE_AUDIT:-$ROOT_DIR/scripts/audit-taira-release-readiness.sh}"
+TAIRA_RELEASE_AUDIT_TEST="${TAIRA_RELEASE_AUDIT_TEST:-$ROOT_DIR/scripts/test-taira-release-readiness-audit.mjs}"
 
 usage() {
   cat <<'USAGE'
@@ -25,6 +27,8 @@ as releasable in the open-source wallets:
   - ../iroha still builds and publishes mobile SDK release assets.
   - Android and iOS can validate the tagged mobile SDK release assets.
   - fearless-wallet-web can validate the browser-safe @iroha/iroha-js artifact.
+  - Taira source contracts are canonical across wallets and genesis; optional
+    live checks require fresh complete four-validator evidence.
   - SORA Nexus mainnet has a committed HTTPS Torii endpoint in all wallets.
 
 Environment:
@@ -45,6 +49,10 @@ Environment:
   NEXUS_TORII_URL                  Optional SORA Nexus Torii base URL or /v1/mcp URL.
                                     Defaults to https://minamoto.sora.org.
   IROHA_NEXUS_LIVE_HEALTH          Set to 1/true to require live Nexus endpoint health.
+  IROHA_TAIRA_LIVE_HEALTH          Set to 1/true to require canonical Taira
+                                    health, fanout, MCP, asset, and validator-DNS checks.
+  TAIRA_EXPECTED_BUILD_COMMIT      Exact deployed Taira build commit required
+                                    when live Taira checks are enabled.
   IROHA_NEXUS_REQUIRE_PRODUCTION_EVIDENCE
                                     Set to 1/true to require ready route
                                     publication, canary, and wallet-smoke
@@ -113,6 +121,10 @@ NEXUS_PROCESS_EXPECTED_GENESIS_HASH="${NEXUS_EXPECTED_GENESIS_HASH-}"
 NEXUS_PROCESS_EXPECTED_BUILD_COMMIT_SET=false
 NEXUS_PROCESS_EXPECTED_CHAIN_ID_SET=false
 NEXUS_PROCESS_EXPECTED_GENESIS_HASH_SET=false
+TAIRA_PROCESS_EXPECTED_BUILD_COMMIT="${TAIRA_EXPECTED_BUILD_COMMIT-}"
+TAIRA_PROCESS_EXPECTED_BUILD_COMMIT_SET=false
+TAIRA_COMMITTED_BUILD_COMMIT=""
+TAIRA_COMMITTED_BUILD_COMMIT_SEEN=false
 if [[ "${NEXUS_EXPECTED_BUILD_COMMIT+x}" == "x" ]]; then
   NEXUS_PROCESS_EXPECTED_BUILD_COMMIT_SET=true
 fi
@@ -122,9 +134,13 @@ fi
 if [[ "${NEXUS_EXPECTED_GENESIS_HASH+x}" == "x" ]]; then
   NEXUS_PROCESS_EXPECTED_GENESIS_HASH_SET=true
 fi
+if [[ "${TAIRA_EXPECTED_BUILD_COMMIT+x}" == "x" ]]; then
+  TAIRA_PROCESS_EXPECTED_BUILD_COMMIT_SET=true
+fi
 readonly NEXUS_HEALTH_MAX_RESPONSE_BYTES=131072
 readonly NEXUS_HEALTH_MAX_BLOCK_AGE_MS=300000
 readonly NEXUS_CHAIN_ID_MAX_BYTES=128
+readonly NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID="sora:nexus:global"
 readonly NEXUS_DIAGNOSTIC_SCAN_BYTES=4096
 readonly NEXUS_DIAGNOSTIC_MAX_BYTES=300
 
@@ -554,6 +570,13 @@ load_release_config_defaults() {
         NEXUS_COMMITTED_GENESIS_HASH_SEEN=true
         NEXUS_COMMITTED_GENESIS_HASH="$value"
         ;;
+      TAIRA_EXPECTED_BUILD_COMMIT)
+        if [[ "$TAIRA_COMMITTED_BUILD_COMMIT_SEEN" == "true" ]]; then
+          record_failure "Duplicate TAIRA_EXPECTED_BUILD_COMMIT in Iroha release defaults"
+        fi
+        TAIRA_COMMITTED_BUILD_COMMIT_SEEN=true
+        TAIRA_COMMITTED_BUILD_COMMIT="$value"
+        ;;
       *)
         record_failure "Unsupported key in Iroha release defaults: $key"
         ;;
@@ -760,6 +783,57 @@ check_nexus_sources() {
   fi
 }
 
+run_isolated_nexus_curl() {
+  /usr/bin/env \
+    -u CURL_CA_BUNDLE \
+    -u SSL_CERT_FILE \
+    -u SSL_CERT_DIR \
+    -u OPENSSL_CONF \
+    -u HTTP_PROXY \
+    -u HTTPS_PROXY \
+    -u ALL_PROXY \
+    -u NO_PROXY \
+    -u http_proxy \
+    -u https_proxy \
+    -u all_proxy \
+    -u no_proxy \
+    curl "$@"
+}
+
+run_isolated_nexus_evidence_audit() {
+  /usr/bin/env \
+    -u NEXUS_RECEIPT_BASE_URL \
+    -u NEXUS_TORII_BASE_URL \
+    -u NEXUS_MCP_URL \
+    -u NEXUS_RECEIPT_FIXTURE_DIR \
+    -u NODE_BIN \
+    -u NODE_OPTIONS \
+    -u NODE_EXTRA_CA_CERTS \
+    -u NODE_TLS_REJECT_UNAUTHORIZED \
+    -u NODE_PATH \
+    -u NPM_CONFIG_NODE_OPTIONS \
+    -u npm_config_node_options \
+    -u NODE_USE_SYSTEM_CA \
+    -u NODE_USE_ENV_PROXY \
+    -u SSL_CERT_FILE \
+    -u SSL_CERT_DIR \
+    -u SSLKEYLOGFILE \
+    -u OPENSSL_CONF \
+    -u HTTP_PROXY \
+    -u HTTPS_PROXY \
+    -u ALL_PROXY \
+    -u NO_PROXY \
+    -u http_proxy \
+    -u https_proxy \
+    -u all_proxy \
+    -u no_proxy \
+    -u GLOBAL_AGENT_HTTP_PROXY \
+    -u GLOBAL_AGENT_HTTPS_PROXY \
+    -u GLOBAL_AGENT_NO_PROXY \
+    -u GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE \
+    bash "$@"
+}
+
 check_nexus_live_health() {
   local nexus_base_url="$1"
   if [[ "$NEXUS_LIVE_HEALTH_ENABLED" != "true" ]]; then
@@ -792,7 +866,7 @@ check_nexus_live_health() {
   local curl_version_output curl_version major_version minor_version
   local health_tmp_dir response_file error_file
   set +e
-  curl_version_output="$(curl --disable --version 2>/dev/null)"
+  curl_version_output="$(run_isolated_nexus_curl --disable --version 2>/dev/null)"
   status=$?
   set -e
   curl_version="$(printf '%s\n' "$curl_version_output" | sed -nE '1s/^curl ([0-9]+)\.([0-9]+)\..*$/\1.\2/p')"
@@ -823,7 +897,7 @@ check_nexus_live_health() {
     : > "$error_file"
     set +e
     metadata="$(
-      curl --disable -sS \
+      run_isolated_nexus_curl --disable -sS \
         --proto '=https' \
         --proto-redir '=https' \
         --tlsv1.2 \
@@ -1108,6 +1182,12 @@ check_nexus_production_evidence() {
   require_executable_file "$NEXUS_PRODUCTION_EVIDENCE_TEST" "SORA Nexus production evidence audit self-test"
   require_pattern "$NEXUS_PRODUCTION_EVIDENCE_AUDIT" 'assertNoSecretLikeValues\(manifest\)' "SORA Nexus production evidence secret-like value gate"
   require_pattern "$NEXUS_PRODUCTION_EVIDENCE_TEST" 'secret-like Nexus evidence value' "SORA Nexus production evidence secret-like value negative test"
+  require_pattern "$NEXUS_PRODUCTION_EVIDENCE_AUDIT" "const EXPECTED_CHAIN_ID = '${NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID}';" "SORA Nexus production evidence chain identity authority"
+
+  if [[ "$NEXUS_PRODUCTION_EVIDENCE_REQUIRED" == "true" &&
+        "$NEXUS_EXPECTED_CHAIN_ID_VALUE" != "$NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID" ]]; then
+    record_failure "Strict SORA Nexus production evidence requires committed NEXUS_EXPECTED_CHAIN_ID to equal ${NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID}; resolved ${NEXUS_EXPECTED_CHAIN_ID_VALUE:-<unset>}"
+  fi
 
   if [[ ! -f "$NEXUS_PRODUCTION_EVIDENCE_FILE" || ! -x "$NEXUS_PRODUCTION_EVIDENCE_AUDIT" ]]; then
     return
@@ -1118,7 +1198,47 @@ check_nexus_production_evidence() {
     args+=(--require-ready)
   fi
 
-  run_step "SORA Nexus production evidence audit" bash "$NEXUS_PRODUCTION_EVIDENCE_AUDIT" "${args[@]}"
+  run_step \
+    "SORA Nexus production evidence audit" \
+    run_isolated_nexus_evidence_audit \
+    "$NEXUS_PRODUCTION_EVIDENCE_AUDIT" \
+    "${args[@]}"
+}
+
+check_taira_release_readiness() {
+  require_executable_file "$TAIRA_RELEASE_AUDIT" "SORA Taira release readiness audit"
+  require_executable_file "$TAIRA_RELEASE_AUDIT_TEST" "SORA Taira release readiness self-test"
+
+  local live="${IROHA_TAIRA_LIVE_HEALTH-0}"
+  local expected_commit="$TAIRA_PROCESS_EXPECTED_BUILD_COMMIT"
+  if [[ "$TAIRA_COMMITTED_BUILD_COMMIT_SEEN" == "true" ]]; then
+    if ! validate_build_commit_pin "committed TAIRA_EXPECTED_BUILD_COMMIT" "$TAIRA_COMMITTED_BUILD_COMMIT"; then
+      expected_commit=""
+    else
+      expected_commit="$TAIRA_COMMITTED_BUILD_COMMIT"
+    fi
+    if [[ "$TAIRA_PROCESS_EXPECTED_BUILD_COMMIT_SET" == "true" &&
+          "$TAIRA_PROCESS_EXPECTED_BUILD_COMMIT" != "$TAIRA_COMMITTED_BUILD_COMMIT" ]]; then
+      record_failure "process TAIRA_EXPECTED_BUILD_COMMIT must not override the committed Taira build pin"
+    fi
+  elif [[ "$live" == "1" || "$live" == "true" ]]; then
+    record_failure "TAIRA_EXPECTED_BUILD_COMMIT must be pinned in the committed Iroha release defaults when live Taira health is enabled"
+    expected_commit=""
+  fi
+
+  if [[ -x "$TAIRA_RELEASE_AUDIT_TEST" ]]; then
+    run_step "SORA Taira release readiness self-test" node "$TAIRA_RELEASE_AUDIT_TEST"
+  fi
+  if [[ -x "$TAIRA_RELEASE_AUDIT" ]]; then
+    run_step \
+      "SORA Taira release readiness audit" \
+      env \
+      IROHA_READINESS_ROOT="$ROOT_DIR" \
+      IROHA_READINESS_PARENT="$PARENT_DIR" \
+      IROHA_TAIRA_LIVE_HEALTH="$live" \
+      TAIRA_EXPECTED_BUILD_COMMIT="$expected_commit" \
+      "$TAIRA_RELEASE_AUDIT"
+  fi
 }
 
 load_release_config_defaults
@@ -1135,11 +1255,12 @@ fi
 check_nexus_sources "$NEXUS_BASE_URL"
 check_nexus_live_health "$NEXUS_BASE_URL"
 check_nexus_production_evidence
+check_taira_release_readiness
 
 if ((${#failures[@]} > 0)); then
-  echo "[iroha-readiness][error] Iroha/Nexus release readiness failed:" >&2
+  echo "[iroha-readiness][error] Iroha Taira/Nexus release readiness failed:" >&2
   printf '  - %s\n' "${failures[@]}" >&2
   exit 1
 fi
 
-log "Iroha/Nexus release readiness passed."
+log "Iroha Taira/Nexus release readiness passed."

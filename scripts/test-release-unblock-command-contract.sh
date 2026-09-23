@@ -57,6 +57,37 @@ function extractReleaseChecks(file) {
   return checks
 }
 
+function extractTerminalChecks(file) {
+  const text = read(file)
+  const checks = new Map()
+  const re = /\brecord_check_result\s+\\?\s*\n\s*"([^"]+)"\s+\\?\s*\n\s*"([^"]+)"/g
+  for (const match of text.matchAll(re)) {
+    const name = match[1]
+    const slug = match[2]
+    if (checks.has(slug) && checks.get(slug) !== name) {
+      fail(`release-readiness terminal check duplicate slug has conflicting name: ${slug}`)
+    }
+    checks.set(slug, name)
+  }
+  if (checks.size === 0) fail('release-readiness terminal check extraction found no checks')
+  return checks
+}
+
+function mergeChecks(primary, additional) {
+  const merged = new Map(primary)
+  for (const [slug, name] of additional) {
+    if (merged.has(slug) && merged.get(slug) !== name) {
+      fail(`release-readiness check duplicate slug has conflicting name: ${slug}`)
+    }
+    merged.set(slug, name)
+  }
+  return merged
+}
+
+function selectMap(source, checks) {
+  return new Map([...checks.keys()].map((slug) => [slug, source.get(slug)]))
+}
+
 function extractAuditCommands(file) {
   const text = read(file)
   const start = text.indexOf('verification_command_for_slug() {')
@@ -219,42 +250,44 @@ function compareCheckNames(label, actual, expected) {
 }
 
 const releaseChecks = extractReleaseChecks(auditFile)
+const terminalChecks = extractTerminalChecks(auditFile)
+const allChecks = mergeChecks(releaseChecks, terminalChecks)
 const auditCommands = extractAuditCommands(auditFile)
 const auditRecommendedActions = extractAuditStringCaseMap(
   auditFile,
   'recommended_action_for_slug',
   'verification_command_for_slug',
-  releaseChecks,
+  allChecks,
   'recommended-action',
 )
-const auditRequiresExternalActions = extractAuditRequiresExternalActions(auditFile, releaseChecks)
+const auditRequiresExternalActions = extractAuditRequiresExternalActions(auditFile, allChecks)
 const auditUnblockCategories = extractAuditStringCaseMap(
   auditFile,
   'unblock_category_for_slug',
   'external_prerequisite_for_slug',
-  releaseChecks,
+  allChecks,
   'unblock-category',
 )
 const auditExternalPrerequisites = extractAuditStringCaseMap(
   auditFile,
   'external_prerequisite_for_slug',
   'log_evidence_preview',
-  releaseChecks,
+  allChecks,
   'external-prerequisite',
 )
-compareKeys('verification_command_for_slug', auditCommands, releaseChecks, 'command')
-compareCommands(path.basename(exportFile), extractJsCommandMap(exportFile), auditCommands)
-compareCommands(path.basename(verifyFile), extractJsCommandMap(verifyFile), auditCommands)
+compareKeys('verification_command_for_slug', auditCommands, allChecks, 'command')
+compareCommands(path.basename(exportFile), extractJsCommandMap(exportFile), selectMap(auditCommands, releaseChecks))
+compareCommands(path.basename(verifyFile), extractJsCommandMap(verifyFile), selectMap(auditCommands, releaseChecks))
 compareCheckNames(path.basename(exportFile), extractJsNameMap(exportFile), releaseChecks)
 compareCheckNames(path.basename(verifyFile), extractJsNameMap(verifyFile), releaseChecks)
-compareValues(path.basename(exportFile), extractJsRecommendedActionMap(exportFile), auditRecommendedActions, 'recommended-action')
-compareValues(path.basename(verifyFile), extractJsRecommendedActionMap(verifyFile), auditRecommendedActions, 'recommended-action')
-compareValues(path.basename(exportFile), extractJsRequiresExternalActionMap(exportFile), auditRequiresExternalActions, 'requires-external-action')
-compareValues(path.basename(verifyFile), extractJsRequiresExternalActionMap(verifyFile), auditRequiresExternalActions, 'requires-external-action')
-compareValues(path.basename(exportFile), extractJsUnblockCategoryMap(exportFile), auditUnblockCategories, 'unblock-category')
-compareValues(path.basename(verifyFile), extractJsUnblockCategoryMap(verifyFile), auditUnblockCategories, 'unblock-category')
-compareValues(path.basename(exportFile), extractJsExternalPrerequisiteMap(exportFile), auditExternalPrerequisites, 'external-prerequisite')
-compareValues(path.basename(verifyFile), extractJsExternalPrerequisiteMap(verifyFile), auditExternalPrerequisites, 'external-prerequisite')
+compareValues(path.basename(exportFile), extractJsRecommendedActionMap(exportFile), selectMap(auditRecommendedActions, releaseChecks), 'recommended-action')
+compareValues(path.basename(verifyFile), extractJsRecommendedActionMap(verifyFile), selectMap(auditRecommendedActions, releaseChecks), 'recommended-action')
+compareValues(path.basename(exportFile), extractJsRequiresExternalActionMap(exportFile), selectMap(auditRequiresExternalActions, releaseChecks), 'requires-external-action')
+compareValues(path.basename(verifyFile), extractJsRequiresExternalActionMap(verifyFile), selectMap(auditRequiresExternalActions, releaseChecks), 'requires-external-action')
+compareValues(path.basename(exportFile), extractJsUnblockCategoryMap(exportFile), selectMap(auditUnblockCategories, releaseChecks), 'unblock-category')
+compareValues(path.basename(verifyFile), extractJsUnblockCategoryMap(verifyFile), selectMap(auditUnblockCategories, releaseChecks), 'unblock-category')
+compareValues(path.basename(exportFile), extractJsExternalPrerequisiteMap(exportFile), selectMap(auditExternalPrerequisites, releaseChecks), 'external-prerequisite')
+compareValues(path.basename(verifyFile), extractJsExternalPrerequisiteMap(verifyFile), selectMap(auditExternalPrerequisites, releaseChecks), 'external-prerequisite')
 NODE
 }
 

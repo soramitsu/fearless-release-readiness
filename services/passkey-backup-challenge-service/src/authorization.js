@@ -92,6 +92,18 @@ async function readBoundedResponse(response) {
   return Buffer.concat(chunks, total);
 }
 
+function cancelRejectedResponse(response, controller) {
+  try {
+    const cancellation = response.body?.cancel?.();
+    if (cancellation && typeof cancellation.catch === 'function') {
+      void cancellation.catch(() => {});
+    }
+  } catch {
+    // Preserve the generic authorization error even if transport cleanup fails.
+  }
+  controller.abort();
+}
+
 export function createIntrospectionRequestAuthorizer({
   introspectionUrl,
   audience,
@@ -146,50 +158,54 @@ export function createIntrospectionRequestAuthorizer({
 
       try {
         if (response.status !== 200) {
-        throw response.status === 401 || response.status === 403
-          ? authorizationFailed()
-          : authorizationUnavailable();
-      }
-      const contentType = String(response.headers?.get?.('content-type') ?? '')
-        .split(';', 1)[0]
-        .trim()
-        .toLowerCase();
-      if (contentType !== 'application/json') throw authorizationUnavailable();
+          cancelRejectedResponse(response, controller);
+          throw response.status === 401 || response.status === 403
+            ? authorizationFailed()
+            : authorizationUnavailable();
+        }
+        const contentType = String(response.headers?.get?.('content-type') ?? '')
+          .split(';', 1)[0]
+          .trim()
+          .toLowerCase();
+        if (contentType !== 'application/json') {
+          cancelRejectedResponse(response, controller);
+          throw authorizationUnavailable();
+        }
 
-      let authorization;
-      try {
-        const raw = await readBoundedResponse(response);
-        authorization = JSON.parse(raw.toString('utf8'));
-      } catch (error) {
-        if (error?.code === 'authorization_service_unavailable') throw error;
-        throw authorizationUnavailable();
-      }
-      const required = [
-        'schemaVersion',
-        'active',
-        'subject',
-        'audience',
-        'method',
-        'path',
-        'bodySha256',
-        'scope',
-        'platform',
-        'expiresAt',
-      ];
-      if (!exactObject(authorization, required) || authorization.schemaVersion !== 1 ||
-          authorization.active !== true ||
-          !SUBJECT_RE.test(authorization.subject) ||
-          authorization.audience !== normalizedAudience || authorization.method !== method ||
-          authorization.path !== path || authorization.bodySha256 !== bodySha256 ||
-          authorization.scope !== expectedScope || !PLATFORMS.has(authorization.platform) ||
-          !Number.isSafeInteger(authorization.expiresAt)) {
-        throw authorizationFailed();
-      }
-      const nowSeconds = Math.floor(now() / 1000);
-      if (authorization.expiresAt <= nowSeconds ||
-          authorization.expiresAt > nowSeconds + maxTtlSeconds) {
-        throw authorizationFailed();
-      }
+        let authorization;
+        try {
+          const raw = await readBoundedResponse(response);
+          authorization = JSON.parse(raw.toString('utf8'));
+        } catch (error) {
+          if (error?.code === 'authorization_service_unavailable') throw error;
+          throw authorizationUnavailable();
+        }
+        const required = [
+          'schemaVersion',
+          'active',
+          'subject',
+          'audience',
+          'method',
+          'path',
+          'bodySha256',
+          'scope',
+          'platform',
+          'expiresAt',
+        ];
+        if (!exactObject(authorization, required) || authorization.schemaVersion !== 1 ||
+            authorization.active !== true ||
+            !SUBJECT_RE.test(authorization.subject) ||
+            authorization.audience !== normalizedAudience || authorization.method !== method ||
+            authorization.path !== path || authorization.bodySha256 !== bodySha256 ||
+            authorization.scope !== expectedScope || !PLATFORMS.has(authorization.platform) ||
+            !Number.isSafeInteger(authorization.expiresAt)) {
+          throw authorizationFailed();
+        }
+        const nowSeconds = Math.floor(now() / 1000);
+        if (authorization.expiresAt <= nowSeconds ||
+            authorization.expiresAt > nowSeconds + maxTtlSeconds) {
+          throw authorizationFailed();
+        }
 
         return Object.freeze({
           subjectHash: authorizationSubjectHash(authorization.subject),

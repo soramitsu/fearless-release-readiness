@@ -546,6 +546,25 @@
         "maxLength": 512,
         "pattern": "^[A-Za-z0-9_-]+$"
       },
+      "ServerCredentialExtensionResults": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Sanitized public extension metadata only. Native clients must keep PRF output local and omit the entire prf and largeBlob results before serialization. Unknown extensions are rejected.",
+        "properties": {
+          "credProps": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rk"
+            ],
+            "properties": {
+              "rk": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
       "RegistrationCredentialResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -555,7 +574,7 @@
           "rawId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
           "type": { "const": "public-key" },
           "authenticatorAttachment": { "enum": ["platform", "cross-platform"] },
-          "clientExtensionResults": { "type": "object" },
+          "clientExtensionResults": { "$ref": "#/components/schemas/ServerCredentialExtensionResults" },
           "response": { "$ref": "#/components/schemas/RegistrationAuthenticatorResponse" }
         }
       },
@@ -586,7 +605,7 @@
           "rawId": { "$ref": "#/components/schemas/Base64UrlCredentialId" },
           "type": { "const": "public-key" },
           "authenticatorAttachment": { "enum": ["platform", "cross-platform"] },
-          "clientExtensionResults": { "type": "object" },
+          "clientExtensionResults": { "$ref": "#/components/schemas/ServerCredentialExtensionResults" },
           "response": { "$ref": "#/components/schemas/AssertionAuthenticatorResponse" }
         }
       },

@@ -1,6 +1,14 @@
 # Fearless Universal Wallet Project Plan
 
-Last updated: 2026-07-31
+Last updated: 2026-09-06
+
+**Upgrade policy superseded 2026-09-06:** [Legacy upgrade goals](LEGACY-UPGRADE-GOALS.md)
+govern the current release. Existing accounts retain normal wallet and signing
+access. New-network enrollment is additive and retryable; it must not replace
+legacy keys or block startup. The implementation goals and local regression
+qualification are complete; distribution-signed installation acceptance remains
+a release gate. Historical hard-cutoff / export-only access items
+below are superseded, even where recorded as Done.
 
 This is the cross-repo tracker for the Fearless wallet refactor, new chain support,
 indexer work, and git-flow cleanup.
@@ -16,6 +24,92 @@ indexer work, and git-flow cleanup.
   publication or deployment is tracked separately where required.
 - Resolved: a previously open risk or superseded verification item is closed and
   retained only for historical traceability.
+
+## 2026-08-24 Taira first-release contract hardening
+
+- Established one non-compatibility Taira identity across Android, iOS, web,
+  Kagami, and release tooling: chain UUID
+  `fc56984b-2be7-431d-840e-21514d1883f0`, I105 discriminant `369`, canonical
+  XOR definition `6TEAJqbb8oEPmLncoNiMRbLEK6tw`, public alias
+  `xor#universal`, and decimal scale `9`. Wallet code rejects the retired
+  `iroha3-taira` chain identifier and legacy named asset-definition literals.
+- Taira wallet reads now fail closed on incomplete routed fanout instead of
+  reconciling partial state. Direct routed reads and nested MCP route results
+  require all six coherent fanout counters; the outer MCP envelope is not
+  mistaken for a routed response. Redirects, non-2xx nested responses,
+  credential/query/fragment-bearing Torii roots, unsafe or overflowing fanout
+  counters, missing pagination proof, and malformed response shapes are
+  rejected. Successful routed and MCP responses must declare a unique JSON
+  media type, nested submit/finality routes require canonical JSON content
+  metadata, and case-colliding response headers are rejected.
+- Balance precision uses the authoritative asset-definition `spec.scale`.
+  Balance reads request one explicit bounded snapshot for definitions and
+  account assets, require matching bounded completeness proof, exact account,
+  Base58 asset, and scope fields, reject duplicate `(asset, scope)` rows, and
+  sum canonical string-only Iroha Numeric quantities within the
+  precision-adjusted 511-bit domain. Registry labels, case mutations, and
+  unknown Iroha identities are never accepted as chain identities and cannot
+  fall through to generic Substrate balance, history, migration, account, or
+  send paths. History requires
+  exact page, pagination, instruction-box, payload, and atomic-batch shapes;
+  canonical transaction hashes, timestamps, indexes, block heights, and stable
+  identities; exact `Committed` status; case-sensitive I105 account binding;
+  UTF-8-bounded leg IDs; and string-only canonical Numeric amounts converted to
+  wallet base units without floating-point or JSON-number coercion.
+  An absent authoritative fee policy is an explicit fee-unavailable error,
+  never a fabricated zero-fee quote.
+  Transfers require the canonical signed transaction bytes and locally derived
+  hash in its exact lowercase, unprefixed spelling, bind mobile MCP replies to
+  JSON-RPC 2.0, the originating request ID, and exactly one result/error arm,
+  then wait for a matching terminal `Applied` receipt before reporting success
+  or refreshing balances.
+- The root release audit now runs a dedicated Taira source/self-test gate and,
+  in full-live mode, additionally requires a pinned deployed commit, fresh
+  four-peer progress, complete fanout, a bounded complete live asset-definition
+  snapshot with XOR scale `9`, the canonical MCP submit-and-wait schema, and
+  resolvable committed validator DNS records.
+- The checked-in NEVO review chain now binds the current Taira node config with
+  SHA-256 `fef09f5c069b6de4d135e4bdb554b7c13437b944546dab7e235154de129eeafb`.
+  Static release readiness recomputes the config, base-genesis, canonical
+  public-input, and unsigned-genesis digests and includes a source-template
+  drift rejection fixture. The release gate additionally invokes Kagami's
+  validate-only `validate-taira-nevo-review-v1` command and accepts only one
+  exact, artifact-bound JSON receipt after native recomposition; an identity
+  mutation outside the digest-only chain is rejected.
+- A read-only 2026-08-24 live snapshot observed build
+  `7efcc118eb50e3369d004d092f9b9d0b4d31ac52`, no reported `chain_id`, two
+  peers, roughly 41 minutes without a block, an exposed absolute manifest path,
+  only one of five routed asset reads succeeding, canonical XOR with a null
+  scale, and zero of four committed validator names resolving. Health and the
+  MCP tool contract passed. This snapshot is diagnostic; the root live gate
+  against a committed exact deployment pin remains the release authority.
+- This closes the source-contract defects only. No live deployment, reset, DNS
+  change, funded write canary, or external publication was performed. Public
+  Taira remains release-blocked until the corrected source is deployed and the
+  full live gate passes against that exact commit.
+
+## 2026-08-09 Kagemusha reviewed-lock v2 plan-gate alignment
+
+- The active Kagemusha dependency authority is
+  `fixtures/kagemusha/cargo-lock.reviewed.v2`, exactly `319,284` bytes with
+  SHA-256
+  `467a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3`.
+  The `315,548`-byte v1 artifact and its
+  `ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409`
+  digest remain required historical provenance; they are no longer the active
+  workspace-lock authority.
+- The v2 guard also authenticates its `3,912`-byte receipt, `3,555`-byte
+  resolution-input inventory, `321,889`-byte seed lock, and the bounded
+  secure-reader helper before comparing or materializing the workspace lock.
+  Root plan readiness now binds the same paths, sizes, digests, verification
+  order, and workflow path inventory, while the canonical peer-transport
+  fixture binds generator digest
+  `3e1153d1b5a7341e7a53d376046c8b064716cb12738251c48405b09e2a2f080c`.
+- This checkpoint updates source contracts and adversarial fixtures only. No
+  plan audit, interpreter, Cargo, SDK, network, live-status, or process command
+  was run, so the existing protected review, clean publication, build, and live
+  deployment gates remain open. Older dated v1 lock statements below are
+  retained as historical evidence and are superseded by this checkpoint.
 
 ## Maintained Repos
 
@@ -64,7 +158,8 @@ explicitly reintroduced later.
   this workspace).
 - `si.soramitsu.io` is read-only. Solana simulation and broadcast use configured
   Solana RPC endpoints directly.
-- Taira testnet is enabled.
+- Taira testnet is enabled in source under the canonical first-release
+  contract; shipping remains fail-closed behind the live Taira release gate.
 - Nexus mainnet is registry-gated and bound to the documented Minamoto Torii
   source at `https://minamoto.sora.org`; it stays disabled by default until live
   endpoint health and release SDK artifact gates pass.
@@ -671,8 +766,14 @@ all relevant CI checks to be green.
 
 ## Open Risks
 
+Current source-audit note (2026-08-10): the typed release-PR required-check
+authority inventory is intentionally incomplete. Historical hosted-check states
+below are not re-admitted as current release evidence until every singleton and
+duplicate context has an authenticated, independently reviewed issuer pin.
+
 | Risk | Status | Mitigation |
 | --- | --- | --- |
+| Public Taira does not yet satisfy the first-release contract | Open | Source now pins the canonical UUID, XOR definition, alias, and scale `9`; all three wallets reject partial fanout reads and require hash-bound terminal `Applied` receipts; and the root full-live audit verifies the deployed commit, fresh four-peer progress, complete fanout, live precision, MCP schema, and validator DNS. The current public deployment remains external to this change and previously exposed stale progress, incomplete fanout, unconstrained XOR precision, and unresolved validator names. Deploy/reset the corrected Taira profile, publish the committed DNS records, pin the exact reported build commit in `config/iroha-release-readiness.env`, run funded Android/iOS/web canaries, and require `scripts/audit-release-readiness.sh` to pass without `--skip-live` before release. |
 | Production Iroha send codecs are not integrated | Open | The shared routes, fail-closed signer seams, exact pinned-artifact manifests, CI audits, and adversarial bypass tests are complete, but no platform may claim production send. Android archive/hash review and a core-only Java bridge test stage are complete under `android_staged_bridge_production_gates_required`; the bridge remains outside app/runtime DI, and authoritative live asset/precision/fee mapping, SDK-to-node compatibility, provider secret-copy acceptance, Android release/device proof, live receipt parity, and funded Taira/Nexus evidence are still required. iOS archive path/type/encryption/CRC/bomb-bound review passed, but `apple_xcframework_review_and_materialization_required` remains because the tag is not directly resolvable or compilable, the app/SDK minimums are iOS 14.1/15.0, published slices disagree with tagged loader hashes, the checked-in bridge is ABI 8 while the loader minimum is 14, the frozen candidate evidence covers source ABI 17, and the current Rust working source is ABI 21 without a reviewed replacement artifact, provenance is incomplete, and canonical parity, protocol chain ID, asset/fee mapping, zeroizable secret handling, exact receipt-hash/finality proof, deployed-node compatibility, and funded Taira/Nexus evidence remain open. The final `@iroha/iroha-js` `0.0.3` two-file delta is now committed, pushed, and immutable in PR `hyperledger-iroha/iroha#5618` at head `555b2bc06cee90c3375a448bff8d0af8153af3b8`, tree `6df598cfcd5baab82379bac1455dd739ed4cf47d`, over exact `optimizations` base `8a54f8ea3e94f6ba2b341d4a03718fa9e99ea8cc`. Its final source has strict Ed25519 verification, canonical metadata and bounds-first guards, independent Nexus payload/final hash verification, browser-only Fetch/Buffer/declaration hardening, compact cross-language fixture/hash corrections, and the unchanged bundle cap; focused and artifact tests passed, the deterministic package tarballs matched, DCO is green, and an independent code review found no findings. The protected PR nevertheless remains open with eligible review pending, and no `0.0.3` release artifact or digest is published, checksum-pinned, bundled into the wallet, or backed by funded live evidence. The pinned immutable `0.0.2` release still lacks that subpath, so `browser_transaction_codec_unpublished_source_only` remains. All defaults remain disabled/unavailable. |
 | Production app-association files are stale | Open | The website source now contains the required Android `get_login_creds` relation, iOS `webcredentials`, production application ID `YLWWUD25VZ.jp.co.soramitsu.fearlesswallet`, preserved development ID `YLWWUD25VZ.jp.co.soramitsu.fearlesswallet.dev`, strict content-type rules, `X-Content-Type-Options: nosniff`, an aggregate live verifier, and adversarial tests that reject the retired `jp.co.soramitsu.fearless` production bundle. Root plan readiness derives the current IDs from the iOS release-signing gate and passkey CloudKit containers, then exact-checks the Xcode Release/Dev bundle and team settings, website verifier, both AASA source forms, documentation, and retired-ID adversarial marker so coordinated stale hardcodes cannot pass. Focused source verification, website adversarial tests, and root parity mutations pass locally. The 2026-07-16 live check still receives old bodies: Android lacks `get_login_creds`, Apple lacks `webcredentials`, the extensionless AASA is `application/octet-stream`, all three endpoints omit `nosn`, and the live bodies differ from source. Deploy the current website source and rerun `yarn verify:app-associations:live` before enabling passkey recovery. |
 | July 11 production-readiness changes are not published and root production source is unowned | Open | The source-publication gate attests all nine source trees twice, with a remote preflight before release checks and an identity-bound postflight afterward. It rejects unowned roots, dirty or unmerged content, wrong branches/origins, stale upstreams, forged PR identity or SHA, remote drift/deletion, symlinks, submodule drift, unexpected generated source, and cross-run identity changes. The workspace root is not a Git repository, so `FEARLESS_PROJECT_PLAN.md`, root release tooling/config, and the passkey challenge service still lack a canonical publishable owner. `../iroha` also does not match its stale last-reviewed merged source identity, and required protected-branch PRs remain open or review-blocked. Assign the root source, publish the exact tested trees through the configured protected PRs, obtain approvals, and rerun the full audit. The former extra `fearless-utils-Android/gradle/wrapper/gradle-wrapper.properties` drift was removed; the exact pinned derived-tree, public-dependency handoff, and strict Android provenance checks now pass, so that wrapper drift is no longer a blocker. |
@@ -681,7 +782,7 @@ all relevant CI checks to be green.
 | `ti.soramitsu.io` production does not yet serve the TI service-info contract | Open | Local TON indexer code and tests include `/api/indexer/v1/service-info`, and PR `tonswap-org/ton-indexer#6` now adds `/api/indexer/v1/health` identity fields plus production-smoke gates for `health.serviceId=ti.soramitsu.io`, `ecosystem=ton`, `chainId=ton:mainnet`, and `network=mainnet`. Production still serves older health without that identity. 2026-06-25 local TI deployment added a production `Dockerfile`, `.dockerignore`, docs, and deployment-manifest negative tests that require `TON_NETWORK=mainnet`, lite-client mainnet config, port `8787`, non-root runtime, write RPC disabled, and the `ti.soramitsu.io` smoke command. 2026-06-26 `../ton-indexer` `master` includes a blocked production deployment evidence gate requiring Docker image digest, deployment ID, commit, operator, UTC smoke timestamp, exact `https://ti.soramitsu.io` smoke command, and `npm run audit:deployment-evidence -- --require-ready` before release enablement. 2026-06-26 follow-up adds a deterministic production deployment evidence template generator and adversarial self-test, plus public deployment-evidence secret-key rejection, so operators can prepare the ready manifest without hand-building schema fields; CI and root plan-readiness now require it. Root full-live release readiness now runs that require-ready deployment-evidence audit in `../ton-indexer`, while `--skip-live` validates the blocked manifest without requiring production evidence. Hotfix PR `tonswap-org/ton-indexer#4` merged to `master` at `43d8cb64063d3bb42001bd6099e530a98bc910a1`, sync PR `#5` merged equivalent content to `develop` at `7a2165cd66ff12f67ac5ca2ea34c7a076518b306`, health-identity PR `#6` was squash-merged to `develop` at `3a3e9b81ce98b0503fa202084b7f99de1c95dc7a` with fresh `develop` CI `verify` passing, health-identity master PR `#7` was promoted to `master` at `ee8c98bebc81f3d8bd358375eca7d5e1d0abf786`, and service-info schema hotfix PR `#8` was promoted to `master` at `52b200f7d0454fd6cc5b1605c05a690ac28dd16c` after confirming GitHub default branch `master` and restoring protected-branch review policy. 2026-07-03 follow-up adds TI production-smoke adversarial coverage for HTTP 503 service-info responses, non-JSON health responses, invalid OpenAPI JSON body previews, old-health identity drift, service-info field drift, and OpenAPI title/path drift with received-value plus deploy-current-image diagnostics; root plan-readiness enforces those operator-diagnostic tests. 2026-07-03 unblock-bundle follow-up requires TI live-service handoff export and verification for `https://ti.soramitsu.io`, `/api/indexer/v1/health`, `/api/indexer/v1/service-info`, `/api/indexer/v1/openapi.json`, `health.lastMasterSeqno`, `serviceInfo.serviceId=ti.soramitsu.io`, OpenAPI title `TONSWAP Indexer API`, and the exact `TON_INDEXER_BASE_URL=https://ti.soramitsu.io npm run smoke:production` command, with adversarial verifier mutations for handoff removal, wrong URL, wrong TON health contract, and wrong command. Ready-for-review PR `tonswap-org/ton-indexer#13` targets `develop` at `2335a094866cf16406bfee3bd9d3998a7e40bc52` with `validate` and `verify` green and remains blocked by protected-branch review policy (`reviewDecision=REVIEW_REQUIRED`, `mergeStateStatus=BLOCKED`). Live `TON_INDEXER_BASE_URL=https://ti.soramitsu.io npm run smoke:production` still fails with `health serviceId must be ti.soramitsu.io`; deploy the updated TON image and replace placeholder mainnet registry values before treating TI as release-ready. |
 | PI protected-branch publication, current deployment, and operator evidence remain incomplete | Open | The 2026-07-11 live request to `https://pi.soramitsu.io/graphql` returns HTTP 400 with exactly four GraphQL validation errors: `_health` does not define `genesisHash`, `latestIndexedBlock`, `latestIndexedBlockHash`, or `latestIndexedAt`. Strict PI production smoke therefore fails; the older label-only health fields do not prove the current cryptographic identity/checkpoint contract. Current source fixes the same audited SORA genesis/hash/timestamp anchor for fresh and legacy identities, requires a locally controlled verifying archival primary plus an independently operated verifying archive on distinct hosts, preflights both identities before database access, validates finalized height/hash, and requires exact dual-RPC agreement on height, hash, canonical raw SCALE block/events, and raw decimal timestamp milliseconds. Production also requires `POLKASWAP_CHAIN_START_BLOCK` and a compiled PostgreSQL worker health probe that proves exact persisted `chainState`, a matching filtered `BLOCK` snapshot, freshness from 300 seconds behind through 30 seconds ahead, bounded cleanup, and secret-safe diagnostics. Ready evidence remains fail-closed and must include the four health fields, exact seven-key `soraRpcControls`, image/deployment/commit/operator/smoke data, and TLS-edge controls. `sora-xor/polkaswap-indexer#1` merged into `develop` on 2026-07-11 at `be829918d5605c5a6d1ce449bf5f3ff5b9dfc7cb`. Numeric replay-order hotfix PR `sora-xor/polkaswap-indexer#3` merged into protected `master` on 2026-07-25 at `b0eec9dd27d1026771034376b9b2a50a2c1a3105`, and current remote `master` is that exact commit. The merge closes the bigint/text replay-order defect, but remote `master` still does not contain `scripts/production-deployment-evidence.json`; the locally present evidence contract and broader worker/API hardening remain unpublished. Promote the reviewed deployment-evidence source to protected `master`, deploy the current worker/API, and record ready evidence before release. |
 | Nexus mainnet public Torii/TLS health is not release-confirmed | Open | `../iroha` Minamoto docs now identify `https://minamoto.sora.org` and `/v1/mcp` as the public SORA Nexus mainnet Torii/MCP source. Android, iOS, and web registries are bound to that URL while Nexus remains disabled by default. Root `scripts/audit-iroha-release-readiness.sh` now defaults to Minamoto, rejects Taira/testnet URL overrides for `NEXUS_TORII_URL`, validates committed Minamoto source bindings, and has an opt-in live health gate enabled by the full root release audit. The gate disables ambient curl configuration, requires the canonical Minamoto origin and exact `/status` path, HTTPS/TLS 1.2+, zero redirects, bounded file-backed byte capture, HTTP 200 `application/json`, a fresh observation, coherent counters, positive peers, recent block progress, a pinned exact deployed build commit, and non-empty structured routing rules. Diagnostics withhold response bodies and parser fragments, strip controls, redact secrets, and remain scan/output bounded; booleans and timeout/retry settings validate strictly. The self-test covers curlrc injection, redirect/TLS/protocol weakening, removed security flags, multibyte oversized bodies, secret/control diagnostics, invalid configuration, private/arbitrary origins, commit drift, zero peers, stale blocks, and malformed or selector-less routes. The remaining schema-level identity gap is external: `/status` exposes no chain ID or genesis hash, so exact chain identity requires a server schema/config addition rather than a fabricated local check. Root `scripts/audit-iroha-wallet-coverage.sh` also proves Android, iOS, and web keep Nexus transfer seams, fail-closed behavior, and adversarial unit/browser coverage in place. The pinned Android and Apple mobile SDK assets were owner-approved, republished without moving their annotated tag, and independently validated; their former HTTP 404 publication gap is resolved. The browser JavaScript SDK tarball remains unavailable and its validator still fails closed on HTTP 404, as recorded in the separate browser risk below. 2026-06-26 `../iroha` `optimizations` commit `c14328626078c8dc266989f8fd9d7622cf37e2e3` carries BSC SCCP route-manifest explorer/account-codec/native-prover-bundle fields through config, data model, Torii DTOs, and ISI publication, with adversarial route-manifest and native-prover tests passing. 2026-06-26 follow-up adds a deterministic Nexus production evidence template generator and adversarial self-test so operators can prepare the ready manifest without hand-building route-publication, canary, and wallet-smoke fields; root plan-readiness now requires it. 2026-06-30 follow-up hardens `scripts/audit-nexus-production-evidence.sh` so ready evidence must include distinct live wallet-smoke records for Android, iOS, and web against the published route manifest; the template generator now emits explicit per-platform records and root plan-readiness has adversarial removals for the all-wallet gate. Keep this Open until `/status` exposes authoritative chain identity, the exact expected deployed commit is configured, live `https://minamoto.sora.org/status` is healthy, and live Nexus transfer smoke runs; browser production send remains independently blocked on its immutable public package. |
-| Iroha mobile SDK artifacts may not be published for public builds | Resolved | The exact annotated tag `v2.0.0-rc.2.1-fearless-mobile-sdk.3` still dereferences to reviewed commit `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`. Owner-approved workflow run `30194123010` rebuilt and republished its Android and Apple assets without moving the tag; all four jobs passed. Independent validation then passed the prescribed release checkers, ZIP/CRC and internal SHA inventories, Maven coordinates/sidecars, exact direct-versus-Maven artifacts, 16 KiB ELF alignment, NX/no-TEXTREL/no-RPATH controls, deterministic strip delta, native exports, 1,901 core plus 48 client plus 11 offline-wallet classes, Apple manifest/slice hashes, and arm64 device, x86_64+arm64 simulator, and arm64 macOS architecture checks. The published Android ZIP SHA-256 is `24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6`; the published `NoritoBridge` XCFramework ZIP SHA-256 is `475035c7173fa6a3ea660ceae2c3f524089826dcfc78b2f74273aff43965919e`. The browser JavaScript package remains a separate Open risk below and production Iroha send stays fail-closed. |
+| Iroha mobile SDK artifacts may not be published for public builds | Resolved | The exact annotated tag `v2.0.0-rc.2.1-fearless-mobile-sdk.3` still dereferences to reviewed commit `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`. Owner-approved workflow run `30194123010` rebuilt and republished its Android and Apple assets without moving the tag; all four jobs passed. Independent validation then passed the prescribed release checkers, ZIP/CRC and internal SHA inventories, Maven coordinates/sidecars, exact direct-versus-Maven artifacts, 16 KiB ELF alignment, NX/no-TEXTREL/no-RPATH controls, deterministic strip delta, native exports, 1,901 core plus 48 client plus 11 offline-wallet classes, Apple manifest/slice hashes, and arm64 device, x86_64+arm64 simulator, and arm64 macOS architecture checks. The current reviewed Android ZIP SHA-256 is `50e37369e3b08e4435f15ae31d1baca28dd55eae82686000df8f39b85feee7e6`; the assessed `NoritoBridge` XCFramework ZIP SHA-256 is `dc944af3dc98d37d349b9f95fe25b9e4a920f095db58adbcccc6354fc28ada4b`. The browser JavaScript package remains a separate Open risk below and production Iroha send stays fail-closed. |
 | Iroha browser JS SDK artifact is no longer publicly available | Open | The browser artifact validator and its adversarial self-tests remain implemented, and the app keeps Iroha transfers fail-closed unless a validated browser-safe codec is supplied. However, the pinned `iroha-js-0.0.2-v2.0.0-rc.2.1-fearless-mobile-sdk.3.tgz` with recorded SHA-256 `68def75061c3842cd2fddbd4629b1ceaf80b2b1ff3069a477596ada9bae61339` disappeared with the deleted GitHub release and its direct download now returns HTTP 404; npm publication is still unavailable. The validated `0.0.3` source is now immutable at PR `hyperledger-iroha/iroha#5618` head `555b2bc06cee90c3375a448bff8d0af8153af3b8`, but the PR remains open and review-blocked, and its deterministic local tarball is not a public release artifact. Obtain the protected merge and eligible approval, publish the intended browser package under a new immutable version/tag, independently validate the downloaded release asset, update all digest/URL pins transactionally, and keep production Iroha send disabled until clean-checkout validation passes. |
 | Historical pre-July web dirty tree was archived and released | Resolved | The earlier dirty worktree was committed, published through PR `soramitsu/fearless-wallet-web#1058` to `develop`, reconciled with existing `master` release history, then released through PRs `#1059` and `#1060` to `master`. Latest `master` CI passed on run `28167653882` for `ed1dce44`, and the repo is public with protected `develop` and `master`. The new July 10 unpublished worktree is tracked separately above. |
 | Release-readiness implementation PRs are not merged | Open | `config/release-readiness-prs.tsv` now tracks 36 release-PR requirements. Iroha `#5611` and `#5612`, Polkaswap deployment-evidence PR `#1`, and Polkaswap numeric replay-order hotfix PR `#3` are merged with their pinned required checks. Twelve protected-branch blockers remain: Android XCM `soramitsu/fearless-Android#1258`, Android migration/WalletConnect `soramitsu/fearless-Android#1259`, iOS transaction-builder `soramitsu/fearless-iOS#1301`, iOS migration-crash hotfix `soramitsu/fearless-iOS#1302`, iOS shared-features upstream `soramitsu/shared-features-spm#81`, web canonical-indexer `soramitsu/fearless-wallet-web#1062`, website app association `soramitsu/fearless-site-web#49`, TON master promotion `tonswap-org/ton-indexer#12`, TON diagnostics `tonswap-org/ton-indexer#13`, Solswap diagnostics `solswap-io/solswap-indexer#16`, Polkaswap production readiness `sora-xor/polkaswap-indexer#5`, and Iroha JS 0.0.3 `hyperledger-iroha/iroha#5618`. Every blocker stays open until its eligible review and protected merge complete. Iroha JS `#5618` is pinned to exact head `555b2bc06cee90c3375a448bff8d0af8153af3b8`, tree `6df598cfcd5baab82379bac1455dd739ed4cf47d`, and base `8a54f8ea3e94f6ba2b341d4a03718fa9e99ea8cc`; required DCO is `SUCCESS`, but the PR remains `OPEN`, `reviewDecision=REVIEW_REQUIRED`, and `mergeStateStatus=UNSTABLE` at the recorded snapshot. TON `#12` is synchronized with current `master` at exact head `8da98205b47ef2b86e88fb063f647df06a8a7075`, tree `582eb48fc116bc3fbe6098faf05815cac5be0129`, and base `baa38d2f5f913b35d71bf131a2d7964a1f4b92e0`; local dependency audit, the complete negative/adversarial suite, TypeScript build, and Docker build passed, and hosted `validate` plus `verify` succeeded. It remains `OPEN`, `reviewDecision=REVIEW_REQUIRED`, and `mergeStateStatus=BLOCKED` until protected review and merge. Upstream `soramitsu/shared-features-spm#81` is pinned to exact head `43e999ee10e64b5dd740b4695ed9766866e2168d`, tree `c60964b175f965fe00a2206e9ec9dbf5878c2cc2`, parent `3a241d6cccef69aaa7bfa54bc351d6105ca4d962` (the committed-test-plan constituent), and base `6d6cb16b7f1f12028fe93d50a4e928a938af141e`; it is `OPEN`, `MERGEABLE`, `reviewDecision=REVIEW_REQUIRED`, and `mergeStateStatus=BLOCKED`. Review is requested from `soramitsu/ios-developers`, but the protected Jenkins context has not started. The same PR replaces the invalid read-only CODEOWNER with that write-enabled team after GitHub reported `Unknown owner`. It also replaces the dead Nexus XNetworking URL with immutable public GitHub release tag `ios-xcframework-1.0.10-rebuild.1`, asset `XNetworking-1.0.10.xcframework.zip`, and exact SwiftPM checksum `43319ac6f215e95edc215366116264205902a18d480b87aa4a8c40d381a3b61a`; the URL now resolves anonymously, and exact checksum/download plus negative transport and artifact verification pass. Constituent commit `ffaed7b460ef86efa646499b551e767b2c03dcb1` is the Package.swift public-artifact fix. The immediate test-plan constituent makes `.swiftpm/Modules-Package.xctestplan` include `FearlessCompatibilityTests`, so CI cannot silently skip the new regression tests. The final head fixes the resulting Swift 6 compile issues; its focused final run passed 5/5 with zero failures or skips, and simulator plus generic-device Release builds pass. Canonical packaging is deterministic, but independent source rebuilds are not byte-reproducible because Kotlin/Native emits different Mach-O UUIDs; the inaccessible Nexus binary cannot be claimed byte-identical, and no physical-device test is claimed. The former DNS blocker is resolved; merge remains blocked only on Jenkins, eligible independent review, and protected merge. Polkaswap `#5` and final Android XCM `#1258` head `38fb2f3b328e3a041c15e253b0abafe405ef8314` have all required hosted checks green; Android `validate` and `build-and-test` both completed successfully after the runtime-provider subscription fix. Android migration/WalletConnect PR `#1259` is now pinned to exact current head `f897c23cbdc4c13fdf3d1049bd07b588889c941f`, tree `9f5e2ddd0050a55342c508ea37a7ebd5382def2d`, parent `6d19fac384c445a471ea38db18b7eec525600baa`; its seven-file delta from that parent is limited to tests and documentation. The PR is a draft and remains `OPEN`, `reviewDecision=REVIEW_REQUIRED`, and `mergeStateStatus=BLOCKED`. Exact-head local `postMergeVerify` passed 1,444/1,444 tasks in 158 seconds, the exact IAS build passed 1,333/1,333 tasks in 188 seconds, all current local adversarial suites and artifact/provenance checks are green, and exact emulator lanes now cover both fresh API 36 startup and an f897-over-bcce preserved-data API 34 in-place replacement. The exact API 34 installed APK SHA-256 is `fd57aa310645b7ec521e55937496529e7860b361f3f891fd1106e378a9f0f786`; package/data identities and 39 private files remained preserved, the first PID remained live across 11 samples through 300 seconds, the second cold launch remained live, and exact fatal/migration scans found zero hits. This is test-signed emulator evidence only, not Google Play-signed or Google-delivered, not a physical-device result, and not public-tester proof. Branch Flow run `30593523725`, IAS-candidate run `30593523746`, and Android CI run `30593523787` all succeeded. The IAS run had 20 successful steps, four intentional skips, a 1,333/1,333-task build, and zero PR artifacts. Android CI completed 42/42 steps with zero failures or skips; all 228 migration tests passed across API 30, 31, 34, and 36, artifact `8780047557` passed all 522 manifest payload-hash checks, the AAB signature/synthesis/R8/identity suites passed, and `readelf` inspected 10 `.so` files across five ABI directories. No Android merge, trusted WalletConnect dispatch, Google Play IAS upload/tester link, physical-device result, or Play-signed upgrade is claimed. iOS `#1302` is pinned to exact current source head `ab9a73db96536604cda7bb0724a9585ccff6dece`; all nine hosted checks are green, but the PR remains `reviewDecision=REVIEW_REQUIRED` and `mergeStateStatus=BLOCKED`. The historical uploaded `2026.7.26` artifact source remains `f56b7b896344cfded39456217097747ef9efeacf`, and the successfully uploaded `2026.7.27` archive remains historical evidence only. The exact current `2026.7.28` archive from product head `2e45e55dc03ad904598e730cfb5994fb5c1072dc` passed the fail-closed signed-archive audit, uploaded successfully with immutable distribution identifier `ae421367-c8a0-46eb-b3db-4f0d536aa6fe`, processed, and is now `Testing` in both `App Store Connect Users` and external group `Public Beta Test`. Safari verified the anyone-with-the-link landing page `https://testflight.apple.com/join/012KzFyD` and its exact TestFlight deep link. Upload and publication attestations are recorded under `build/ios-release-2e45e55dc-20260731T181700Z`; only an in-place Apple-delivered preserved-data physical-iPhone install remains unverified because both attached iPhones are unavailable. Android `#1258` remains open with `reviewDecision=REVIEW_REQUIRED` and `mergeStateStatus=BLOCKED`; its earlier review was dismissed and no current-head approval exists. No admin merge or Apple-delivered device-install state is inferred from the signed archive, successful upload, or verified TestFlight publication. |
@@ -694,7 +795,7 @@ all relevant CI checks to be green.
 | iOS dual CocoaPods/SPM graph still emits dependency-scan warnings | Mitigated | The vendored SwiftPM `SoraKeystore` runtime classes are namespaced by `scripts/spm-shared-features-fixes.sh`; full simulator tests pass without the previous `implemented in both` warning. The dual CocoaPods/SPM module graph still emits Swift dependency-scan warnings and remains covered by the iOS dependency-patch risk. |
 | Android public dependency resolution relies on compatibility modules and local `fearless-utils` source | Open | `android-foundation`, `ui-core`, `shared_features:{core,xcm,backup}`, and `xnetworking:lib-android` now resolve to first-party public modules; extrinsic submit/fee/watch, mortal-era signing, account-aware fee-estimation, anonymous fee-preview cleanup, pinned public `fearless-utils` checkout enforcement, public XCM route metadata guards, an explicit XCM execution-spec validator, a typed XCM multilocation parser, an injectable route-aware public XCM transfer-engine contract, a concrete open-source Substrate XCM call builder/submitter, deterministic included/fixed destination-fee handling, and a strict Android XCM registry metadata audit are implemented. The XCM service now validates origin/destination route support, asset support, execution spec completeness, parseable destination/asset/beneficiary/fee multilocations, recipient placeholder policy, route-aware destination-fee requests, minimum amount for amount-bearing calls, recipient, sender, and fee inputs before delegating to the backend, with adversarial unit coverage. The backend builds versioned XCM extrinsic calls, replaces `<account>` placeholders, requires per-origin keypair providers, returns zero for included destination fees, normalizes fixed destination fees by asset precision, rejects estimated destination fees until a real destination estimator exists, estimates origin fees through `ExtrinsicService`, submits through the same public extrinsic path, and is wired in Android DI. AccountKey20 beneficiary routes now validate 0x-prefixed 20-byte EVM recipients before transfer submission or origin-fee estimation. The registry audit validates malformed execution specs, bridge mismatches, destination-fee policy, destination locations, weight limits, route symbols, min amounts, unsupported multilocation junctions, junction-count mismatches, and missing `<account>` recipient placeholders; the committed Android registry now has 15 executable native relay-asset routes gated by `scripts/xcm-required-routes.tsv`: Polkadot -> Polkadot Asset Hub/Moonbeam/Acala/Parallel DOT, Kusama -> Kusama AssetHub/Moonriver/Karura KSM, Polkadot Asset Hub/Acala/Parallel/Moonbeam -> Polkadot DOT, and Kusama AssetHub/Karura/Moonriver/Bifrost -> Kusama KSM, with 34 remaining discovery-only destinations. Those 34 remaining routes are now committed in `scripts/xcm-discovery-only-routes.tsv`, categorized as `bridge-sora`, `non-native-asset`, or `cross-parachain-native`, and compared exactly against the generated gap report by `--require-gap-file`; stale, malformed, missing, untracked, wrong-reason, and wrong-bridge gap entries fail the Android audit and root plan-readiness self-test. The registry audit also writes a deterministic JSON gap report listing each `missingExecutionSpec` route, and Android CI uploads it as `xcm-registry-gap-report` so route debt cannot be hidden by aggregate counts. `scripts/xcm-production-evidence.json` now explicitly blocks broad production XCM release with `status: blocked`, `releaseEnabled: false`, E2E evidence, all-routes executable, and discovery-only route blockers; CI and release-readiness audits reject stale counts, missing evidence fields, untracked route evidence, malformed transfer hashes, and any ready/release-enabled claim until every required route has E2E transfer evidence and no discovery-only gaps remain. 2026-06-30 follow-up tightens ready XCM production evidence to require `mainnet`, non-placeholder sender/recipient/operator fields, and distinct sender/recipient parties. Root full-live release readiness now also runs `bash scripts/audit-xcm-production-evidence.sh --require-ready` inside `fearless-Android`; the same audit runs without `--require-ready` in `--skip-live` mode to validate the blocked manifest locally. `scripts/generate-xcm-production-evidence-template.sh` now emits a deterministic 15-record evidence skeleton from `scripts/xcm-required-routes.tsv`, and Android CI/root plan-readiness enforce its adversarial self-test so release operators cannot silently drop required route evidence. 2026-07-05 follow-up copies that generated template into release-readiness reports and the release unblock bundle as `handoffs/android-xcm-production-evidence-template.json`, with exporter/verifier guards for the exact 15-route placeholders, `mainnet` environment, Android release-commit placeholder, checksum, Markdown handoff, and focused negative fixtures. 2026-06-28 follow-up adds a deterministic Android public dependency upstream handoff export and adversarial self-test; Android CI/root aggregate readiness now require the handoff bundle with `fearless-utils` overlay checksums and public compatibility-module digests before release review. |
 | Android XCM route semantics, live discovery completeness, and independent mainnet evidence remain incomplete | Open | The mutable remote registry is no longer transaction authority. Release code owns an immutable 15-route per-asset registry in the APK, binds every caller and discovered candidate to exact chain/asset/execution identity, accepts only canonical `vN` XCM versions and a single route/fee asset at index zero, rejects estimated destination fees and bridge execution, and treats a successful current-process discovery snapshot only as a narrowing advisory. Persisted Room data, remote execution metadata, release URL overrides, and release flag overrides cannot enable a route; release XCM is literal `false`. The schema, loader, validator, registry, and engine now carry execution authority on each exact destination asset. All 15 approved single-asset specifications were migrated without semantic changes; legacy destination-scoped or mixed authority, normalized duplicate assets, missing exact specifications, sibling-spec borrowing, malformed dormant specifications, and asset/spec mismatches fail closed before provider or network calls. The canonical live registry still yields 13 compatible candidates, 2 missing approved routes, 49 unapproved discovery-only routes, and 0 production-executable routes. The bundled catalog's remaining 34 destinations / 59 asset routes have no reviewed execution specifications and remain disabled; the 14 multi-asset destinations / 39 routes are now structurally representable per asset, but their exact chain semantics still require reviewed external specifications. Production also lacks independently reviewed finalized origin and destination block proofs, successful origin extrinsic and destination event results, positive destination balance deltas, distinct public HTTPS proof URLs, canonical RPC/explorer verification, and an independent verifier for all 15 approved routes. The full ready command must regenerate a canonical live effective-registry report, require complete approved/effective parity, then validate evidence bound to the Android release commit. Keep the release flag disabled until the two live discovery gaps, all 34/59 execution gaps, all independently verified mainnet evidence, protected-branch review, and a separate flag-enablement review are complete. |
-| Private Android/iOS repositories are constrained to release overlays | Mitigated | Android and iOS private-overlay audits now reject any tracked product path in private repos, including identical public product files, so a synced full fork cannot pass as an overlay. The private checkouts were converted with `git rm --cached` so files remain on disk for inspection but only release overlay paths remain tracked. 2026-06-25 root private-overlay readiness passes; Android private tracking is down to 14 release-overlay files and iOS private tracking is down to 8 release-overlay files. |
+| Private Android/iOS repositories are constrained to release overlays | Open | Android and iOS private-overlay audits correctly reject every tracked non-overlay product path, including identical copies of public files, so widening the allowlists would weaken the release boundary. The 2026-06-25 conversion to 14 Android and 8 iOS tracked overlay files is historical rather than current: a 2026-08-09 source-only recheck finds non-allowlisted product components in both private indexes (`feature-account-api`/`importing` on Android and `ComponentFactories`/`StorageRequestWorkers` on iOS), while visible identical public/private copies such as Android `tests.gradle` and iOS `Rambafile` remain outside the allowlists. The visible private trees contain 2,314 Android and 3,779 iOS non-allowlisted files; those are surface counts, not reconstructed index counts, but the indexed product components are already sufficient to keep private-overlay readiness blocked. The private-repository owners must review any genuine private delta, move required product source into the public repositories, and untrack every remaining non-overlay path while retaining only the existing release-overlay allowlists. No destructive cleanup or Git mutation was performed during this source-only recheck. |
 | Passkey-backed backup lacks release enablement | Open | Android now declares stable AndroidX Credential Manager dependencies, adds a public `fearlesswallet.io` RP contract, creates WebAuthn registration/assertion request JSON, validates encrypted backup payload metadata, exposes a fail-closed `PasskeyBackupCloudStorage`, adds an injectable Google Drive `appDataFolder` encrypted-backup adapter, adds a GoogleAuthUtil-backed Drive appdata access-token provider behind a testable interface, adds a strict remote challenge-service client for WebAuthn ceremony creation/completion, adds a testable passkey backup workflow that ties challenge ceremonies to encrypted cloud save/load/delete, and pins the production challenge-service URL to `https://backup.fearlesswallet.io`. iOS now has a matching `AuthenticationServices`/`CloudKit` passkey backup contract, injectable CloudKit private-database storage adapter, fail-closed storage protocol, `webcredentials:fearlesswallet.io` entitlement, CloudKit container entitlements for release and dev bundle IDs, the same remote challenge-service client contract, the same testable challenge-to-cloud workflow, and the same production challenge-service URL pin. Root `config/passkey-backup-production.json` now captures the production release contract for RP ID, HTTPS challenge-service base URL, endpoint paths, encrypted backup metadata fields, Android Drive appdata scope, Android Google account selection/Drive consent/recovery UX checklist, iOS associated domain, CloudKit record type, release/dev containers, and iOS iCloud account/associated-domain/CloudKit production-schema/provisioning/recovery checklist. Root `config/passkey-backup-challenge-service.openapi.json` now defines the server contract for health, registration challenge/completion, assertion challenge/completion, strict schema version/RP ID constants, credential object shape requiring `credential.id` and `response.clientDataJSON`, storage key/id patterns, and service identity. `services/passkey-backup-challenge-service` now provides a Node 22 service backed by `@simplewebauthn/server` 13.3.2 for real WebAuthn registration and assertion cryptographic verification with a non-root Docker contract, healthcheck, strict outer request validation, one-time ceremony consumption, TTL cleanup, allowed-origin checks, WebAuthn `clientDataJSON` type/challenge/origin validation, registered-credential assertion binding, credential list/single-revoke/revoke-all lifecycle APIs, subject/platform-bound one-time authorization introspection, durable owner tombstones, replay/race controls, a file-backed durable credential-ID store selected by `PASSKEY_CREDENTIAL_STORE_FILE` with Docker volume `/data/passkey-backup`, schema validation, atomic writes, restart/corruption/unavailable-path adversarial tests, production deployment docs for `backup.fearlesswallet.io`, release checklist live-health evidence, deployment-manifest negative tests covering port/env/volume/root-user/runbook drift, and a blocked deployment-evidence gate in `scripts/production-deployment-evidence.json`. 2026-06-26 follow-up adds a deterministic passkey deployment-evidence template generator and adversarial self-test so operators can prepare the ready manifest without hand-building image digest, commit, health-response, credential-store, and platform-provisioning fields; the service audit, root plan-readiness, and aggregate skip-live readiness now require it. Root `scripts/audit-passkey-challenge-service.sh` requires those markers, runs syntax checks plus the Node adversarial test suite, and now runs the passkey deployment-evidence audit and adversarial self-test before aggregate release readiness reaches the live passkey health gate. The deployment-evidence audit rejects release-enabled claims until image digest, deployment ID, commit, operator, live health response, durable credential-store volume/file, and Android/iOS platform-provisioning evidence are recorded and `npm run audit:deployment-evidence -- --require-ready` passes. 2026-06-26 hardening now also rejects all-repeated placeholder image digests and 40-character commit hashes, with focused adversarial tests and root plan-readiness fixtures proving those checks cannot be removed silently. The root passkey prerequisite audit validates both manifests, cross-checks Android/iOS source and entitlements against them, requires Android and iOS workflow seams, requires release checklist coverage for account selection/consent/recovery/provisioning, validates the OpenAPI contract, and runs an optional live health check enabled by the full release-readiness audit. It also requires Android and iOS passkey backup release flags to stay disabled by default until live health passes, and live health must return `ok=true`, service identity `fearless-passkey-backup`, matching RP ID, and schema version 1. Live health failures now include curl output/body previews plus an explicit `backup.fearlesswallet.io` DNS/TLS/routing and service-deployment hint, and non-JSON live-health responses are covered by an adversarial fixture required by root plan-readiness. Android and iOS now also have concrete native passkey ceremony adapters, canonical cross-platform `FPBKAEAD` v1 AES-256-GCM envelopes with metadata-bound AAD, exact lifecycle identity checks, post-registration compensation, and disabled-by-default unavailable cross-device key providers. Local service, native, and root contract gates pass, but the 2026-07-10 live website associations remain stale and `backup.fearlesswallet.io` remains undeployed or unresolvable. Keep this risk Open until the remote challenge service is deployed/configured with working DNS/health and the app-store/platform provisioning items are completed and a reviewed wallet-owned cross-device recoverable 32-byte key source is configured before enabling user-facing passkey backup. |
 | Android `libsr25519java.so` provenance remains unresolved | Resolved | Documented the `soramitsu/fearless-utils-Android` source commit and added `scripts/build-sr25519.sh` plus checksum gating. |
 | Indexer dependency audit findings remain | Resolved | TON and Solana/Solswap indexers now pass production `npm audit --omit=dev`, Polkaswap passes `yarn npm audit --environment production`, and maintained indexer CI workflows run the production dependency audit before tests/build. |
@@ -1612,15 +1713,30 @@ all relevant CI checks to be green.
   test-only Internal App Sharing: testers need an eligible Google account,
   Android/Play Store, and Internal App Sharing opt-in, and no physical-device
   install through the newly generated link is claimed yet.
-- Reconciled release-PR check provenance without changing GitHub state.
-  Duplicate checks now require a complete canonical app/workflow pin and count
-  only `pull_request` runs whose Actions head branch exactly matches the
-  configured PR head. Same-SHA post-merge pushes and unrelated branches can
-  neither pass nor poison the PR, and an exact-head PR run remains mandatory.
-  Five new adversarial cases and the full release-PR self-test pass. The
-  expanded current catalog has `33` requirements and the live result is
-  `24 passed / 9 failed`: the nine failures are exactly the open
-  approval/review blockers enumerated in the Open Risks table.
+- Hardened release-PR check provenance without changing GitHub state. Every
+  required check now needs exactly one typed issuer pin, regardless of whether
+  GitHub returns one matching row or several. GitHub Actions pins bind the
+  canonical Actions app, exact workflow ID/path, repository, reviewed SHA,
+  `pull_request` event, configured head branch, suite, and details URL.
+  Third-party check runs bind an exact app ID/slug; legacy commit statuses bind
+  an exact creator ID/login and credential-free HTTPS target origin. Only rows
+  that satisfy their typed authority can reach outcome selection, so singleton
+  spoofing, same-SHA post-merge pushes, and unrelated branches fail closed.
+  Hermetic fixtures cover singleton wrong-app, wrong-workflow, wrong-status
+  creator/origin, missing-pin, and duplicate evidence cases. The checked-in
+  production authority inventory intentionally remains incomplete: unknown
+  Vercel, DCO, Jenkins, and other check identities were not guessed. Release
+  readiness therefore remains blocked until those identities are captured from
+  authenticated GitHub evidence, independently reviewed, and added as pins.
+  The protected merge handoff now delegates every exact repo/head/base/PR/SHA
+  candidate to this same typed authority verifier before admitting it to a dry
+  run, then repeats the verifier immediately before `gh pr merge` and retains
+  `--match-head-commit`. Its local status rollup is only supplemental discovery;
+  it cannot authorize a merge, substitute an unreviewed PR, or bypass a missing
+  issuer pin. Candidate verification also requires an exact current-head
+  approving review in addition to GitHub's aggregate `APPROVED` decision, so an
+  empty, malformed, or stale-only review inventory fails closed. It cannot
+  publish or overwrite the canonical release-readiness report.
 - Android PR `soramitsu/fearless-Android#1258` now has final remote head
   `38fb2f3b328e3a041c15e253b0abafe405ef8314`
   (`fix: subscribe to runtime sync before initialization`). Hosted Branch Flow
@@ -2015,17 +2131,23 @@ all relevant CI checks to be green.
   SHA differs from that authoritative ref. The configured reviewed PR head is
   still queried and validated independently; no prompt-capable remote Git
   transport is introduced.
-- The source-publication adversarial suite now passes exactly 81 negative cases,
+- The source-publication adversarial suite now passes exactly 83 negative cases,
   including an advanced Iroha actual branch with a forged-current cached
   upstream, and missing, unavailable, and malformed actual-branch responses.
   The fake GitHub API also rejects duplicate queries for the same repository
   ref, proving the matching current/configured branch path performs one
   authoritative lookup rather than constructing a two-query race. Source
-  reports now use wire schema version 2 and reject legacy version-1 preflight
-  reports; the separate root-owner configuration deliberately remains at
-  schema version 1.
+  reports now use wire schema version 3 and reject legacy version-2 preflight
+  reports. Every report carries an exact `phase`; standalone and preflight
+  reports carry a null parent digest, while a postflight report binds the
+  SHA-256 of the exact raw preflight bytes it validated. The separate
+  root-owner configuration deliberately remains at schema version 1.
 - Aggregate, export, and verification classifiers now treat reviewed-source
-  drift as external-Iroha-only solely when a failed schema-v2 source report
+  drift as external-Iroha-only solely when a failed schema-v3 postflight source
+  report is bound to the exact canonical preflight artifact and
+  all nine ordered source rows preserve the producer's nineteen identity
+  fields for every preflight-passed source; a preflight-failed row must instead
+  retain the exact postflight continuity diagnostic. The report also
   contains the exact canonical Iroha identity, a true/present authoritative
   actual-branch proof, a local HEAD exactly matching the cached upstream, a
   distinct canonical `prHeadSha`, and deleted configured merged-ref proof. A
@@ -2047,21 +2169,39 @@ all relevant CI checks to be green.
   configured remote presence and SHA. The manifest handoff carries
   `remoteBranchPresent` as well as both remote SHAs so deletion proof cannot be
   lost or contradicted during export and re-verification.
-- Release-unblock manifests now use schema version 2 to carry the expanded
-  source handoff while their summary and actions documents, and the root-owner
-  configuration, remain schema version 1. The aggregate suite passes 235
-  scenarios plus 118 production override probes, two production
-  tool-path/function probes, and five test-mode isolation probes. Under the
+- Release-unblock manifests now use schema version 3 to carry the expanded
+  source handoff and both checksummed preflight and postflight reports while
+  their summary and actions documents, and the root-owner configuration,
+  remain schema version 1. Export validation, blocker classification, handoff
+  hashes, and copied bytes now derive from one admitted byte snapshot for each
+  of the four source-publication artifacts; verification likewise parses and
+  checks manifest and `SHA256SUMS` authority from those same admitted bytes.
+  The aggregate suite passes 237
+  scenarios plus 146 production override probes, three production
+  tool-path/function probes, and six test-mode isolation probes. Under the
   established ordinary-helper inventory, the bundle exporter passes 16
-  positive cases plus 280 failure probes and the verifier passes 12 positive
-  cases plus 473 failure probes; including specialized `expect_*` invocation
-  variants, the executed totals are 17/296 and 12/491 respectively. Root
-  plan-readiness now catalogs 4,189 destructive mutation cases and pins the implementation,
+  positive cases plus 295 failure probes and the verifier passes 12 positive
+  cases plus 504 failure probes; including specialized `expect_*` invocation
+  variants, the executed totals are 17/311 and 12/522 respectively. Root
+  plan-readiness now catalogs 4,211 destructive mutation cases and pins the implementation,
   report fields, exact API route, adversarial fixtures, and this live SHA
   boundary against silent regression. The mutation harness also asserts at
-  runtime that its final `TEST_CASE_INDEX` equals the declared 4,189-case
+  runtime that its final `TEST_CASE_INDEX` equals the declared 4,211-case
   catalog, so deleting a case cannot leave a superficially valid append-block
   threshold and stale plan count.
+- Terminal release-unblock publication is fail-closed. The aggregate audit
+  passes the canonical workspace verifier into the exporter, the exporter
+  verifies its private same-filesystem staging directory, revalidates the full
+  staged checksum/file/content closure, and only then atomically publishes the
+  canonical bundle. A staged export or verification failure never publishes
+  that candidate and is recorded as the failed `release-unblock-bundle` check;
+  the aggregate audit then rewrites and revalidates `summary.json`,
+  `actions.json`, and `blockers.md` so terminal process failure cannot coexist
+  with authoritative `status: passed` evidence. An initial rejection of those
+  three canonical report contracts follows the same rule: it is captured in a
+  bounded terminal log, recorded as the failed `release-output-contract`
+  check, rewritten into all three reports, and revalidated before exit; no
+  bundle export is attempted from the rejected report set.
 
 ### 2026-07-13 Reversible Maintained-Source Output Quarantine
 
@@ -2115,7 +2255,7 @@ all relevant CI checks to be green.
   Iroha checkout remained untouched and still reports 153 ignored paths plus
   the synchronized `f6f8706977f5b3589ddbaea4d92f0e871b1cbe82` versus reviewed
   PR-head mismatch.
-- Root plan-readiness now catalogs 4,189 destructive mutation cases. The
+- Root plan-readiness now catalogs 4,211 destructive mutation cases. The
   quarantine cases reject removal or weakening of this exact maintained-source cleanup
   boundary and its reusable fail-closed quarantine implementation.
 
@@ -2297,7 +2437,7 @@ all relevant CI checks to be green.
   present. Independently reviewed endpoint credential provisioning/provenance,
   funded mainnet evidence, and a reviewed finalized-chain absence proof or
   explicit audited quarantine for expired pending intents remain external
-  gates. Root plan-readiness now catalogs 4,189 cases, including the 120-case
+  gates. Root plan-readiness now catalogs 4,211 cases, including the 120-case
   iOS contract and the new web, passkey, Bitcoin, and aggregate-boundary
   mutations. The maintained-workspace
   audit is expected to remain red only for owner-controlled external `../iroha`
@@ -2317,11 +2457,11 @@ all relevant CI checks to be green.
 ### 2026-07-12 Release Transport And Environment Boundary Hardening
 
 - Sealed the aggregate release launcher behind canonical `/bin/bash`, a
-  centralized 106-name production denylist, dynamic rejection of ambient
+  centralized 117-name production denylist, dynamic rejection of ambient
   NPM/Yarn/Corepack/Git/GitHub variables and exported shell functions, a
   canonical production `PATH`, and resolved canonical Node/npm tools. Test-mode
   roots are canonical, isolated, and component-wise symlink checked. The full
-  aggregate self-test passes 208 scenarios, 118 production override probes, two
+  aggregate self-test passes 208 scenarios, 129 production override probes, two
   production tool-path/function probes, and five test-mode isolation probes.
   `BASH_ENV` remains a shell-startup property that executes before any Bash
   script can inspect it, so callers must invoke the canonical launcher from a
@@ -2360,7 +2500,7 @@ all relevant CI checks to be green.
 - Source publication now detects merge, both rebase forms, cherry-pick, revert,
   bisect, and sequencer state through canonical Git and common directories,
   rejects symlink/type-spoofed metadata, and fingerprints operation state across
-  inspection to close races. Its self-test passes exactly 81 negative/adversarial
+  inspection to close races. Its self-test passes exactly 83 negative/adversarial
   cases plus a clean post-operation control. Operator guidance now says to have
   the checkout owner resolve an in-progress Git operation, remove or quarantine
   ignored non-published outputs, and assign the root release/passkey source to a
@@ -2479,7 +2619,7 @@ all relevant CI checks to be green.
   Kusama live rows confirmed stash/validator/era fields; the configured Ternoa
   and legacy Moonbeam/Moonriver endpoints currently return HTTP 404 and are not
   claimed as live-verified.
-- Root plan-readiness now catalogs 4,189 cases. The prior 60 additions plus the
+- Root plan-readiness now catalogs 4,211 cases. The prior 60 additions plus the
   latest 82 destructively mutate the source-report-bound Iroha classifier,
   unmerged-index
   and forged/clean controls, wallet error/progress/provider boundaries,
@@ -2496,9 +2636,9 @@ all relevant CI checks to be green.
 
 - Completed the narrow Android review and staging path for the official
   `v2.0.0-rc.2.1-fearless-mobile-sdk.3` archive without adding it to the app
-  runtime. The current owner-approved 116,992,564-byte republished release ZIP
+  runtime. The current owner-approved 116,231,129-byte republished release ZIP
   is pinned to SHA-256
-  `24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6`;
+  `50e37369e3b08e4435f15ae31d1baca28dd55eae82686000df8f39b85feee7e6`;
   only `core-jvm` is materialized into ignored build output, with JAR SHA-256
   `33f449700948641c73eeaa4e4a8ab9e39d3d6a642a50b6b7d8c30a9f6aff19ce`.
   The bounded, no-follow, transactional materializer passed 63
@@ -2517,16 +2657,19 @@ all relevant CI checks to be green.
   compact framing and returns
   `2332d0004eb24d97fd965fe68f6f31b0e51339764b4dd80f3ea50a3b6f7e5003`;
   production source is statically forbidden from importing the defective SDK
-  hasher. The Android blocked-readiness self-test passed 23 destructive
+  hasher. The Android blocked-readiness self-test passed 39 destructive
   fixtures covering manifest/vector tamper, production dependency/DI bypass,
-  native tracking, compatibility promotion, and live-registry evidence drift.
-- Kept live facts distinct from deterministic fixtures. The release-tag test
-  asset is `61CtjvNd9T3THAR65GsMVHr82Bjc`; the 2026-07-11 Taira registry read
-  reports native XOR as `6TEAJqbb8oEPmLncoNiMRbLEK6tw`. The deployed node
-  reports `2.0.0-rc.2.0` at commit prefix `039af2d`, while the SDK tag points at
-  `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`. Authoritative production asset,
-  precision, and fee mapping, revision compatibility, and a funded live receipt
-  remain unproven.
+  native tracking, retired-alias rejection, fabricated-zero-fee regression,
+  hash/finality binding, and live-registry evidence drift.
+- Kept the first-release contract distinct from diagnostic fixtures. Native
+  Taira XOR is exactly `6TEAJqbb8oEPmLncoNiMRbLEK6tw` at scale `9`;
+  `61CtjvNd9T3THAR65GsMVHr82Bjc` may coexist only as a secondary fixture and is
+  never selected as native XOR. The read-only 2026-08-23 public snapshot reports
+  build `7efcc118eb50e3369d004d092f9b9d0b4d31ac52`, canonical scale `null`, and
+  only one of five routed asset reads succeeding, while the SDK tag points at
+  `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`. The corrected candidate must still
+  prove exact SDK/wire behavior, the authoritative fee policy, and a funded
+  hash-bound terminal `Applied` receipt after deployment.
 - Android production send remains **Blocked** under
   `android_staged_bridge_production_gates_required`. Production DI still uses
   `UnavailableIrohaTransferSigner`; Nexus remains disabled; the staged bridge
@@ -2535,7 +2678,7 @@ all relevant CI checks to be green.
   canonical `/run/secrets/passkey-smoke-grant-helper` as a readable executable,
   and every PI deployment/smoke handoff uses the root-pinned Yarn runner rather
   than ambient `yarn`. Root release-readiness retains 197 aggregate scenarios;
-  its hardened launcher additionally passes 118 production override probes,
+  its hardened launcher additionally passes 129 production override probes,
   two production tool-path/function probes, and five test-mode isolation
   probes. Unblock-bundle export/verify self-tests reject helper, command, and
   bundle tampering.
@@ -2834,7 +2977,10 @@ all relevant CI checks to be green.
   or future timestamp, TON-shaped health, and identity/freshness boundary drift.
 - Added a two-phase full-live source-publication gate. A remote preflight runs
   before every release check, and the final postflight must match the preflight
-  workspace/configuration identity and all nine exact source identities. It
+  workspace/configuration identity and all nine exact source identities. The
+  schema-v3 postflight also records the SHA-256 of the exact raw schema-v3
+  preflight bytes it consumed, so a standalone, legacy, replaced, or unrelated
+  preflight report cannot be relabeled as the final attestation. It
   binds eight configured Git worktrees plus the root production source to exact
   GitHub origins, branches, PR identities, local/PR/remote SHAs, clean
   indexes/worktrees, initialized clean submodules, and tracked root
@@ -2860,7 +3006,8 @@ all relevant CI checks to be green.
   must match the root Git origin/branch/PR and exactly one merged row in
   `config/release-readiness-prs.tsv`.
 - Added a checksummed top-level `sourcePublicationHandoff` to the release unblock
-  bundle. The bundle includes and verifies the structured source report, exact
+  bundle. The bundle includes and verifies both structured preflight and
+  postflight source reports, their exact byte-digest relationship, the exact
   publication config, and root-owner policy even when the source gate fails.
   Export and verification reject credential leakage, passed rows with dirty or
   missing remote proof, wrong source paths/origins/branches/SHAs, unmerged PRs,
@@ -13679,11 +13826,13 @@ all relevant CI checks to be green.
 
 ### 2026-06-23 Shared Registry Constants
 
-- Added Universal Wallet registry constants to Android, iOS, and web:
+- Added the initial Universal Wallet registry constants to Android, iOS, and web
+  (the Taira identity below is historical and superseded by the 2026-08-23
+  first-release contract):
   - TON indexer: `https://ti.soramitsu.io`
   - Solana indexer: `https://si.soramitsu.io`
-  - Taira testnet: chain id `iroha3-taira`, discriminant `369`, Torii
-    `https://taira.sora.org`, enabled by default.
+  - Taira testnet: a Kagami profile label was initially misused as the chain
+    identifier; discriminant `369` and Torii `https://taira.sora.org` were set.
   - Nexus mainnet: chain id `sora:nexus:global`, discriminant `753`, disabled
     by default with no Torii URL until production endpoint confirmation.
 - Extended the Android, iOS, and web fixture tests to pin these registry values.
@@ -14043,8 +14192,9 @@ all relevant CI checks to be green.
 
 ### 2026-06-23 Web Taira Torii MCP Client Foundation
 
-- Verified the local `../iroha` Taira profile before patching wallet code:
-  - Taira chain id is `iroha3-taira`.
+- Verified the local `../iroha` Taira profile before patching wallet code. This
+  historical check conflated a Kagami profile label with the wire chain ID and
+  is superseded by the canonical UUID in the 2026-08-23 checkpoint:
   - Taira I105 chain discriminant is `369`.
   - Public Torii root is `https://taira.sora.org`.
   - Torii MCP is enabled at `/v1/mcp` with public writer profile,
@@ -16534,11 +16684,9 @@ all relevant CI checks to be green.
 ### 2026-06-24 Taira/Nexus Registry Chain IDs
 
 - Replaced legacy and placeholder Iroha registry chain IDs across Android,
-  iOS, and web:
-  - Taira testnet: `iroha3-taira`, sourced from
-    `../iroha/defaults/kagami/iroha3-taira/config.toml`,
-    `../iroha/defaults/kagami/iroha3-taira/genesis.json`, and
-    `../iroha/defaults/kagami/iroha3-taira/verify.txt`.
+  iOS, and web. The historical Taira value in this checkpoint was sourced from
+  Kagami profile fixtures rather than the wire identity and is superseded by
+  `fc56984b-2be7-431d-840e-21514d1883f0` in the 2026-08-23 checkpoint:
   - SORA Nexus mainnet: `sora:nexus:global`, sourced from
     `../iroha/release/network_profiles.toml`.
 - Kept I105 discriminants aligned with the Kagami-generated profiles:
@@ -27759,6 +27907,54 @@ all relevant CI checks to be green.
   evidence, Nexus live/evidence readiness, Android XCM production evidence, web
   Bitcoin funded broadcast evidence, TI/SI deployment evidence, and TI/SI
   production routing/smoke.
+
+### 2026-08-10 iOS shared-features full-live boundary
+
+- Full-live root readiness now invokes the iOS dependency-delta audit with
+  `--require-ready`. A release cannot pass while
+  `removalReadiness.status=blocked`, `mutatesResolvedCheckout=true`, the blocker
+  list is non-empty, or any authoritative CI/release call site still invokes
+  the post-resolution shared-features or native-crypto mutation helpers.
+- `--skip-live` and ordinary iOS CI retain diagnostic mode so the blocked report
+  and upstream handoff remain available without being mislabeled as production
+  readiness. The active source is intentionally still blocked pending upstream
+  publication, protected merge, repinning, and removal of those mutation calls.
+- The readiness fence closes over an exact 10-entry inventory: five CI/release
+  consumers multiplied by the shared-features and native-crypto mutation
+  helpers. Focused coverage proves a forged ready declaration remains blocked
+  until every inventoried call is absent, and root plan-readiness case 4,211
+  rejects a truncated inventory.
+
+### 2026-08-10 Passkey deployment provenance boundary
+
+- The prior ready-evidence audit validated only the shape of the recorded
+  GitHub Actions and attestation URLs plus a claimant-authored payload digest.
+  Its positive fixture used synthetic numeric IDs, so those fields did not
+  prove that the image came from the reviewed publication workflow.
+- Ready evidence now authenticates the exact recorded GitHub Actions run and
+  exact attestation ID on `github.com`. It binds the canonical repository,
+  publication workflow, `workflow_dispatch` event, `main` branch, successful
+  completion, source commit, image digest, and exact repository-scoped
+  attestation-bundle endpoint, then runs `gh attestation verify --bundle`
+  against that returned bundle with the signer workflow, source digest, source
+  ref, and hosted-runner policy pinned.
+- Root full-live readiness passes its canonical GitHub CLI through
+  `PASSKEY_DEPLOYMENT_GH_BIN` and rejects ambient overrides. Blocked diagnostic
+  mode makes no GitHub calls, so the checked-in blocked manifest remains usable
+  without network authority. Full-live passkey route smoke now removes ambient
+  Node TLS, proxy, CA, OpenSSL, and npm configuration authorities before the
+  canonical smoke command; the child fixture receives hostile transport values
+  and proves they do not cross that boundary. The production denylist now has
+  134 entries and the aggregate harness carries 146 production override probes.
+  The immediately following Nexus health gate also invokes both curl version
+  admission and the exact live request through one boundary that removes
+  `CURL_CA_BUNDLE`, OpenSSL/CA variables, and upper- and lowercase proxy
+  variables before `curl --disable` parses any option.
+- The runtime source, focused fake-GitHub fixtures, service static audit, root
+  authority handoff, and plan-readiness seals are implemented. Runtime tests and
+  live GitHub verification were not run under the source-only constraint, and
+  production passkey evidence remains blocked until operators publish the real
+  image and record its authenticated run and attestation.
 
 ### 2026-07-01 Iroha Taira SCCP Route Merge And TON Helper Hardening
 

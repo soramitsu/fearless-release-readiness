@@ -28,8 +28,8 @@ credential store and all revocation state.
     --deny-self-hosted-runners
   ```
 
-- Confirm the selected binary supports the current schema-v3 credential-store
-  contract, including bounded empty owner tombstones. If compatibility is not
+- Confirm the selected binary supports the current schema-v4 credential-store
+  contract, including its validated credential owner index and bounded empty owner tombstones. If compatibility is not
   proven, stop and fail closed; do not restore an older store to make it start.
 
 ## Preserve Durable State
@@ -60,7 +60,7 @@ credential store and all revocation state.
   `docker compose down -v`, `docker volume rm`, delete or replace
   `credentials.json`, initialize an empty volume, or copy a snapshot over the
   live store as a routine rollback step.
-- Treat every schema-v3 record, signature counter, credential, owner-subject
+- Treat every schema-v4 record, credential owner index entry, signature counter, credential, owner-subject
   binding, and empty owner tombstone as durable security state. An older
   snapshot can resurrect a revoked credential, lose an advanced counter, or
   remove a takeover-prevention tombstone.

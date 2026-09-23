@@ -229,7 +229,7 @@ test('file-backed store persists public key, user handle, counter, and metadata 
 
   const persistedAfterRegistration = JSON.parse(readFileSync(credentialStoreFile, 'utf8'));
   assert.equal(readFileSync(credentialStoreFile, 'utf8').includes('local-test-wallet-owner'), false);
-  assert.equal(persistedAfterRegistration.schemaVersion, 3);
+  assert.equal(persistedAfterRegistration.schemaVersion, 4);
   const persistedCredential = persistedAfterRegistration.credentialsByStorageKey[0].credentials[0];
   assert.equal(persistedCredential.id, base64UrlEncode(authenticator.credentialId));
   assert.equal(persistedCredential.userId, registration.userId);
@@ -379,7 +379,7 @@ test('revoke-all tombstone survives restart, denies takeover, and permits same-o
   assert.equal(service.revokeAllCredentials(lifecycleRequest, owner).remainingCredentials, 0);
 
   const persisted = JSON.parse(readFileSync(credentialStoreFile, 'utf8'));
-  assert.equal(persisted.schemaVersion, 3);
+  assert.equal(persisted.schemaVersion, 4);
   assert.equal(persisted.credentialsByStorageKey.length, 1);
   assert.deepEqual(persisted.credentialsByStorageKey[0].credentials, []);
   assert.equal(persisted.credentialsByStorageKey[0].ownerSubjectHash, owner.subjectHash);
@@ -640,7 +640,7 @@ test('failed durable revocation does not mutate the in-memory credential state',
   assert.equal(store.hasAnyCredential(result.storageKey), true);
 });
 
-test('post-rename fsync and close failures keep durable and in-memory state aligned', async (t) => {
+test('post-rename failures keep durable state aligned and lifecycle guards active', async (t) => {
   const root = tempDirectory(t);
 
   for (const failurePoint of ['directory-fsync', 'directory-close']) {
@@ -663,6 +663,8 @@ test('post-rename fsync and close failures keep durable and in-memory state alig
       },
       fsyncSync(descriptor) {
         if (armed && failurePoint === 'directory-fsync' && descriptor === directoryDescriptor) {
+          replacementRenamed = false;
+          directoryDescriptor = undefined;
           throw new Error('injected post-rename directory fsync failure');
         }
         fsyncSync(descriptor);
@@ -670,6 +672,8 @@ test('post-rename fsync and close failures keep durable and in-memory state alig
       closeSync(descriptor) {
         if (armed && failurePoint === 'directory-close' && descriptor === directoryDescriptor) {
           closeSync(descriptor);
+          replacementRenamed = false;
+          directoryDescriptor = undefined;
           throw new Error('injected post-rename directory close failure');
         }
         closeSync(descriptor);
@@ -682,6 +686,7 @@ test('post-rename fsync and close failures keep durable and in-memory state alig
     const service = makeService({ store });
     const owner = authorization(`fearless-wallet-owner:${failurePoint}`);
     const registration = service.createRegistrationChallenge(registrationRequest(), owner);
+    const staleRegistration = service.createRegistrationChallenge(registrationRequest(), owner);
     armed = true;
 
     await assertServiceRejects(
@@ -702,6 +707,45 @@ test('post-rename fsync and close failures keep durable and in-memory state alig
     assert.equal(restarted.hasAnyCredential(registration.storageKey), true, failurePoint);
     const persisted = JSON.parse(readFileSync(credentialStoreFile, 'utf8'));
     assert.equal(persisted.credentialsByStorageKey[0].storageKey, registration.storageKey);
+
+    await assertServiceRejects(
+      service.completeRegistration(
+        registrationCompletion(
+          staleRegistration,
+          createAuthenticator(`post-rename-stale-registration-${failurePoint}`),
+          { origin: ANDROID_ORIGIN },
+        ),
+        owner,
+      ),
+      'credential_lifecycle_conflict',
+      409,
+    );
+
+    const pendingReplacement = service.createRegistrationChallenge(registrationRequest(), owner);
+    assertServiceError(
+      () => service.revokeAllCredentials({
+        storageKey: registration.storageKey,
+        rpId: RP_ID,
+        schemaVersion: SCHEMA_VERSION,
+      }, owner),
+      'credential_store_unavailable',
+      500,
+    );
+    assert.equal(store.hasAnyCredential(registration.storageKey), false, failurePoint);
+    const restartedAfterRevoke = new FileBackedPasskeyChallengeStore({ credentialStoreFile });
+    assert.equal(restartedAfterRevoke.hasAnyCredential(registration.storageKey), false, failurePoint);
+    await assertServiceRejects(
+      service.completeRegistration(
+        registrationCompletion(
+          pendingReplacement,
+          createAuthenticator(`post-rename-revoked-registration-${failurePoint}`),
+          { origin: ANDROID_ORIGIN },
+        ),
+        owner,
+      ),
+      'unknown_or_expired_registration',
+      404,
+    );
   }
 });
 

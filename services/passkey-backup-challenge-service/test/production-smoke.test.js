@@ -8,10 +8,14 @@ import {
   runProductionSmoke,
 } from '../scripts/production-smoke.mjs';
 import { createServer } from '../src/server.js';
+import { createPasskeyBackupChallengeService } from '../src/service.js';
+import { InMemoryPasskeyChallengeStore } from '../src/store.js';
 
-async function withServer(t, handler) {
+async function withServer(t, handler, { requestAuthorizer } = {}) {
+  const store = new InMemoryPasskeyChallengeStore();
   const server = createServer({
-    requestAuthorizer: {
+    service: createPasskeyBackupChallengeService({ store }),
+    requestAuthorizer: requestAuthorizer ?? {
       async authorize() {
         return {
           subjectHash: 'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI',
@@ -25,7 +29,7 @@ async function withServer(t, handler) {
     server.close();
   });
   const address = server.address();
-  return handler(`http://127.0.0.1:${address.port}`);
+  return handler(`http://127.0.0.1:${address.port}`, store);
 }
 
 function jsonResponse(status, body, contentType = 'application/json') {
@@ -83,6 +87,7 @@ const serviceError = (error) => ({
 const testAuthorizationProvider = async ({ bodySha256 }) => `smoke-grant.${bodySha256}`;
 
 function smokeRoutes(overrides = {}) {
+  let registrationConsumed = false;
   return {
     'GET /api/passkey-backup/v1/health': () => jsonResponse(200, health),
     'POST /api/passkey-backup/v1/registration/challenge': (input, options) => {
@@ -97,10 +102,15 @@ function smokeRoutes(overrides = {}) {
       404,
       serviceError('credential_not_registered'),
     ),
-    'POST /api/passkey-backup/v1/registration/complete': () => jsonResponse(
-      404,
-      serviceError('unknown_or_expired_registration'),
-    ),
+    'POST /api/passkey-backup/v1/registration/complete': (input, options) => {
+      const body = JSON.parse(options.body);
+      assert.equal(body.registrationId, registration.registrationId);
+      if (registrationConsumed) {
+        return jsonResponse(404, serviceError('unknown_or_expired_registration'));
+      }
+      registrationConsumed = true;
+      return jsonResponse(400, serviceError('credential_type_mismatch'));
+    },
     'POST /api/passkey-backup/v1/assertion/complete': () => jsonResponse(
       404,
       serviceError('unknown_or_expired_assertion'),
@@ -132,8 +142,8 @@ function smokeRoutes(overrides = {}) {
   };
 }
 
-test('production smoke validates health and challenge routes without storing credentials', async (t) => {
-  await withServer(t, async (baseUrl) => {
+test('production smoke validates health and challenge routes without storing credentials or ceremonies', async (t) => {
+  await withServer(t, async (baseUrl, store) => {
     let tokenIndex = 0;
     const result = await runProductionSmoke({
       baseUrl,
@@ -151,7 +161,39 @@ test('production smoke validates health and challenge routes without storing cre
       '/api/passkey-backup/v1/credentials/revoke',
       '/api/passkey-backup/v1/credentials/revoke-all',
     ]);
+    assert.equal(store.registrationCeremonies.size, 0);
+    assert.equal(store.inFlightRegistrationsByStorageKey.size, 0);
+    assert.equal(store.credentialsByStorageKey.size, 0);
   });
+});
+
+test('production smoke detects rotating authorization subjects and consumes its pending registration', async (t) => {
+  let authorizationCalls = 0;
+  const subjects = [
+    'QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI',
+    'Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M',
+  ];
+  const requestAuthorizer = {
+    async authorize() {
+      const subjectHash = subjects[authorizationCalls % subjects.length];
+      authorizationCalls += 1;
+      return { subjectHash, platform: 'android' };
+    },
+  };
+
+  await withServer(t, async (baseUrl, store) => {
+    await assert.rejects(
+      () => runProductionSmoke({
+        baseUrl,
+        timeoutMs: 1_000,
+        authorizationProvider: testAuthorizationProvider,
+      }),
+      /authorization subject or platform changed between registration challenge and completion/,
+    );
+    assert.equal(store.registrationCeremonies.size, 0);
+    assert.equal(store.inFlightRegistrationsByStorageKey.size, 0);
+    assert.equal(store.credentialsByStorageKey.size, 0);
+  }, { requestAuthorizer });
 });
 
 test('production smoke rejects non-HTTPS non-localhost base URLs', async () => {
@@ -625,7 +667,7 @@ test('production smoke rejects completion routes with wrong public error codes',
       })),
       authorizationProvider: testAuthorizationProvider,
     }),
-    /registration completion error must be unknown_or_expired_registration/,
+    /registration completion error must be credential_type_mismatch/,
   );
 });
 

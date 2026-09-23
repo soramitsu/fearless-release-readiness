@@ -66,15 +66,97 @@ const source = fs.readFileSync(file, 'utf8').split(/\r?\n/)
 const output = [
   '# Each release PR requirement is bound to immutable review evidence.',
   '# reviewed_pr_pin\trepo\thead\tbase\treviewed_pr_number\treviewed_head_sha',
+  '# Every required check is bound to one typed issuer authority.',
+  '# required_check_provenance_pin\trepo\thead\tbase\tcheck_name\tkind\tactor_id\tactor_slug\tauthority_id\tauthority_value',
 ]
+
+function provenancePin(repo, head, base, checkName) {
+  if (checkName === 'Vercel') {
+    return `# required_check_provenance_pin\t${repo}\t${head}\t${base}\t${checkName}\tcommit-status\t35613825\tvercel[bot]\t-\thttps://vercel.com`
+  }
+  if (checkName === 'DCO') {
+    return `# required_check_provenance_pin\t${repo}\t${head}\t${base}\t${checkName}\tcheck-run-app\t19000\tdco\t-\t-`
+  }
+  const workflowId = checkName === 'verify' ? 9002 : 9001
+  const workflowPath = checkName === 'verify'
+    ? '.github/workflows/ci.yml'
+    : '.github/workflows/branch-flow.yml'
+  return `# required_check_provenance_pin\t${repo}\t${head}\t${base}\t${checkName}\tgithub-actions\t15368\tgithub-actions\t${workflowId}\t${workflowPath}`
+}
+
 for (const line of source) {
   if (!line || line.startsWith('#')) continue
-  const [repo, head, base] = line.split('\t')
+  const [repo, head, base, , requiredChecks] = line.split('\t')
   output.push(`# reviewed_pr_pin\t${repo}\t${head}\t${base}\t42\t${headSha}`)
+  for (const checkName of requiredChecks.split(',').map((value) => value.trim())) {
+    output.push(provenancePin(repo, head, base, checkName))
+  }
   output.push(line)
 }
 fs.writeFileSync(file, `${output.join('\n')}\n`)
 NODE
+}
+
+append_github_actions_provenance_pin() {
+  local repo="$1"
+  local head="$2"
+  local base="$3"
+  local check_name="$4"
+  local workflow_id="$5"
+  local workflow_path="$6"
+  printf '%s\n' \
+    "# required_check_provenance_pin	$repo	$head	$base	$check_name	github-actions	15368	github-actions	$workflow_id	$workflow_path" >> "$config_file"
+}
+
+append_check_run_app_provenance_pin() {
+  local repo="$1"
+  local head="$2"
+  local base="$3"
+  local check_name="$4"
+  local app_id="$5"
+  local app_slug="$6"
+  printf '%s\n' \
+    "# required_check_provenance_pin	$repo	$head	$base	$check_name	check-run-app	$app_id	$app_slug	-	-" >> "$config_file"
+}
+
+append_commit_status_provenance_pin() {
+  local repo="$1"
+  local head="$2"
+  local base="$3"
+  local check_name="$4"
+  local creator_id="$5"
+  local creator_login="$6"
+  local target_origin="$7"
+  printf '%s\n' \
+    "# required_check_provenance_pin	$repo	$head	$base	$check_name	commit-status	$creator_id	$creator_login	-	$target_origin" >> "$config_file"
+}
+
+append_default_required_check_provenance_pins() {
+  local repo="$1"
+  local head="$2"
+  local base="$3"
+  local required_checks="$4"
+  local check_name
+  local -a check_names=()
+  IFS=',' read -r -a check_names <<< "$required_checks"
+  for check_name in "${check_names[@]}"; do
+    check_name="${check_name#"${check_name%%[![:space:]]*}"}"
+    check_name="${check_name%"${check_name##*[![:space:]]}"}"
+    case "$check_name" in
+      Vercel)
+        append_commit_status_provenance_pin "$repo" "$head" "$base" "$check_name" 35613825 'vercel[bot]' https://vercel.com
+        ;;
+      DCO)
+        append_check_run_app_provenance_pin "$repo" "$head" "$base" "$check_name" 19000 dco
+        ;;
+      verify)
+        append_github_actions_provenance_pin "$repo" "$head" "$base" "$check_name" 9002 .github/workflows/ci.yml
+        ;;
+      *)
+        append_github_actions_provenance_pin "$repo" "$head" "$base" "$check_name" 9001 .github/workflows/branch-flow.yml
+        ;;
+    esac
+  done
 }
 
 write_single_config() {
@@ -85,20 +167,20 @@ write_single_config() {
   local required_checks="$5"
   local reviewed_pr_number="${6:-42}"
   local reviewed_head_sha="${7:-$expected_merged_oid}"
+  local provenance_mode="${8:-with-provenance}"
   printf '%s\n' \
     "# reviewed_pr_pin	$repo	$head	$base	$reviewed_pr_number	$reviewed_head_sha" \
     "$repo	$head	$base	$required_state	$required_checks" > "$config_file"
-}
-
-append_duplicate_check_provenance_pin() {
-  local repo="$1"
-  local head="$2"
-  local base="$3"
-  local check_name="$4"
-  local workflow_id="$5"
-  local workflow_path="$6"
-  printf '%s\n' \
-    "# duplicate_check_provenance_pin	$repo	$head	$base	$check_name	15368	github-actions	$workflow_id	$workflow_path" >> "$config_file"
+  case "$provenance_mode" in
+    with-provenance)
+      append_default_required_check_provenance_pins "$repo" "$head" "$base" "$required_checks"
+      ;;
+    no-provenance)
+      ;;
+    *)
+      fail "unsupported fixture provenance mode: $provenance_mode"
+      ;;
+  esac
 }
 
 cat > "$fake_gh" <<'SH'
@@ -109,6 +191,36 @@ scenario="${FAKE_GH_SCENARIO:-merged}"
 merged_oid="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 drift_oid="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 pr_number=42
+
+emit_check_runs() {
+  local raw_payload
+  raw_payload="$(command cat)"
+  node - "${api_repo:-}" "$raw_payload" <<'NODE'
+const [repo, rawPayload] = process.argv.slice(2)
+const payload = JSON.parse(rawPayload)
+if (payload && Array.isArray(payload.check_runs)) {
+  for (const run of payload.check_runs) {
+    if (!run || typeof run !== 'object') continue
+    if (!run.app) {
+      run.app = run.name === 'DCO'
+        ? { id: 19000, slug: 'dco' }
+        : { id: 15368, slug: 'github-actions' }
+    }
+    const suiteId = run.check_suite && run.check_suite.id
+    if (
+      run.app.id === 15368 &&
+      typeof run.details_url !== 'string' &&
+      Number.isSafeInteger(suiteId) &&
+      suiteId > 0
+    ) {
+      run.details_url = `https://github.com/${repo}/actions/runs/${500000 + suiteId}/job/${600000 + suiteId}`
+    }
+  }
+}
+process.stdout.write(`${JSON.stringify(payload)}\n`)
+NODE
+}
+
 case "$scenario" in
   exact-ton-pr-12-merged|exact-ton-pr-12-open)
     merged_oid="8da98205b47ef2b86e88fb063f647df06a8a7075"
@@ -170,6 +282,9 @@ if [[ "${1:-}" == "api" ]]; then
       review-thread-query-fails:soramitsu/fearless-iOS)
         echo "GitHub GraphQL review thread API unavailable" >&2
         exit 1
+        ;;
+      open-ready-missing-thread-inventory:*)
+        printf '{}\n'
         ;;
     malformed-review-threads:soramitsu/fearless-iOS)
         cat <<'JSON'
@@ -233,6 +348,9 @@ JSON
       echo "required check-runs query must request the latest complete SHA-bound page" >&2
       exit 1
     fi
+    cat() {
+      emit_check_runs
+    }
     api_repo="${api_path#repos/}"
     api_repo="${api_repo%%/commits/*}"
     api_oid="${api_path#repos/$api_repo/commits/}"
@@ -269,6 +387,11 @@ JSON
       cross-branch-authoritative-failure:soramitsu/fearless-Android)
         cat <<JSON
 {"total_count":3,"check_runs":[{"id":101,"name":"validate","status":"completed","conclusion":"success","head_sha":"$merged_oid","app":{"id":15368,"slug":"github-actions"},"details_url":"https://github.com/$api_repo/actions/runs/501001/job/601001","check_suite":{"id":1001}},{"id":111,"name":"validate","status":"completed","conclusion":"failure","head_sha":"$merged_oid","app":{"id":15368,"slug":"github-actions"},"details_url":"https://github.com/$api_repo/actions/runs/501011/job/601011","check_suite":{"id":1011}},{"id":102,"name":"build-and-test","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1004}}]}
+JSON
+        ;;
+      singleton-wrong-app:soramitsu/fearless-Android)
+        cat <<JSON
+{"total_count":2,"check_runs":[{"id":101,"name":"validate","status":"completed","conclusion":"success","head_sha":"$merged_oid","app":{"id":99999,"slug":"attacker"},"details_url":"https://github.com/$api_repo/actions/runs/501001/job/601001","check_suite":{"id":1001}},{"id":102,"name":"build-and-test","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1004}}]}
 JSON
         ;;
       duplicate-wrong-sha:soramitsu/fearless-Android|duplicate-wrong-app:soramitsu/fearless-Android|duplicate-wrong-workflow:soramitsu/fearless-Android|duplicate-missing-workflow:soramitsu/fearless-Android|duplicate-workflow-sha:soramitsu/fearless-Android|duplicate-workflow-repository:soramitsu/fearless-Android)
@@ -357,7 +480,63 @@ JSON
     exit 0
   fi
 
-  if [[ "$api_path" == repos/*/commits/*/status* ]]; then
+  if [[ "$api_path" == repos/*/commits/*/statuses\?* ]]; then
+    if [[ "$api_path" != *"/statuses?per_page=100" || "${2:-}" != "--paginate" || "${3:-}" != "--slurp" || -n "${4:-}" ]]; then
+      echo "required commit-status provenance query must paginate and slurp the complete SHA-bound history" >&2
+      exit 1
+    fi
+    api_repo="${api_path#repos/}"
+    api_repo="${api_repo%%/commits/*}"
+
+    case "$scenario:$api_repo" in
+      commit-status-provenance-query-fails:soramitsu/fearless-site-web)
+        echo "request failed token=STATUS_PROVENANCE_SECRET_SENTINEL" >&2
+        exit 1
+        ;;
+      malformed-status-details:soramitsu/fearless-site-web)
+        printf '%s\n' '{}'
+        ;;
+      missing-status-details:soramitsu/fearless-site-web)
+        printf '%s\n' '[[]]'
+        ;;
+      ambiguous-status-details:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"success","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://vercel.com/deployments/301"},{"id":301,"context":"Vercel","state":"success","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://vercel.com/deployments/301"}]]
+JSON
+        ;;
+      mismatched-status-details:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"success","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://attacker.example/deployments/301"}]]
+JSON
+        ;;
+      wrong-status-creator-provenance:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"success","creator":{"id":17001,"login":"attacker"},"target_url":"https://vercel.com/deployments/301"}]]
+JSON
+        ;;
+      wrong-status-origin-provenance:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"success","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://attacker.example/deployments/301"}]]
+JSON
+        ;;
+      exact-site-pr-49-pending:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"pending","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://vercel.com/deployments/301"}]]
+JSON
+        ;;
+      *:soramitsu/fearless-site-web)
+        cat <<JSON
+[[{"id":301,"context":"Vercel","state":"success","creator":{"id":35613825,"login":"vercel[bot]"},"target_url":"https://vercel.com/deployments/301"}]]
+JSON
+        ;;
+      *)
+        printf '%s\n' '[[]]'
+        ;;
+    esac
+    exit 0
+  fi
+
+  if [[ "$api_path" == repos/*/commits/*/status\?* ]]; then
     if [[ "$api_path" != *"/status?per_page=100" ]]; then
       echo "required commit-status query must request the complete SHA-bound page" >&2
       exit 1
@@ -370,12 +549,22 @@ JSON
     case "$scenario:$api_repo" in
       exact-site-pr-49-pending:soramitsu/fearless-site-web)
         cat <<JSON
-{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"pending"}]}
+{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"pending","target_url":"https://vercel.com/deployments/301"}]}
 JSON
         ;;
       wrong-status-head-provenance:soramitsu/fearless-site-web)
         cat <<JSON
-{"sha":"$drift_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success"}]}
+{"sha":"$drift_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success","target_url":"https://vercel.com/deployments/301"}]}
+JSON
+        ;;
+      wrong-status-creator-provenance:soramitsu/fearless-site-web)
+        cat <<JSON
+{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success","target_url":"https://vercel.com/deployments/301"}]}
+JSON
+        ;;
+      wrong-status-origin-provenance:soramitsu/fearless-site-web)
+        cat <<JSON
+{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success","target_url":"https://attacker.example/deployments/301"}]}
 JSON
         ;;
       malformed-status:soramitsu/fearless-site-web)
@@ -383,7 +572,7 @@ JSON
         ;;
       *:soramitsu/fearless-site-web)
         cat <<JSON
-{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success"}]}
+{"sha":"$merged_oid","total_count":1,"statuses":[{"id":301,"context":"Vercel","state":"success","target_url":"https://vercel.com/deployments/301"}]}
 JSON
         ;;
       *)
@@ -416,26 +605,21 @@ JSON
     workflow_sha="$merged_oid"
     workflow_repo="$api_repo"
     workflow_event="pull_request"
-    case "$api_repo" in
-      soramitsu/fearless-Android)
-        workflow_head_branch="codex/android-universal-wallet-readiness"
-        ;;
-      solswap-io/solswap-indexer)
-        workflow_head_branch="release/sync-develop-into-master"
-        ;;
-      tonswap-org/ton-indexer)
-        workflow_head_branch="release/ton-health-identity-master"
-        ;;
-      *)
-        workflow_head_branch="codex/test-head"
-        ;;
-    esac
+    if [[ -z "${FAKE_GH_ACTIVE_HEAD_FILE:-}" || ! -s "$FAKE_GH_ACTIVE_HEAD_FILE" ]]; then
+      echo "Actions workflow provenance requested without an admitted PR head" >&2
+      exit 1
+    fi
+    workflow_head_branch="$(< "$FAKE_GH_ACTIVE_HEAD_FILE")"
 
     if [[ "$scenario" == "duplicate-missing-workflow" && "$suite_id" == "1011" ]]; then
       echo '{"total_count":0,"workflow_runs":[]}'
       exit 0
     fi
     if [[ "$scenario" == "duplicate-wrong-workflow" && "$suite_id" == "1011" ]]; then
+      workflow_id=9999
+      workflow_path=".github/workflows/untrusted.yml"
+    fi
+    if [[ "$scenario" == "singleton-wrong-workflow" && "$suite_id" == "1001" ]]; then
       workflow_id=9999
       workflow_path=".github/workflows/untrusted.yml"
     fi
@@ -472,6 +656,12 @@ JSON
     api_repo="${api_path#repos/}"
     api_repo="${api_repo%%/check-suites/*}"
     suite_id="${api_path##*/}"
+    suite_app_id=15368
+    suite_app_slug=github-actions
+    if [[ "$suite_id" == "1006" ]]; then
+      suite_app_id=19000
+      suite_app_slug=dco
+    fi
     case "$scenario:$api_repo:$suite_id" in
       check-suite-query-fails:soramitsu/fearless-Android:1001)
         echo "suite request failed token=CHECK_SUITE_SECRET_SENTINEL" >&2
@@ -479,12 +669,12 @@ JSON
         ;;
       wrong-suite-sha-provenance:soramitsu/fearless-Android:1001)
         cat <<JSON
-{"id":1001,"head_sha":"$drift_oid","private_payload":"CHECK_SUITE_PAYLOAD_SECRET_SENTINEL"}
+{"id":1001,"head_sha":"$drift_oid","app":{"id":$suite_app_id,"slug":"$suite_app_slug"},"private_payload":"CHECK_SUITE_PAYLOAD_SECRET_SENTINEL"}
 JSON
         ;;
       wrong-suite-id-provenance:soramitsu/fearless-Android:1001)
         cat <<JSON
-{"id":9999,"head_sha":"$merged_oid"}
+{"id":9999,"head_sha":"$merged_oid","app":{"id":$suite_app_id,"slug":"$suite_app_slug"}}
 JSON
         ;;
       duplicate-wrong-app:soramitsu/fearless-Android:1011)
@@ -494,7 +684,7 @@ JSON
         ;;
       *)
         cat <<JSON
-{"id":$suite_id,"head_sha":"$merged_oid","app":{"id":15368,"slug":"github-actions"}}
+{"id":$suite_id,"head_sha":"$merged_oid","app":{"id":$suite_app_id,"slug":"$suite_app_slug"}}
 JSON
         ;;
     esac
@@ -594,6 +784,11 @@ if [[ -z "$head" || "$state" != "all" ]]; then
   echo "unexpected query repo=$repo head=$head base=$base state=$state" >&2
   exit 1
 fi
+if [[ -z "${FAKE_GH_ACTIVE_HEAD_FILE:-}" ]]; then
+  echo "fake GitHub active-head authority file is unavailable" >&2
+  exit 1
+fi
+printf '%s\n' "$head" > "$FAKE_GH_ACTIVE_HEAD_FILE"
 
 if [[ "$json_fields" != *"headRefOid"* || "$json_fields" != *"isDraft"* || "$json_fields" != *"reviewDecision"* || "$json_fields" != *"mergeStateStatus"* || "$json_fields" != *"reviews"* ]]; then
   echo "query is missing release-readiness fields" >&2
@@ -642,6 +837,26 @@ case "$scenario:$repo" in
   merged:*|exact-ton-pr-12-merged:tonswap-org/ton-indexer|exact-site-pr-49-merged:soramitsu/fearless-site-web|exact-shared-features-pr-81-merged:soramitsu/shared-features-spm|exact-iroha-pr-5619-merged:hyperledger-iroha/iroha)
     cat <<JSON
 [{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"MERGED","mergedAt":"2026-06-26T12:00:00Z","headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks)}]
+JSON
+    ;;
+  open-ready:*)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"OPEN","mergedAt":null,"headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[{"state":"APPROVED","submittedAt":"2026-06-26T12:00:00Z","commit":{"oid":"$merged_oid"}}]}]
+JSON
+    ;;
+  open-ready-empty-approval:*)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"OPEN","mergedAt":null,"headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[]}]
+JSON
+    ;;
+  open-ready-stale-approval:*)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"OPEN","mergedAt":null,"headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[{"state":"APPROVED","submittedAt":"2026-06-26T12:00:00Z","commit":{"oid":"$drift_oid"}}]}]
+JSON
+    ;;
+  open-ready-missing-thread-inventory:*)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"OPEN","mergedAt":null,"headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[{"state":"APPROVED","submittedAt":"2026-06-26T12:00:00Z","commit":{"oid":"$merged_oid"}}]}]
 JSON
     ;;
   open-review-required:soramitsu/fearless-iOS|review-thread-query-fails:soramitsu/fearless-iOS|malformed-review-threads:soramitsu/fearless-iOS|missing-review-thread-id:soramitsu/fearless-iOS|open-polkaswap-hotfix:sora-xor/polkaswap-indexer|exact-ton-pr-12-open:tonswap-org/ton-indexer|exact-site-pr-49-open:soramitsu/fearless-site-web|exact-site-pr-49-pending:soramitsu/fearless-site-web|exact-shared-features-pr-81-open:soramitsu/shared-features-spm|exact-shared-features-pr-81-pending:soramitsu/shared-features-spm|exact-iroha-pr-5619-open:hyperledger-iroha/iroha|exact-iroha-pr-5619-pending:hyperledger-iroha/iroha)
@@ -727,14 +942,20 @@ chmod +x "$fake_gh"
 run_audit() {
   local scenario="$1"
   shift
-  FAKE_GH_SCENARIO="$scenario" GH_BIN="$fake_gh" bash "$AUDIT_SCRIPT" --config "$config_file" "$@"
+  local active_head_file="$tmp_dir/fake-gh-active-head"
+  : > "$active_head_file"
+  FAKE_GH_SCENARIO="$scenario" \
+    FAKE_GH_ACTIVE_HEAD_FILE="$active_head_file" \
+    GH_BIN="$fake_gh" \
+    bash "$AUDIT_SCRIPT" --config "$config_file" "$@"
 }
 
 expect_success() {
   local name="$1"
   local scenario="$2"
+  shift 2
   local output
-  if ! output="$(run_audit "$scenario" 2>&1)"; then
+  if ! output="$(run_audit "$scenario" "$@" 2>&1)"; then
     echo "$output" >&2
     fail "$name unexpectedly failed"
   fi
@@ -744,9 +965,10 @@ expect_failure() {
   local name="$1"
   local scenario="$2"
   local expected="$3"
+  shift 3
   local output
   set +e
-  output="$(run_audit "$scenario" 2>&1)"
+  output="$(run_audit "$scenario" "$@" 2>&1)"
   local status=$?
   set -e
 
@@ -785,6 +1007,29 @@ expect_secret_safe_failure() {
 
 write_config
 expect_success "merged fixture" merged
+
+write_config
+expect_failure "open ready fixture remains incomplete for release readiness" open-ready "is open and is not release-ready"
+
+write_config
+expect_success "authoritative open ready protected-merge handoff fixture" open-ready --verify-open-candidate soramitsu/fearless-Android codex/android-universal-wallet-readiness develop 42 "$expected_merged_oid"
+
+write_config
+expect_failure "protected-merge handoff rejects empty approval inventory fixture" open-ready-empty-approval "protectedMergeCurrentHeadApprovalRequired=true" --verify-open-candidate soramitsu/fearless-Android codex/android-universal-wallet-readiness develop 42 "$expected_merged_oid"
+
+write_config
+expect_failure "protected-merge handoff rejects stale-only approval inventory fixture" open-ready-stale-approval "staleApprovalCount=1" --verify-open-candidate soramitsu/fearless-Android codex/android-universal-wallet-readiness develop 42 "$expected_merged_oid"
+
+write_config
+expect_failure "protected-merge handoff rejects missing review-thread inventory fixture" open-ready-missing-thread-inventory "protected merge requires an exact open-PR thread inventory" --verify-open-candidate soramitsu/fearless-Android codex/android-universal-wallet-readiness develop 42 "$expected_merged_oid"
+
+write_config
+forbidden_open_ready_report="$tmp_dir/forbidden-open-ready-report.json"
+printf '%s\n' 'protected-merge-report-sentinel' > "$forbidden_open_ready_report"
+expect_failure "protected-merge handoff cannot overwrite readiness report fixture" open-ready "--verify-open-candidate cannot write a release-readiness report" --write-report "$forbidden_open_ready_report" --verify-open-candidate soramitsu/fearless-Android codex/android-universal-wallet-readiness develop 42 "$expected_merged_oid"
+if [[ "$(command cat "$forbidden_open_ready_report")" != "protected-merge-report-sentinel" ]]; then
+  fail "protected-merge report isolation sentinel changed"
+fi
 
 write_single_config \
   tonswap-org/ton-indexer \
@@ -1169,103 +1414,90 @@ expect_failure "missing required-check fixture" missing-required-check "missingR
 write_config
 expect_failure "skipped required-check fixture" skipped-required-check "incompleteRequiredChecks=validate:COMPLETED/SKIPPED"
 
-write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
+write_single_config \
+  soramitsu/fearless-Android \
+  codex/android-universal-wallet-readiness \
+  develop merged validate,build-and-test 42 "$expected_merged_oid" no-provenance
 expect_failure \
-  "duplicate required-check fixture missing provenance pin" \
+  "singleton required-check fixture missing provenance pin" \
   duplicate-required-check \
-  "invalidRequiredCheckProvenance=validate:duplicate-check-provenance-pin-missing"
+  "missing required-check provenance pin for soramitsu/fearless-Android:codex/android-universal-wallet-readiness -> develop:validate"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_success "fully provenanced successful duplicate required-check fixture" duplicate-required-check
 
 write_single_config solswap-io/solswap-indexer release/sync-develop-into-master master merged validate,verify
-append_duplicate_check_provenance_pin solswap-io/solswap-indexer release/sync-develop-into-master master validate 9001 .github/workflows/branch-flow.yml
-append_duplicate_check_provenance_pin solswap-io/solswap-indexer release/sync-develop-into-master master verify 9002 .github/workflows/ci.yml
 expect_success \
   "exact PR-head checks ignore conflicting same-SHA checks from another branch" \
   cross-branch-conflicting-duplicate
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "exact PR-head failure is not hidden by an unrelated same-SHA success" \
   cross-branch-authoritative-failure \
   "incompleteRequiredChecks=validate:COMPLETED/FAILURE"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "all duplicate checks from unrelated branches fail closed" \
   all-unrelated-duplicate \
   "invalidRequiredCheckProvenance=validate:actions-workflow-required-head-pull-request-missing"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "missing duplicate workflow head-branch provenance fails closed" \
   duplicate-workflow-head-branch-missing \
   "invalidRequiredCheckProvenance=validate:actions-workflow-head-branch-missing"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "non-PR duplicate workflow events cannot satisfy exact-head provenance" \
   duplicate-non-pr-event \
   "invalidRequiredCheckProvenance=validate:actions-workflow-required-head-pull-request-missing"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "duplicate wrong SHA provenance fixture" \
   duplicate-wrong-sha \
   "invalidRequiredCheckProvenance=validate:check-run-head-sha-mismatch"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
-  "duplicate wrong GitHub app provenance fixture" \
-  duplicate-wrong-app \
+  "singleton wrong GitHub app provenance fixture" \
+  singleton-wrong-app \
   "invalidRequiredCheckProvenance=validate:check-run-app-mismatch"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
-  "duplicate wrong workflow provenance fixture" \
-  duplicate-wrong-workflow \
+  "singleton wrong workflow provenance fixture" \
+  singleton-wrong-workflow \
   "invalidRequiredCheckProvenance=validate:actions-workflow-id-mismatch"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "duplicate missing workflow provenance fixture" \
   duplicate-missing-workflow \
   "invalidRequiredCheckProvenance=validate:actions-workflow-provenance-missing"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "duplicate workflow SHA provenance fixture" \
   duplicate-workflow-sha \
   "invalidRequiredCheckProvenance=validate:actions-workflow-head-sha-mismatch"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "duplicate workflow repository provenance fixture" \
   duplicate-workflow-repository \
   "invalidRequiredCheckProvenance=validate:actions-workflow-repository-mismatch"
 
 write_single_config solswap-io/solswap-indexer release/sync-develop-into-master master merged validate,verify
-append_duplicate_check_provenance_pin solswap-io/solswap-indexer release/sync-develop-into-master master validate 9001 .github/workflows/branch-flow.yml
-append_duplicate_check_provenance_pin solswap-io/solswap-indexer release/sync-develop-into-master master verify 9002 .github/workflows/ci.yml
 expect_failure \
   "future-failure timestamp duplicate fixture rejects conflicting conclusions" \
   stale-duplicate-checks \
   "conflictingRequiredCheckConclusions=validate,verify"
 
 write_single_config tonswap-org/ton-indexer release/ton-health-identity-master master merged validate,verify
-append_duplicate_check_provenance_pin tonswap-org/ton-indexer release/ton-health-identity-master master validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
   "future-success timestamp duplicate fixture rejects conflicting conclusions" \
   reverse-timestamp-duplicate \
@@ -1290,7 +1522,32 @@ write_config
 expect_failure "wrong status-context head SHA provenance fixture" wrong-status-head-provenance "invalidRequiredCheckProvenance=Vercel:commit-status-head-sha-mismatch"
 
 write_config
+expect_failure "wrong singleton status creator provenance fixture" wrong-status-creator-provenance "invalidRequiredCheckProvenance=Vercel:commit-status-creator-mismatch"
+
+write_config
+expect_failure "missing detailed status provenance fixture" missing-status-details "invalidRequiredCheckProvenance=Vercel:commit-status-detail-missing"
+
+write_config
+expect_failure "ambiguous detailed status provenance fixture" ambiguous-status-details "invalidRequiredCheckProvenance=Vercel:commit-status-detail-ambiguous"
+
+write_config
+expect_failure "mismatched detailed status provenance fixture" mismatched-status-details "invalidRequiredCheckProvenance=Vercel:commit-status-detail-mismatch"
+
+write_config
+expect_failure "wrong singleton status target origin provenance fixture" wrong-status-origin-provenance "invalidRequiredCheckProvenance=Vercel:commit-status-target-origin-mismatch"
+
+write_config
 expect_failure "malformed commit status evidence fixture" malformed-status "malformedChecks=commit-status-response-shape"
+
+write_config
+expect_failure "malformed detailed commit status evidence fixture" malformed-status-details "malformedChecks=commit-status-details-response-shape"
+
+write_config
+expect_secret_safe_failure \
+  "secret-safe detailed commit status query failure fixture" \
+  commit-status-provenance-query-fails \
+  "commit-status provenance request failed; GitHub response details suppressed" \
+  STATUS_PROVENANCE_SECRET_SENTINEL
 
 write_config
 expect_secret_safe_failure \
@@ -1331,39 +1588,48 @@ expect_failure "unsupported required state fixture" merged "unsupported required
 printf '%s\n' "soramitsu/fearless-wallet-web	codex/web	develop	merged" > "$config_file"
 expect_failure "missing required checks config fixture" merged "invalid release PR config line"
 
-write_single_config soramitsu/fearless-wallet-web codex/web develop merged validate,validate
+write_single_config \
+  soramitsu/fearless-wallet-web \
+  codex/web \
+  develop merged validate,validate 42 "$expected_merged_oid" no-provenance
+append_github_actions_provenance_pin soramitsu/fearless-wallet-web codex/web develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure "duplicate required checks config fixture" merged "duplicate required_checks entries"
 
-write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
+write_single_config \
+  soramitsu/fearless-Android \
+  codex/android-universal-wallet-readiness \
+  develop merged validate,build-and-test 42 "$expected_merged_oid" no-provenance
 printf '%s\n' \
-  "# duplicate_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	validate	99999	github-actions	9001	.github/workflows/branch-flow.yml" >> "$config_file"
+  "# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	validate	github-actions	99999	github-actions	9001	.github/workflows/branch-flow.yml" >> "$config_file"
 expect_failure \
-  "noncanonical duplicate-check app pin fixture" \
+  "noncanonical required-check app pin fixture" \
   merged \
-  "duplicate required-check provenance pin must use the canonical GitHub Actions app"
+  "GitHub Actions required-check provenance pin must use the canonical GitHub Actions app"
+
+write_single_config \
+  soramitsu/fearless-Android \
+  codex/android-universal-wallet-readiness \
+  develop merged validate,build-and-test 42 "$expected_merged_oid" no-provenance
+printf '%s\n' \
+  "# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	validate	github-actions	15368	github-actions	9001	.github/workflows/../untrusted.yml" >> "$config_file"
+expect_failure \
+  "noncanonical required-check workflow path pin fixture" \
+  merged \
+  "GitHub Actions required-check provenance pin has invalid workflow path"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-printf '%s\n' \
-  "# duplicate_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	validate	15368	github-actions	9001	.github/workflows/../untrusted.yml" >> "$config_file"
+append_github_actions_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
 expect_failure \
-  "noncanonical duplicate-check workflow path pin fixture" \
-  merged \
-  "duplicate required-check provenance pin has invalid workflow path"
-
-write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop validate 9001 .github/workflows/branch-flow.yml
-expect_failure \
-  "duplicate duplicate-check provenance pin fixture" \
+  "duplicate required-check provenance pin fixture" \
   merged \
   "duplicate required-check provenance pin"
 
 write_single_config soramitsu/fearless-Android codex/android-universal-wallet-readiness develop merged validate,build-and-test
-append_duplicate_check_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop unrequired 9001 .github/workflows/branch-flow.yml
+append_github_actions_provenance_pin soramitsu/fearless-Android codex/android-universal-wallet-readiness develop unrequired 9001 .github/workflows/branch-flow.yml
 expect_failure \
-  "unrequired duplicate-check provenance pin fixture" \
+  "unrequired required-check provenance pin fixture" \
   merged \
-  "duplicate required-check provenance pin names an unrequired check"
+  "required-check provenance pin names an unrequired check"
 
 write_single_config soramitsu/fearless-wallet-web codex/../web develop merged validate
 expect_failure "invalid head branch ref fixture" merged "invalid head branch ref"
@@ -1373,8 +1639,10 @@ expect_failure "invalid base branch ref fixture" merged "invalid base branch ref
 
 {
   printf '%s\n' "# reviewed_pr_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	42	$expected_merged_oid"
+  printf '%s\n' "# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	validate	github-actions	15368	github-actions	9001	.github/workflows/branch-flow.yml"
+  printf '%s\n' "# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	verify	github-actions	15368	github-actions	9002	.github/workflows/ci.yml"
   printf '%s\n' "soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	merged	validate,verify"
-  printf '%s\n' "soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	merged	validate"
+  printf '%s\n' "soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	merged	validate,verify"
 } > "$config_file"
 expect_failure "duplicate release PR row fixture" merged "duplicate release PR requirement row for soramitsu/fearless-wallet-web:codex/web-bitcoin-broadcast-evidence -> develop"
 

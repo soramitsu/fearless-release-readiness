@@ -70,6 +70,20 @@ test('OpenAPI credential lifecycle is bounded, non-secret, and documents the own
   assert.match(spec.info.description, /owner tombstone/);
 });
 
+test('OpenAPI credential requests prohibit PRF and arbitrary local extension output', () => {
+  const extension = spec.components.schemas.ServerCredentialExtensionResults;
+  assert.equal(extension.additionalProperties, false);
+  assert.deepEqual(Object.keys(extension.properties), ['credProps']);
+  assert.deepEqual(extension.properties.credProps, {
+    type: 'object', additionalProperties: false, required: ['rk'], properties: { rk: { type: 'boolean' } },
+  });
+  for (const name of ['RegistrationCredentialResponse', 'AssertionCredentialResponse']) {
+    assert.deepEqual(spec.components.schemas[name].properties.clientExtensionResults, {
+      $ref: '#/components/schemas/ServerCredentialExtensionResults',
+    });
+  }
+});
+
 test('runtime, OpenAPI, authorization scopes, and production config expose the same exact routes', () => {
   const runtimePostPaths = Object.entries(PATHS)
     .filter(([name]) => name !== 'health')

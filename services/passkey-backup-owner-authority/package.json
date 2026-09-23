@@ -1,0 +1,12 @@
+{
+  "name": "@fearless/passkey-backup-owner-authority",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Metadata-only owner/session/exact-request grant core; no production authentication adapter or HTTP listener.",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint:syntax": "node --check src/authority.js && node --check src/store.js && node --check src/validation.js && node --check test/authority.test.js && node --check test/process-worker.js"
+  }
+}

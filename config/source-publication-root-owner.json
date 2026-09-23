@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "status": "blocked",
-  "repository": null,
-  "head": null,
-  "base": null,
-  "prNumber": null,
-  "lastReviewed": "2026-07-10",
-  "blocker": "canonical-root-source-owner-unassigned"
+  "status": "ready",
+  "repository": "soramitsu/fearless-release-readiness",
+  "head": "codex/release-readiness-root-owner",
+  "base": "main",
+  "prNumber": 1,
+  "lastReviewed": "2026-09-22",
+  "blocker": null
 }

@@ -12,6 +12,184 @@ mkdir -p "$MISSING_GIT_BIN"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"$MISSING_GIT_BIN/git"
 chmod 700 "$MISSING_GIT_BIN/git"
 
+FAKE_GH_BIN="$FIXTURE_DIR/fake-gh"
+FAKE_GH_LOG="$FIXTURE_DIR/fake-gh-calls.log"
+NON_EXECUTABLE_GH_BIN="$FIXTURE_DIR/non-executable-gh"
+SYMLINK_GH_BIN="$FIXTURE_DIR/symlink-gh"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"$NON_EXECUTABLE_GH_BIN"
+chmod 600 "$NON_EXECUTABLE_GH_BIN"
+
+cat >"$FAKE_GH_BIN" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PASSKEY_FAKE_GH_LOG:?}"
+{
+  separator=""
+  for argument in "$@"; do
+    printf '%s%s' "$separator" "$argument"
+    separator=$'\t'
+  done
+  printf '\n'
+} >>"$PASSKEY_FAKE_GH_LOG"
+
+scenario="${PASSKEY_FAKE_GH_SCENARIO:-valid}"
+[[ "${GH_HOST:-}" == "github.com" ]]
+expected_repository="soramitsu/fearless-release-readiness"
+expected_workflow=".github/workflows/passkey-image-publish.yml"
+expected_commit="0123456789abcdef0123456789abcdef01234567"
+expected_run_url="https://github.com/soramitsu/fearless-release-readiness/actions/runs/123456789"
+expected_bundle='{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{"certificate":"fixture"},"dsseEnvelope":{"payload":"fixture"}}'
+expected_predicate_type="https://slsa.dev/provenance/v1"
+
+if [[ "${1:-}" == "api" ]]; then
+  [[ "$#" -eq 10 ]]
+  [[ "$2" == "--hostname" && "$3" == "github.com" ]]
+  [[ "$4" == "--method" && "$5" == "GET" ]]
+  [[ "$6" == "-H" && "$7" == "Accept: application/vnd.github+json" ]]
+  [[ "$8" == "-H" && "$9" == "X-GitHub-Api-Version: 2026-03-10" ]]
+  endpoint="${10}"
+fi
+
+if [[ "${1:-}" == "api" ]]; then
+  endpoint="${!#}"
+  case "$endpoint" in
+    repos/soramitsu/fearless-release-readiness/actions/runs/123456789)
+      run_id=123456789
+      run_url="$expected_run_url"
+      repository="$expected_repository"
+      repository_id=424242
+      head_repository="$expected_repository"
+      workflow="$expected_workflow"
+      event="workflow_dispatch"
+      branch="main"
+      status="completed"
+      conclusion="success"
+      head_sha="$expected_commit"
+      case "$scenario" in
+        run-repository-drift) repository="attacker/fearless-release-readiness" ;;
+        run-repository-id-drift) repository_id=0 ;;
+        run-head-repository-drift) head_repository="attacker/fearless-release-readiness" ;;
+        run-workflow-drift) workflow=".github/workflows/unreviewed.yml" ;;
+        run-event-drift) event="push" ;;
+        run-branch-drift) branch="develop" ;;
+        run-status-drift) status="in_progress" ;;
+        run-conclusion-drift) conclusion="failure" ;;
+        run-id-drift) run_id=123456788 ;;
+        run-url-drift) run_url="https://github.com/soramitsu/fearless-release-readiness/actions/runs/123456788" ;;
+        run-head-sha-drift) head_sha="fedcba9876543210fedcba9876543210fedcba98" ;;
+      esac
+      printf '{"id":%s,"html_url":"%s","repository":{"id":%s,"full_name":"%s"},"head_repository":{"full_name":"%s"},"path":"%s","event":"%s","head_branch":"%s","status":"%s","conclusion":"%s","head_sha":"%s"}\n' \
+        "$run_id" "$run_url" "$repository_id" "$repository" "$head_repository" "$workflow" \
+        "$event" "$branch" "$status" "$conclusion" "$head_sha"
+      ;;
+    repos/soramitsu/fearless-release-readiness/attestations/sha256:*\?per_page=2\&predicate_type=provenance)
+      digest="${endpoint#repos/soramitsu/fearless-release-readiness/attestations/}"
+      digest="${digest%%\?*}"
+      case "$digest" in
+        sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef)
+          expected_attestation_id=987654321
+          ;;
+        sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210)
+          expected_attestation_id=987654322
+          ;;
+        *)
+          echo "unexpected attestation subject digest: $digest" >&2
+          exit 92
+          ;;
+      esac
+      case "$scenario" in
+        missing-attestation)
+          printf '%s\n' '{"attestations":[]}'
+          exit 0
+          ;;
+        malformed-attestation-collection) printf '%s\n' '"not-an-attestation-collection"'; exit 0 ;;
+        missing-attestations-array) printf '%s\n' '{}'; exit 0 ;;
+        multiple-attestations)
+          printf '{"attestations":[{"repository_id":424242,"bundle_url":"https://tmaproduction.blob.core.windows.net/attestations/424242/2026/08/14/%s.json.sn?sig=fixture"},{"repository_id":424242,"bundle_url":"https://tmaproduction.blob.core.windows.net/attestations/424242/2026/08/14/999999999.json.sn?sig=fixture"}]}\n' "$expected_attestation_id"
+          exit 0
+          ;;
+        attestation-id-drift) expected_attestation_id=987654399 ;;
+        attestation-repository-drift) attestation_repository_id=31337 ;;
+        malformed-attestation-bundle-url)
+          printf '%s\n' '{"attestations":[{"repository_id":424242,"bundle_url":"https://attacker.invalid/not-an-attestation"}]}'
+          exit 0
+          ;;
+      esac
+      printf '{"attestations":[{"repository_id":%s,"bundle_url":"https://tmaproduction.blob.core.windows.net/attestations/424242/2026/08/14/%s.json.sn?sig=fixture","initiator":"user","bundle":null}]}\n' \
+        "${attestation_repository_id:-424242}" "$expected_attestation_id"
+      ;;
+    *)
+      echo "unexpected gh api endpoint: $endpoint" >&2
+      exit 92
+      ;;
+  esac
+  exit 0
+fi
+
+if [[ "${1:-}" == "attestation" && "${2:-}" == "download" ]]; then
+  [[ "$#" -eq 11 ]]
+  [[ "$3" =~ ^oci://ghcr\.io/soramitsu/fearless-passkey-backup@sha256:[0-9a-f]{64}$ ]]
+  [[ "$4" == "--repo" && "$5" == "$expected_repository" ]]
+  [[ "$6" == "--predicate-type" && "$7" == "$expected_predicate_type" ]]
+  [[ "$8" == "--limit" && "$9" == "2" ]]
+  [[ "${10}" == "--hostname" && "${11}" == "github.com" ]]
+  if [[ "$scenario" == "download-failure" ]]; then
+    echo "fixture attestation download failed" >&2
+    exit 93
+  fi
+  if [[ "$scenario" != "missing-downloaded-bundle" ]]; then
+    bundle_name="${3##*@}.jsonl"
+    if [[ "$scenario" == "malformed-downloaded-bundle" ]]; then
+      printf '%s\n' '{}' >"$bundle_name"
+    elif [[ "$scenario" == "multiple-downloaded-bundles" ]]; then
+      printf '%s\n%s\n' "$expected_bundle" "$expected_bundle" >"$bundle_name"
+    else
+      printf '%s\n' "$expected_bundle" >"$bundle_name"
+    fi
+    if [[ "$scenario" == "extra-downloaded-bundle" ]]; then
+      printf '%s\n' "$expected_bundle" >unexpected.jsonl
+    fi
+  fi
+  exit 0
+fi
+
+if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" ]]; then
+  [[ "$#" -eq 20 ]]
+  [[ "$3" =~ ^oci://ghcr\.io/soramitsu/fearless-passkey-backup@sha256:[0-9a-f]{64}$ ]]
+  [[ "$4" == "--bundle" && -f "$5" && ! -L "$5" ]]
+  [[ "$(<"$5")" == "$expected_bundle" ]]
+  [[ "$6" == "--repo" && "$7" == "$expected_repository" ]]
+  [[ "$8" == "--signer-workflow" && "$9" == "$expected_repository/$expected_workflow" ]]
+  [[ "${10}" == "--source-digest" && "${11}" == "$expected_commit" ]]
+  [[ "${12}" == "--source-ref" && "${13}" == "refs/heads/main" ]]
+  [[ "${14}" == "--predicate-type" && "${15}" == "$expected_predicate_type" ]]
+  [[ "${16}" == "--deny-self-hosted-runners" ]]
+  [[ "${17}" == "--hostname" && "${18}" == "github.com" ]]
+  [[ "${19}" == "--format" && "${20}" == "json" ]]
+  if [[ "$scenario" == "verify-failure" ]]; then
+    echo "fixture attestation verification failed" >&2
+    exit 93
+  fi
+  if [[ "$scenario" == "verify-invalid-json" ]]; then
+    printf '%s\n' 'not-json'
+    exit 0
+  fi
+  if [[ "$scenario" == "verify-multiple-results" ]]; then
+    printf '%s\n' '[{},{}]'
+    exit 0
+  fi
+  printf '%s\n' '[{"attestation":{},"verificationResult":{}}]'
+  exit 0
+fi
+
+echo "unexpected fake gh invocation" >&2
+exit 94
+FAKE_GH
+chmod 700 "$FAKE_GH_BIN"
+ln -s "$FAKE_GH_BIN" "$SYMLINK_GH_BIN"
+: >"$FAKE_GH_LOG"
+
 write_blocked_fixture() {
   local file="$1"
   cat >"$file" <<'JSON'
@@ -80,7 +258,12 @@ JSON
 
 run_audit() {
   local expected_commit="${PASSKEY_DEPLOYMENT_EXPECTED_COMMIT:-$FIXTURE_DEPLOYED_COMMIT}"
-  PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$expected_commit" bash "$AUDIT_SCRIPT" --evidence "$1" "${@:2}"
+  local gh_bin="${PASSKEY_DEPLOYMENT_GH_BIN-$FAKE_GH_BIN}"
+  PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$expected_commit" \
+  PASSKEY_DEPLOYMENT_GH_BIN="$gh_bin" \
+  PASSKEY_FAKE_GH_LOG="$FAKE_GH_LOG" \
+  PASSKEY_FAKE_GH_SCENARIO="${PASSKEY_FAKE_GH_SCENARIO:-valid}" \
+    bash "$AUDIT_SCRIPT" --evidence "$1" "${@:2}"
 }
 
 expect_success() {
@@ -111,6 +294,45 @@ expect_failure() {
   if [[ "$output" != *"$expected"* ]]; then
     echo "$output" >&2
     echo "[passkey-deployment-evidence-test][error] $name did not report expected text: $expected" >&2
+    exit 1
+  fi
+}
+
+reset_fake_gh_calls() {
+  : >"$FAKE_GH_LOG"
+}
+
+expect_no_fake_gh_calls() {
+  local name="$1"
+  if [[ -s "$FAKE_GH_LOG" ]]; then
+    echo "$(<"$FAKE_GH_LOG")" >&2
+    echo "[passkey-deployment-evidence-test][error] $name unexpectedly invoked gh" >&2
+    exit 1
+  fi
+}
+
+expect_fake_gh_call_count() {
+  local name="$1"
+  local expected="$2"
+  local actual=0
+  while IFS= read -r _call; do
+    actual=$((actual + 1))
+  done <"$FAKE_GH_LOG"
+  if [[ "$actual" -ne "$expected" ]]; then
+    echo "$(<"$FAKE_GH_LOG")" >&2
+    echo "[passkey-deployment-evidence-test][error] $name expected $expected gh calls, got $actual" >&2
+    exit 1
+  fi
+}
+
+expect_fake_gh_call() {
+  local name="$1"
+  local expected="$2"
+  local calls
+  calls="$(<"$FAKE_GH_LOG")"
+  if [[ "$calls" != *"$expected"* ]]; then
+    echo "$calls" >&2
+    echo "[passkey-deployment-evidence-test][error] $name missing gh call marker: $expected" >&2
     exit 1
   fi
 }
@@ -245,8 +467,12 @@ fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 
 fixture="$FIXTURE_DIR/evidence.json"
 write_blocked_fixture "$fixture"
+reset_fake_gh_calls
 expect_success "blocked evidence without --require-ready" run_audit "$fixture"
+expect_no_fake_gh_calls "blocked evidence makes zero GitHub calls"
+reset_fake_gh_calls
 expect_failure "blocked evidence with --require-ready" "--require-ready requires status ready" run_audit "$fixture" --require-ready
+expect_no_fake_gh_calls "blocked --require-ready evidence makes zero GitHub calls"
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); d.deploymentEvidence=[{}]; fs.writeFileSync(f, JSON.stringify(d));'
@@ -327,7 +553,95 @@ expect_failure "malformed JSON" "production deployment evidence must be valid JS
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" "$ready_json_mutator"
-expect_success "ready evidence with live health and platform proof" run_audit "$fixture" --require-ready
+reset_fake_gh_calls
+GH_HOST=attacker.invalid
+export GH_HOST
+expect_success "ready evidence authenticates exact GitHub Actions run and attestation bundle" run_audit "$fixture" --require-ready
+unset GH_HOST
+expect_fake_gh_call_count "ready evidence exact provenance call count" 4
+expect_fake_gh_call "ready evidence queries exact run on github.com" $'api\t--hostname\tgithub.com\t--method\tGET\t-H\tAccept: application/vnd.github+json\t-H\tX-GitHub-Api-Version: 2026-03-10\trepos/soramitsu/fearless-release-readiness/actions/runs/123456789'
+expect_fake_gh_call "ready evidence lists provenance by exact subject digest" $'api\t--hostname\tgithub.com\t--method\tGET\t-H\tAccept: application/vnd.github+json\t-H\tX-GitHub-Api-Version: 2026-03-10\trepos/soramitsu/fearless-release-readiness/attestations/sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?per_page=2&predicate_type=provenance'
+expect_fake_gh_call "ready evidence downloads the uniquely digest-listed attestation" $'attestation\tdownload\toci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\t--repo\tsoramitsu/fearless-release-readiness\t--predicate-type\thttps://slsa.dev/provenance/v1\t--limit\t2\t--hostname\tgithub.com'
+expect_fake_gh_call "ready evidence verifies exact OCI subject with exact signer and source" $'attestation\tverify\toci://ghcr.io/soramitsu/fearless-passkey-backup@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\t--bundle\t'
+expect_fake_gh_call "ready evidence pins repository signer source digest source ref predicate hosted runner and host" $'--repo\tsoramitsu/fearless-release-readiness\t--signer-workflow\tsoramitsu/fearless-release-readiness/.github/workflows/passkey-image-publish.yml\t--source-digest\t0123456789abcdef0123456789abcdef01234567\t--source-ref\trefs/heads/main\t--predicate-type\thttps://slsa.dev/provenance/v1\t--deny-self-hosted-runners\t--hostname\tgithub.com\t--format\tjson'
+
+expect_failure "ready evidence rejects missing explicit gh binary" "PASSKEY_DEPLOYMENT_GH_BIN must be set to an absolute executable gh binary for ready evidence" \
+  env -u PASSKEY_DEPLOYMENT_GH_BIN PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$FIXTURE_DEPLOYED_COMMIT" \
+    bash "$AUDIT_SCRIPT" --evidence "$fixture" --require-ready
+
+expect_failure "ready evidence rejects non-absolute gh binary" "PASSKEY_DEPLOYMENT_GH_BIN must be an absolute path for ready evidence" \
+  env PASSKEY_DEPLOYMENT_GH_BIN=gh PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$FIXTURE_DEPLOYED_COMMIT" \
+    bash "$AUDIT_SCRIPT" --evidence "$fixture" --require-ready
+
+expect_failure "ready evidence rejects non-executable gh binary" "PASSKEY_DEPLOYMENT_GH_BIN must name an existing executable file" \
+  env PASSKEY_DEPLOYMENT_GH_BIN="$NON_EXECUTABLE_GH_BIN" PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$FIXTURE_DEPLOYED_COMMIT" \
+    bash "$AUDIT_SCRIPT" --evidence "$fixture" --require-ready
+
+expect_failure "ready evidence rejects symlinked gh binary" "PASSKEY_DEPLOYMENT_GH_BIN must not be a symbolic link" \
+  env PASSKEY_DEPLOYMENT_GH_BIN="$SYMLINK_GH_BIN" PASSKEY_DEPLOYMENT_EXPECTED_COMMIT="$FIXTURE_DEPLOYED_COMMIT" \
+    bash "$AUDIT_SCRIPT" --evidence "$fixture" --require-ready
+
+for run_drift_case in \
+  'run-repository-drift|repository.full_name must be soramitsu/fearless-release-readiness' \
+  'run-repository-id-drift|repository.id must be a positive integer' \
+  'run-head-repository-drift|head_repository.full_name must be soramitsu/fearless-release-readiness' \
+  'run-workflow-drift|path must be .github/workflows/passkey-image-publish.yml' \
+  'run-event-drift|event must be workflow_dispatch' \
+  'run-branch-drift|head_branch must be main' \
+  'run-status-drift|status must be completed' \
+  'run-conclusion-drift|conclusion must be success' \
+  'run-id-drift|run id must exactly match the evidence URL id' \
+  'run-url-drift|html_url must exactly match the evidence URL' \
+  'run-head-sha-drift|head_sha must exactly match deployedCommit'; do
+  IFS='|' read -r scenario expected_diagnostic <<<"$run_drift_case"
+  reset_fake_gh_calls
+  PASSKEY_FAKE_GH_SCENARIO="$scenario" expect_failure \
+    "authenticated Actions run drift is rejected: $scenario" "$expected_diagnostic" \
+    run_audit "$fixture" --require-ready
+done
+
+for attestation_case in \
+  'missing-attestation|imageDigest must resolve to exactly one provenance attestation' \
+  'malformed-attestation-collection|imageDigest attestation-list response must contain an attestations array' \
+  'missing-attestations-array|imageDigest attestation-list response must contain an attestations array' \
+  'multiple-attestations|imageDigest must resolve to exactly one provenance attestation' \
+  'attestation-id-drift|imageProvenanceAttestationUrl id must exactly match the digest-listed bundle_url id' \
+  'attestation-repository-drift|imageDigest provenance attestation repository_id must match the authenticated Actions repository' \
+  'malformed-attestation-bundle-url|imageProvenanceAttestationUrl id must exactly match the digest-listed bundle_url id'; do
+  IFS='|' read -r scenario expected_diagnostic <<<"$attestation_case"
+  reset_fake_gh_calls
+  PASSKEY_FAKE_GH_SCENARIO="$scenario" expect_failure \
+    "missing malformed or incomplete exact attestation bundle is rejected: $scenario" "$expected_diagnostic" \
+    run_audit "$fixture" --require-ready
+done
+
+for download_case in \
+  'download-failure|gh attestation download failed: fixture attestation download failed' \
+  'missing-downloaded-bundle|download must create exactly the digest-named bundle file' \
+  'extra-downloaded-bundle|download must create exactly the digest-named bundle file' \
+  'multiple-downloaded-bundles|download must contain exactly one Sigstore bundle' \
+  'malformed-downloaded-bundle|download must contain a structurally valid Sigstore bundle'; do
+  IFS='|' read -r scenario expected_diagnostic <<<"$download_case"
+  reset_fake_gh_calls
+  PASSKEY_FAKE_GH_SCENARIO="$scenario" expect_failure \
+    "attestation download fails closed: $scenario" "$expected_diagnostic" \
+    run_audit "$fixture" --require-ready
+done
+
+reset_fake_gh_calls
+PASSKEY_FAKE_GH_SCENARIO=verify-failure expect_failure \
+  "attestation verification failure is fail closed" "gh attestation verify failed: fixture attestation verification failed" \
+  run_audit "$fixture" --require-ready
+
+for verification_shape_case in \
+  'verify-invalid-json|gh attestation verify response must be valid JSON' \
+  'verify-multiple-results|verification must return exactly one verified provenance result'; do
+  IFS='|' read -r scenario expected_diagnostic <<<"$verification_shape_case"
+  reset_fake_gh_calls
+  PASSKEY_FAKE_GH_SCENARIO="$scenario" expect_failure \
+    "attestation verification output fails closed: $scenario" "$expected_diagnostic" \
+    run_audit "$fixture" --require-ready
+done
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" "$ready_json_mutator"
@@ -397,7 +711,7 @@ expect_failure "ready evidence one second beyond 24-hour boundary" "smokePassedA
 
 write_blocked_fixture "$fixture"
 mutate_json "$fixture" "$ready_json_mutator"
-mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); const second=structuredClone(d.deploymentEvidence[0]); second.deploymentId="render-passkey-prod-002"; second.imageDigest="sha256:"+"fedcba9876543210".repeat(4); d.deploymentEvidence.push(second); fs.writeFileSync(f, JSON.stringify(d));'
+mutate_json "$fixture" 'const fs=require("fs"); const f=process.env.PASSKEY_FIXTURE; const d=JSON.parse(fs.readFileSync(f,"utf8")); const second=structuredClone(d.deploymentEvidence[0]); second.deploymentId="render-passkey-prod-002"; second.imageDigest="sha256:"+"fedcba9876543210".repeat(4); second.imageProvenanceAttestationUrl="https://github.com/soramitsu/fearless-release-readiness/attestations/987654322"; d.deploymentEvidence.push(second); fs.writeFileSync(f, JSON.stringify(d));'
 mutate_json "$fixture" "$rebind_all_json_mutator"
 expect_success "multiple independently bound fresh deployment records" run_audit "$fixture" --require-ready
 

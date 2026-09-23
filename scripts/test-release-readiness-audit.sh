@@ -15,7 +15,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 workspace="$tmp_dir/fearless"
 parent="$tmp_dir"
-report_dir="$tmp_dir/reports"
+report_dir="$workspace/build/reports/release-readiness"
 bin_dir="$tmp_dir/bin"
 SCENARIO_COUNT=0
 
@@ -47,7 +47,7 @@ write_fake_audit_script() {
     '    exit 1' \
     '  fi' \
     'fi' \
-    'if [[ "$script_name" == "audit-plan-readiness.sh" && ( "$scenario" == "plan-unsafe-iroha-only" || "$scenario" == "plan-unmerged-iroha-only" || "$scenario" == "plan-unpublished-iroha-only" || "$scenario" == "plan-unpublished-iroha-postflight-continuity" || "$scenario" == "plan-unpublished-iroha-wrong-continuity-marker" || "$scenario" == "plan-unpublished-iroha-duplicate-continuity-marker" || "$scenario" == "plan-unpublished-iroha-reordered-continuity-marker" || "$scenario" == "plan-unpublished-iroha-continuity-marker-plus-extra" || "$scenario" == "plan-unpublished-iroha-legacy-v1" || "$scenario" == "plan-unpublished-iroha-missing-actual-proof" || "$scenario" == "plan-unpublished-iroha-forged-actual-proof" || "$scenario" == "plan-unpublished-iroha-mismatched-proof-failure" || "$scenario" == "plan-unpublished-iroha-missing-pr-head" || "$scenario" == "plan-unpublished-iroha-forged-pr-head" || "$scenario" == "plan-unpublished-iroha-missing-pr-diagnostic" || "$scenario" == "plan-unpublished-iroha-invalid-configured-ref-proof" || "$scenario" == "plan-unpublished-iroha-missing-ignored-diagnostic" || "$scenario" == "plan-unpublished-iroha-stale-current-diagnostic" || "$scenario" == "plan-unpublished-iroha-extra-failure" || "$scenario" == plan-unpublished-iroha-drift* || "$scenario" == "plan-clean-iroha-only" || "$scenario" == "plan-forged-iroha-operation" || "$scenario" == "plan-forged-iroha-publication" ) ]]; then' \
+    'if [[ "$script_name" == "audit-plan-readiness.sh" && ( "$scenario" == "plan-unsafe-iroha-only" || "$scenario" == "plan-unmerged-iroha-only" || "$scenario" == "plan-unpublished-iroha-only" || "$scenario" == "plan-unpublished-iroha-postflight-continuity" || "$scenario" == "plan-unpublished-iroha-wrong-continuity-marker" || "$scenario" == "plan-unpublished-iroha-duplicate-continuity-marker" || "$scenario" == "plan-unpublished-iroha-reordered-continuity-marker" || "$scenario" == "plan-unpublished-iroha-continuity-marker-plus-extra" || "$scenario" == "plan-unpublished-iroha-legacy-v2" || "$scenario" == "plan-unpublished-iroha-wrong-report-phase" || "$scenario" == "plan-unpublished-iroha-wrong-preflight-digest" || "$scenario" == "plan-unpublished-iroha-missing-actual-proof" || "$scenario" == "plan-unpublished-iroha-forged-actual-proof" || "$scenario" == "plan-unpublished-iroha-mismatched-proof-failure" || "$scenario" == "plan-unpublished-iroha-missing-pr-head" || "$scenario" == "plan-unpublished-iroha-forged-pr-head" || "$scenario" == "plan-unpublished-iroha-missing-pr-diagnostic" || "$scenario" == "plan-unpublished-iroha-invalid-configured-ref-proof" || "$scenario" == "plan-unpublished-iroha-missing-ignored-diagnostic" || "$scenario" == "plan-unpublished-iroha-stale-current-diagnostic" || "$scenario" == "plan-unpublished-iroha-preflight-row-mismatch" || "$scenario" == plan-unpublished-iroha-drift* || "$scenario" == "plan-clean-iroha-only" || "$scenario" == "plan-forged-iroha-operation" || "$scenario" == "plan-forged-iroha-publication" ) ]]; then' \
     '  echo "[plan-readiness][warn] ../iroha unsafe external source contract missing" >&2' \
     '  echo "[plan-readiness][error] Plan readiness audit failed:" >&2' \
     '  echo "  - ../iroha unsafe external source contract missing" >&2' \
@@ -90,17 +90,28 @@ setup_fixture() {
     'fi'
   chmod +x "$bin_dir/date"
 
+  write_file "$bin_dir/gh" \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'echo "aggregate fixture gh must not be invoked directly" >&2' \
+    'exit 97'
+  chmod +x "$bin_dir/gh"
+
   write_fake_audit_script "$workspace/scripts/audit-plan-readiness.sh" "plan-fail,multi-fail"
   write_fake_audit_script "$workspace/scripts/audit-github-governance.sh" "github-fail,live-fail"
   write_fake_audit_script "$workspace/scripts/audit-release-pr-readiness.sh" "release-pr-fail,live-fail,multi-fail"
   write_fake_audit_script "$workspace/scripts/test-source-publication-readiness-audit.sh" "source-self-test-fail"
   write_file "$workspace/scripts/audit-source-publication-readiness.mjs" \
     '#!/usr/bin/env node' \
+    'import crypto from "node:crypto"' \
     'import fs from "node:fs"' \
     'import path from "node:path"' \
     'const args = process.argv.slice(2)' \
     'const reportIndex = args.indexOf("--write-report")' \
-    'if (!args.includes("--check-remote") || reportIndex < 0 || !args[reportIndex + 1]) {' \
+    'const phaseIndex = args.indexOf("--phase")' \
+    'const preflightIndex = args.indexOf("--preflight-report")' \
+    'const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : "standalone"' \
+    'if (!args.includes("--check-remote") || reportIndex < 0 || !args[reportIndex + 1] || !["preflight", "postflight"].includes(phase) || (phase === "postflight" && (preflightIndex < 0 || !args[preflightIndex + 1]))) {' \
     '  console.error("source publication audit missing fail-closed live/report arguments")' \
     '  process.exit(2)' \
     '}' \
@@ -113,7 +124,9 @@ setup_fixture() {
     'const duplicateContinuityMarker = scenario === "plan-unpublished-iroha-duplicate-continuity-marker"' \
     'const reorderedContinuityMarker = scenario === "plan-unpublished-iroha-reordered-continuity-marker"' \
     'const continuityMarkerPlusExtra = scenario === "plan-unpublished-iroha-continuity-marker-plus-extra"' \
-    'const legacyPublication = scenario === "plan-unpublished-iroha-legacy-v1"' \
+    'const legacyPublication = scenario === "plan-unpublished-iroha-legacy-v2"' \
+    'const wrongReportPhase = scenario === "plan-unpublished-iroha-wrong-report-phase"' \
+    'const wrongPreflightDigest = scenario === "plan-unpublished-iroha-wrong-preflight-digest"' \
     'const missingActualProof = scenario === "plan-unpublished-iroha-missing-actual-proof"' \
     'const forgedActualProof = scenario === "plan-unpublished-iroha-forged-actual-proof"' \
     'const mismatchedProofFailure = scenario === "plan-unpublished-iroha-mismatched-proof-failure"' \
@@ -123,7 +136,7 @@ setup_fixture() {
     'const invalidConfiguredRefProof = scenario === "plan-unpublished-iroha-invalid-configured-ref-proof"' \
     'const missingIgnoredDiagnostic = scenario === "plan-unpublished-iroha-missing-ignored-diagnostic"' \
     'const staleCurrentDiagnostic = scenario === "plan-unpublished-iroha-stale-current-diagnostic"' \
-    'const extraPublicationFailure = scenario === "plan-unpublished-iroha-extra-failure"' \
+    'const preflightRowMismatch = scenario === "plan-unpublished-iroha-preflight-row-mismatch"' \
     'const driftPublication = scenario.startsWith("plan-unpublished-iroha-drift")' \
     'const driftContinuityMarker = scenario === "plan-unpublished-iroha-drift-postflight-continuity"' \
     'const driftCurrentEqualsPr = scenario === "plan-unpublished-iroha-drift-current-equals-pr"' \
@@ -145,7 +158,7 @@ setup_fixture() {
     'const driftNonzeroCount = scenario === "plan-unpublished-iroha-drift-nonzero-count"' \
     'const forgedIroha = scenario === "plan-forged-iroha-operation"' \
     'const forgedPublication = scenario === "plan-forged-iroha-publication"' \
-    'const publicationIroha = unpublishedIroha || postflightContinuityIroha || wrongContinuityMarker || duplicateContinuityMarker || reorderedContinuityMarker || continuityMarkerPlusExtra || legacyPublication || missingActualProof || forgedActualProof || mismatchedProofFailure || missingPrHead || forgedPrHead || missingPrDiagnostic || invalidConfiguredRefProof || missingIgnoredDiagnostic || staleCurrentDiagnostic || extraPublicationFailure || driftPublication' \
+    'const publicationIroha = unpublishedIroha || postflightContinuityIroha || wrongContinuityMarker || duplicateContinuityMarker || reorderedContinuityMarker || continuityMarkerPlusExtra || legacyPublication || wrongReportPhase || wrongPreflightDigest || missingActualProof || forgedActualProof || mismatchedProofFailure || missingPrHead || forgedPrHead || missingPrDiagnostic || invalidConfiguredRefProof || missingIgnoredDiagnostic || staleCurrentDiagnostic || preflightRowMismatch || driftPublication' \
     'const failed = scenario === "source-publication-fail" || unsafeIroha || unmergedIroha || publicationIroha || forgedIroha || forgedPublication' \
     'const operationFailure = unsafeIroha ? "repository has an in-progress Git merge operation (MERGE_HEAD); only the repository owner may complete or abort it before source publication" : "repository has an in-progress Git merge operation (FORGED_HEAD); only the repository owner may complete or abort it before source publication"' \
     'const unmergedFailure = "worktree is not clean (staged=0, unstaged=0, untracked=0, unmerged=2)"' \
@@ -167,7 +180,6 @@ setup_fixture() {
     'if (missingPrDiagnostic) publicationFailures.splice(2, 1)' \
     'if (missingIgnoredDiagnostic) publicationFailures.shift()' \
     'if (staleCurrentDiagnostic) publicationFailures.push(`local HEAD ${localSha} does not match authoritative current branch optimizations at ${currentBranchRemoteSha}`)' \
-    'if (extraPublicationFailure) publicationFailures.push("authoritative publication proof accepted by an unrelated forged diagnostic")' \
     'if (driftContinuityMarker) publicationFailures.push(preflightContinuityFailure)' \
     'if (driftMissingCurrentDiagnostic) publicationFailures.splice(2, 1)' \
     'if (driftMissingCachedDiagnostic) publicationFailures.splice(5, 1)' \
@@ -178,7 +190,7 @@ setup_fixture() {
     'if (driftWrongContinuityMarker) publicationFailures.push("source publication preflight did not pass after release checks")' \
     'if (driftDuplicateContinuityMarker) publicationFailures.push(preflightContinuityFailure, preflightContinuityFailure)' \
     'if (driftContinuityMarkerPlusExtra) publicationFailures.push(preflightContinuityFailure, "authoritative publication proof accepted by an unrelated forged diagnostic")' \
-    'const publicationRow = {path:"../iroha",repository:"hyperledger-iroha/iroha",originRepository:"hyperledger-iroha/iroha",head:"codex/kagemusha-selector-hardening",base:"optimizations",prNumber:5612,prUrl:"https://github.com/hyperledger-iroha/iroha/pull/5612",prState:"merged",branch:"optimizations",upstream:"origin/optimizations",headSha:localSha,upstreamSha:localSha,prHeadSha,remoteHeadSha:null,remoteBranchPresent:false,currentBranchRemoteSha,currentBranchRemotePresent:true,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:publicationFailures}' \
+    'const publicationRow = {path:"../iroha",repository:"hyperledger-iroha/iroha",originUrl:"https://github.com/hyperledger-iroha/iroha.git",originRepository:"hyperledger-iroha/iroha",head:"codex/kagemusha-selector-hardening",base:"optimizations",prNumber:5612,prUrl:"https://github.com/hyperledger-iroha/iroha/pull/5612",prState:"merged",repositoryPath:"/fixture/iroha",branch:"optimizations",upstream:"origin/optimizations",headSha:localSha,upstreamSha:localSha,prHeadSha,remoteHeadSha:null,remoteBranchPresent:false,currentBranchRemoteSha,currentBranchRemotePresent:true,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:publicationFailures}' \
     'if (missingActualProof) { publicationRow.currentBranchRemoteSha = null; publicationRow.currentBranchRemotePresent = null }' \
     'if (forgedActualProof) publicationRow.currentBranchRemoteSha = "d".repeat(40)' \
     'if (missingPrHead) publicationRow.prHeadSha = null' \
@@ -192,12 +204,28 @@ setup_fixture() {
     'if (driftCurrentRefNotPresent) publicationRow.currentBranchRemotePresent = false' \
     'if (driftNonzeroCount) publicationRow.stagedCount = 1' \
     'if (forgedPublication) publicationRow.upstream = "origin/forged"' \
-    'const operationRow = {path:"../iroha",status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:unmergedIroha?2:0,failures:[unmergedIroha?unmergedFailure:operationFailure]}' \
-    'const repositories = (publicationIroha || forgedPublication) ? [publicationRow] : (unsafeIroha || unmergedIroha || forgedIroha) ? [operationRow] : []' \
-    'const report = {schemaVersion:legacyPublication?1:2,status:failed?"failed":"passed",checkRemote:true,totals:{sources:9,passed:failed?8:9,failed:failed?1:0,staged:0,unstaged:0,untracked:0,unmerged:unmergedIroha?2:0},workspaceSource:{status:failed?"failed":"passed"},repositories}' \
+    'const operationRow = {...publicationRow,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:unmergedIroha?2:0,failures:[unmergedIroha?unmergedFailure:operationFailure]}' \
+    'const stablePaths = [".","fearless-Android","fearless-iOS","fearless-wallet-web","fearless-site-web","../ton-indexer","../solswap-indexer","../polkaswap-indexer"]' \
+    'const stableSource = (sourcePath, index) => ({path:sourcePath,repository:`example/source-${index}`,head:"main",base:"main",prNumber:index+1,prUrl:`https://github.com/example/source-${index}/pull/${index+1}`,prState:"merged",prHeadSha:localSha,repositoryPath:`/fixture/source-${index}`,originUrl:`https://github.com/example/source-${index}.git`,originRepository:`example/source-${index}`,branch:"main",headSha:localSha,upstream:"origin/main",upstreamSha:localSha,currentBranchRemoteSha:localSha,currentBranchRemotePresent:true,remoteHeadSha:localSha,remoteBranchPresent:true,status:"passed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:[]})' \
+    'const stableSources = stablePaths.map(stableSource)' \
+    'if (preflightRowMismatch && phase === "postflight") stableSources[1].headSha = "c".repeat(40)' \
+    'const ordinaryIrohaRow = stableSource("../iroha", 8)' \
+    'const postflightIrohaRow = (publicationIroha || forgedPublication) ? publicationRow : (unsafeIroha || unmergedIroha || forgedIroha) ? operationRow : ordinaryIrohaRow' \
+    'const failedPreflightIroha = postflightContinuityIroha || wrongContinuityMarker || duplicateContinuityMarker || reorderedContinuityMarker || continuityMarkerPlusExtra || driftContinuityMarker || driftWrongContinuityMarker || driftDuplicateContinuityMarker || driftContinuityMarkerPlusExtra' \
+    'const preflightIrohaRow = {...postflightIrohaRow,status:failedPreflightIroha?"failed":"passed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:failedPreflightIroha?[ignoredOutputFailure]:[]}' \
+    'const currentIrohaRow = phase === "preflight" ? preflightIrohaRow : postflightIrohaRow' \
+    'const workspaceSource = {...stableSources[0]}' \
+    'if (scenario === "source-publication-fail" && phase === "postflight") { workspaceSource.status = "failed"; workspaceSource.failures = ["source publication fixture failure"] }' \
+    'const repositories = [...stableSources.slice(1), currentIrohaRow]' \
+    'const sources = [workspaceSource, ...repositories]' \
+    'const sourceTotals = sources.reduce((totals, source) => { totals[source.status] += 1; totals.staged += source.stagedCount; totals.unstaged += source.unstagedCount; totals.untracked += source.untrackedCount; totals.unmerged += source.unmergedCount; return totals }, {passed:0,failed:0,staged:0,unstaged:0,untracked:0,unmerged:0})' \
+    'const reportFailed = sourceTotals.failed > 0' \
+    'const preflightBytes = phase === "postflight" ? fs.readFileSync(args[preflightIndex + 1]) : null' \
+    'const preflightSha256 = preflightBytes ? crypto.createHash("sha256").update(preflightBytes).digest("hex") : null' \
+    'const report = {schemaVersion:legacyPublication&&phase==="postflight"?2:3,phase:wrongReportPhase&&phase==="postflight"?"preflight":phase,preflightReportSha256:phase==="postflight"?(wrongPreflightDigest?"f".repeat(64):preflightSha256):null,generatedAt:phase==="preflight"?"2026-06-28T00:00:01Z":"2026-06-28T00:00:02Z",status:reportFailed?"failed":"passed",checkRemote:true,workspaceRoot:"/fixture/fearless",workspaceParent:"/fixture",configFile:"/fixture/source-publication-readiness.tsv",rootOwnerConfigFile:"/fixture/source-publication-root-owner.json",releasePrConfigFile:"/fixture/release-readiness-prs.tsv",totals:{sources:9,...sourceTotals},workspaceSource,repositories}' \
     'fs.mkdirSync(path.dirname(args[reportIndex + 1]), {recursive:true})' \
     'fs.writeFileSync(args[reportIndex + 1], JSON.stringify(report) + "\n")' \
-    'if (failed) {' \
+    'if (reportFailed) {' \
     '  console.error("tested source is dirty or unpublished and root production source has no Git owner")' \
     '  process.exit(1)' \
     '}' \
@@ -338,6 +366,7 @@ setup_fixture() {
     'set -euo pipefail' \
     'output=""' \
     'report_dir=""' \
+    'verifier=""' \
     'while (($#)); do' \
     '  case "$1" in' \
     '    --output)' \
@@ -348,6 +377,10 @@ setup_fixture() {
     '      report_dir="$2"' \
     '      shift 2' \
     '      ;;' \
+    '    --verify-with)' \
+    '      verifier="$2"' \
+    '      shift 2' \
+    '      ;;' \
     '    *)' \
     '      shift' \
     '      ;;' \
@@ -355,6 +388,12 @@ setup_fixture() {
     'done' \
     '[[ -n "$output" ]] || output="build/reports/release-readiness/unblock-bundle"' \
     '[[ -n "$report_dir" ]] || { echo "fake exporter missing report dir" >&2; exit 1; }' \
+    '[[ -n "$verifier" && -x "$verifier" ]] || { echo "fake exporter missing canonical verifier" >&2; exit 1; }' \
+    'final_output="$output"' \
+    'staged_output="${output}.staging"' \
+    'rm -rf "$staged_output"' \
+    'output="$staged_output"' \
+    'trap '\''rm -rf "$staged_output"'\'' EXIT' \
     'node - "$report_dir/actions.json" "$report_dir/android-xcm-effective-registry-report.json" <<'"'"'NODE'"'"'' \
     'const fs = require("fs")' \
     'const [actionsFile, reportFile] = process.argv.slice(2)' \
@@ -377,7 +416,11 @@ setup_fixture() {
     'printf "%s\n" "#!/usr/bin/env bash" "echo fake verification" > "$output/verify-blockers.sh"' \
     'chmod +x "$output/verify-blockers.sh"' \
     'printf "%s\n" "bundle-checksum  manifest.json" > "$output/SHA256SUMS"' \
-    'echo "fake release unblock bundle exported to $output"'
+    '"$verifier" --bundle "$output" --published-path "$final_output"' \
+    'rm -rf "$final_output"' \
+    'mv "$output" "$final_output"' \
+    'trap - EXIT' \
+    'echo "fake release unblock bundle exported and verified to $final_output"'
   chmod +x "$workspace/scripts/export-release-unblock-bundle.sh"
 
   write_file "$workspace/scripts/verify-release-unblock-bundle.sh" \
@@ -385,10 +428,15 @@ setup_fixture() {
     'set -euo pipefail' \
     'scenario="${FAKE_RELEASE_SCENARIO:-good}"' \
     'bundle=""' \
+    'published_path=""' \
     'while (($#)); do' \
     '  case "$1" in' \
     '    --bundle)' \
     '      bundle="$2"' \
+    '      shift 2' \
+    '      ;;' \
+    '    --published-path)' \
+    '      published_path="$2"' \
     '      shift 2' \
     '      ;;' \
     '    *)' \
@@ -400,6 +448,7 @@ setup_fixture() {
     '  echo "fake release unblock bundle verification failed for $scenario" >&2' \
     '  exit 1' \
     'fi' \
+    '[[ "$published_path" == "${bundle%.staging}" ]] || { echo "published bundle path does not match staged destination" >&2; exit 1; }' \
     '[[ -f "$bundle/manifest.json" ]] || { echo "manifest missing from $bundle" >&2; exit 1; }' \
     'node - "$bundle/actions.json" "$bundle/handoffs/android-xcm-effective-registry-report.json" <<'"'"'NODE'"'"'' \
     'const fs = require("fs")' \
@@ -640,11 +689,16 @@ setup_fixture() {
     'set -euo pipefail' \
     'scenario="${FAKE_RELEASE_SCENARIO:-good}"' \
     'report=""' \
+    'require_ready=false' \
     'while (($#)); do' \
     '  case "$1" in' \
     '    --write-report)' \
     '      report="$2"' \
     '      shift 2' \
+    '      ;;' \
+    '    --require-ready)' \
+    '      require_ready=true' \
+    '      shift' \
     '      ;;' \
     '    *)' \
     '      shift' \
@@ -655,9 +709,21 @@ setup_fixture() {
     '  echo "shared-features delta audit failed for $scenario" >&2' \
     '  exit 1' \
     'fi' \
+    'status="ready"' \
+    'mutates=false' \
+    'blockers="[]"' \
+    'if [[ "$scenario" == "ios-delta-blocked" || "$require_ready" == false ]]; then' \
+    '  status="blocked"' \
+    '  mutates=true' \
+    '  blockers="[\"checkout mutation remains\"]"' \
+    'fi' \
     'if [[ -n "$report" ]]; then' \
     '  mkdir -p "$(dirname "$report")"' \
-    '  printf "%s\n" "{\"schemaVersion\":1,\"removalReadiness\":{\"status\":\"blocked\"}}" > "$report"' \
+    '  printf "%s\n" "{\"schemaVersion\":1,\"mutatesResolvedCheckout\":${mutates},\"removalReadiness\":{\"status\":\"${status}\",\"blockers\":${blockers}}}" > "$report"' \
+    'fi' \
+    'if [[ "$require_ready" == true && "$status" != "ready" ]]; then' \
+    '  echo "--require-ready rejected unresolved shared-features checkout mutation: removalReadiness.status must be ready, got $status" >&2' \
+    '  exit 1' \
     'fi' \
     'echo "shared-features delta audit passed"'
   chmod +x "$workspace/fearless-iOS/scripts/deps/audit-shared-features-delta-report.sh"
@@ -813,6 +879,13 @@ setup_fixture() {
     '  exit 0' \
     'fi' \
     'if [[ "$args" == run\ audit:deployment-evidence* || "$args" == audit:deployment-evidence* ]]; then' \
+    '  if [[ "$repo" == passkey-backup-challenge-service && "$require_ready" == true ]]; then' \
+    '    expected_gh="$(cd "$(dirname "$0")" && pwd -P)/gh"' \
+    '    [[ "${PASSKEY_DEPLOYMENT_GH_BIN:-}" == "$expected_gh" ]] || {' \
+    '      echo "passkey ready evidence must receive the root authenticated gh authority" >&2' \
+    '      exit 2' \
+    '    }' \
+    '  fi' \
     '  case "$scenario:$repo" in' \
     '    passkey-deployment-fail:passkey-backup-challenge-service|multi-fail:passkey-backup-challenge-service)' \
     '      echo "passkey deployment evidence failed for $scenario requireReady=$require_ready" >&2' \
@@ -840,9 +913,39 @@ setup_fixture() {
     '  echo "$repo deployment evidence passed requireReady=$require_ready runner=$runner"' \
     '  exit 0' \
     'fi' \
-    'if [[ "$repo" == passkey-backup-challenge-service && "$args" == *"smoke:production"* && "${PASSKEY_BACKUP_SMOKE_GRANT_HELPER:-}" != /run/secrets/passkey-smoke-grant-helper ]]; then' \
-    '  echo "passkey production smoke must use the canonical grant helper path" >&2' \
-    '  exit 2' \
+    'if [[ "$repo" == passkey-backup-challenge-service && "$args" == *"smoke:production"* ]]; then' \
+    '  for transport_variable in NODE_TLS_REJECT_UNAUTHORIZED NODE_EXTRA_CA_CERTS NODE_USE_ENV_PROXY NODE_USE_SYSTEM_CA OPENSSL_CONF SSL_CERT_FILE SSL_CERT_DIR HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy NODE_PATH; do' \
+    '    [[ -z "${!transport_variable+x}" ]] || {' \
+    '      echo "passkey production smoke inherited forbidden Node TLS/proxy/CA environment: $transport_variable" >&2' \
+    '      exit 2' \
+    '    }' \
+    '  done' \
+    '  [[ "${HOME:-}" == /var/empty && "${XDG_CONFIG_HOME:-}" == /var/empty && "${NPM_CONFIG_USERCONFIG:-}" == /dev/null && "${npm_config_userconfig:-}" == /dev/null && "${NPM_CONFIG_GLOBALCONFIG:-}" == /dev/null && "${npm_config_globalconfig:-}" == /dev/null && "${NODE_OPTIONS+x}" == x && -z "$NODE_OPTIONS" ]] || {' \
+    '    echo "passkey production smoke must isolate Node and npm configuration" >&2' \
+    '    exit 2' \
+    '  }' \
+    '  [[ "${PASSKEY_BACKUP_SMOKE_GRANT_HELPER:-}" == /run/secrets/passkey-smoke-grant-helper && "${PASSKEY_BACKUP_SMOKE_TIMEOUT_MS:-}" == 10000 && "${PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES:-}" == 1048576 && "${PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS:-}" == 2000 ]] || {' \
+    '    echo "passkey production smoke must use the canonical helper, timeout, response-size, and isolated Node TLS/proxy/CA environment" >&2' \
+    '    exit 2' \
+    '  }' \
+    'fi' \
+    'if [[ "$repo" == ton-indexer && "$args" == *"smoke:production"* ]]; then' \
+    '  [[ "${TON_INDEXER_SMOKE_TIMEOUT_MS:-}" == 10000 && "${TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES:-}" == 1048576 && "${TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC:-}" == 300 ]] || {' \
+    '    echo "TI production smoke must use the canonical timeout, response-size, and health-lag limits" >&2' \
+    '    exit 2' \
+    '  }' \
+    'fi' \
+    'if [[ "$repo" == solswap-indexer && "$args" == *"smoke:production"* ]]; then' \
+    '  [[ "${SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS:-}" == 10000 && "${SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES:-}" == 1048576 && "${SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC:-}" == 120 ]] || {' \
+    '    echo "SI production smoke must use the canonical timeout, response-size, and health-age limits" >&2' \
+    '    exit 2' \
+    '  }' \
+    'fi' \
+    'if [[ "$repo" == polkaswap-indexer && "$args" == *"smoke:production"* ]]; then' \
+    '  [[ "${POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS:-}" == 10000 && "${POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES:-}" == 1048576 && "${POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC:-}" == 300 ]] || {' \
+    '    echo "PI production smoke must use the canonical timeout, response-size, and indexer-age limits" >&2' \
+    '    exit 2' \
+    '  }' \
     'fi' \
     'case "$scenario:$repo" in' \
     '  passkey-smoke-fail:passkey-backup-challenge-service|live-fail:passkey-backup-challenge-service|multi-fail:passkey-backup-challenge-service)' \
@@ -880,9 +983,21 @@ run_audit() {
     FEARLESS_UTILS_PATH="${TEST_AMBIENT_FEARLESS_UTILS_PATH:-$parent/fearless-utils-Android}" \
     FEARLESS_UTILS_COMMIT="${TEST_AMBIENT_FEARLESS_UTILS_COMMIT:-7500809f33243ee47ecb2ec8563fc284ac4de0d6}" \
     FEARLESS_UTILS_REPOSITORY="${TEST_AMBIENT_FEARLESS_UTILS_REPOSITORY:-soramitsu/fearless-utils-Android}" \
+    PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=5242880 \
+    PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS=10000 \
+    TON_INDEXER_SMOKE_TIMEOUT_MS=60000 \
+    TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES=5242880 \
+    TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC=3600 \
+    SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS=60000 \
+    SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=5242880 \
+    SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC=900 \
+    POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS=60000 \
+    POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=5242880 \
+    POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC=900 \
     PATH="$bin_dir:$PATH" \
     NPM_BIN="$bin_dir/npm" \
     YARN_BIN="$bin_dir/yarn" \
+    GH_BIN="$bin_dir/gh" \
     MAX_LOG_PREVIEW_LINES=3 \
     MAX_EVIDENCE_PREVIEW_CHARS="${MAX_EVIDENCE_PREVIEW_CHARS:-6000}" \
     bash "$AUDIT_SCRIPT" "$@"
@@ -967,7 +1082,10 @@ assert.equal(summary.totals.failed, Number(expectedFailed), `${name}: failed tot
 assert.equal(summary.totals.skipped, Number(expectedSkipped), `${name}: skipped total`)
 assert.equal(summary.totals.total, summary.checks.length, `${name}: total matches checks`)
 assert.equal(summary.totals.passed + summary.totals.failed + summary.totals.skipped, summary.totals.total, `${name}: totals sum`)
-assert.equal(summary.checks.length, 21, `${name}: expected all release gates to be represented`)
+const expectsTerminalFailure = expectedSlugStatuses.some((pair) =>
+  pair === 'release-unblock-bundle=failed' || pair === 'release-output-contract=failed'
+)
+assert.equal(summary.checks.length, expectsTerminalFailure ? 22 : 21, `${name}: expected all release gates to be represented`)
 const slugs = summary.checks.map((check) => check.slug)
 assert.equal(new Set(slugs).size, slugs.length, `${name}: check slugs must be unique`)
 
@@ -1071,9 +1189,28 @@ for (const blocker of actions.blockers) {
   assert.equal(typeof blocker.evidencePreview, 'string', `${name}: blocker evidencePreview`)
 }
 
+const stringValues = []
+const collectStrings = (value) => {
+  if (typeof value === 'string') {
+    stringValues.push(value)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach(collectStrings)
+    return
+  }
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(collectStrings)
+  }
+}
+collectStrings(actions)
+const searchableText = stringValues.join('\n')
 const serialized = JSON.stringify(actions)
 for (const text of expectedText) {
-  assert.ok(serialized.includes(text), `${name}: actions manifest missing expected text: ${text}`)
+  assert.ok(
+    serialized.includes(text) || searchableText.includes(text),
+    `${name}: actions manifest missing expected text: ${text}`
+  )
 }
 NODE
 }
@@ -1196,6 +1333,7 @@ production_override_cases=(
   'PASSKEY_CHALLENGE_SERVICE_AUDIT_SKIP_COMMANDS|1'
   'PASSKEY_DEPLOYMENT_EVIDENCE_ROOT|/tmp/forged-passkey-evidence-root'
   'PASSKEY_DEPLOYMENT_EXPECTED_COMMIT|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  'PASSKEY_DEPLOYMENT_GH_BIN|/tmp/forged-passkey-gh'
   'PASSKEY_ANDROID_ASSOCIATION_FILE|/tmp/forged-assetlinks.json'
   'PASSKEY_DEPLOYMENT_EVIDENCE_FILE|/tmp/forged-passkey-evidence.json'
   'PASSKEY_BACKUP_PRODUCTION_CONFIG_FILE|/tmp/forged-passkey-config.json'
@@ -1235,12 +1373,39 @@ production_override_cases=(
   'BITCOIN_BROADCAST_EVIDENCE_INDEXER_FIXTURE|/tmp/forged-bitcoin-indexer.json'
   'DEPLOYMENT_EVIDENCE_ROOT|/tmp/forged-deployment-root'
   'DEPLOYMENT_EVIDENCE_EXPECTED_COMMIT|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  'PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES|5242880'
+  'PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS|10000'
+  'TON_INDEXER_SMOKE_TIMEOUT_MS|60000'
+  'TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'
+  'TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC|3600'
+  'SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS|60000'
+  'SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'
+  'SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC|900'
+  'POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS|60000'
+  'POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'
+  'POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC|900'
   'NODE_BIN|/usr/bin/true'
   'NPM_BIN|/usr/bin/true'
   'YARN_BIN|/usr/bin/true'
   'GH_BIN|/usr/bin/true'
   'NODE_OPTIONS|--require=/tmp/forged-preload.cjs'
   'NODE_PATH|/tmp/forged-node-modules'
+  'NODE_TLS_REJECT_UNAUTHORIZED|0'
+  'NODE_EXTRA_CA_CERTS|/tmp/forged-ca.pem'
+  'NODE_USE_ENV_PROXY|1'
+  'NODE_USE_SYSTEM_CA|1'
+  'OPENSSL_CONF|/tmp/forged-openssl.cnf'
+  'CURL_CA_BUNDLE|/tmp/forged-ca.pem'
+  'SSL_CERT_FILE|/tmp/forged-ca.pem'
+  'SSL_CERT_DIR|/tmp/forged-ca-dir'
+  'HTTP_PROXY|http://127.0.0.1:1'
+  'HTTPS_PROXY|http://127.0.0.1:1'
+  'ALL_PROXY|socks5://127.0.0.1:1'
+  'NO_PROXY|*'
+  'http_proxy|http://127.0.0.1:1'
+  'https_proxy|http://127.0.0.1:1'
+  'all_proxy|socks5://127.0.0.1:1'
+  'no_proxy|*'
   'PINNED_YARN_TEST_MODE|1'
   'PINNED_YARN_NODE_BIN|/usr/bin/true'
   'PINNED_YARN_NPM_BIN|/usr/bin/true'
@@ -1329,6 +1494,29 @@ grep -Fq 'TI, SI, and PI deployment evidence readiness' "$path_probe_log" ||
   fail "release-readiness help must enumerate PI deployment evidence coverage"
 PRODUCTION_PATH_PROBE_COUNT=$((PRODUCTION_PATH_PROBE_COUNT + 1))
 
+cleanup_probe_root="$tmp_dir/production-cleanup-symlink-root"
+cleanup_probe_outside="$tmp_dir/production-cleanup-symlink-outside"
+cleanup_probe_log="$tmp_dir/production-cleanup-symlink.log"
+mkdir -p "$cleanup_probe_root/scripts" "$cleanup_probe_outside/reports/release-readiness"
+cp "$AUDIT_SCRIPT" "$cleanup_probe_root/scripts/audit-release-readiness.sh"
+ln -s "$cleanup_probe_outside" "$cleanup_probe_root/build"
+write_file "$cleanup_probe_outside/reports/release-readiness/sentinel" "must survive"
+set +e
+"${clean_production_env[@]}" \
+  /bin/bash "$cleanup_probe_root/scripts/audit-release-readiness.sh" \
+  >"$cleanup_probe_log" 2>&1
+cleanup_probe_status=$?
+set -e
+if [[ "$cleanup_probe_status" -ne 2 ]]; then
+  sed -n '1,20p' "$cleanup_probe_log" >&2
+  fail "production cleanup symlink probe must fail setup with exit code 2"
+fi
+[[ -f "$cleanup_probe_outside/reports/release-readiness/sentinel" ]] ||
+  fail "production cleanup followed an intermediate build symlink"
+grep -Fq 'release-readiness report directory cleanup path must not traverse a symlink' "$cleanup_probe_log" ||
+  fail "production cleanup symlink diagnostic missing"
+PRODUCTION_PATH_PROBE_COUNT=$((PRODUCTION_PATH_PROBE_COUNT + 1))
+
 function_probe_log="$tmp_dir/production-exported-function-probe.log"
 if "${clean_production_env[@]}" AUDIT_SCRIPT="$AUDIT_SCRIPT" /bin/bash -c \
   'git() { return 0; }; export -f git; exec /bin/bash "$AUDIT_SCRIPT" --help' \
@@ -1367,6 +1555,30 @@ if "${clean_production_env[@]}" \
 fi
 grep -Fq "must be the isolated workspace root's canonical parent" "$test_mode_log" ||
   fail "test-mode detached-parent diagnostic missing"
+TEST_ISOLATION_PROBE_COUNT=$((TEST_ISOLATION_PROBE_COUNT + 1))
+
+destructive_parent="$tmp_dir/test-mode-report-parent-equality"
+destructive_root="$destructive_parent/fearless"
+destructive_probe_log="$tmp_dir/test-mode-report-parent-equality.log"
+mkdir -p "$destructive_root"
+write_file "$destructive_root/sentinel" "workspace must survive"
+set +e
+"${clean_production_env[@]}" \
+  RELEASE_READINESS_TEST_MODE=1 \
+  RELEASE_READINESS_ROOT="$destructive_root" \
+  RELEASE_READINESS_PARENT="$destructive_parent" \
+  RELEASE_READINESS_REPORT_DIR="$destructive_parent" \
+  /bin/bash "$AUDIT_SCRIPT" >"$destructive_probe_log" 2>&1
+destructive_probe_status=$?
+set -e
+if [[ "$destructive_probe_status" -ne 2 ]]; then
+  sed -n '1,20p' "$destructive_probe_log" >&2
+  fail "test mode report-parent equality must fail setup with exit code 2"
+fi
+[[ -f "$destructive_root/sentinel" ]] ||
+  fail "test mode report-parent equality deleted the isolated workspace"
+grep -Fq 'RELEASE_READINESS_REPORT_DIR must be a strict descendant' "$destructive_probe_log" ||
+  fail "test-mode strict report-descendant diagnostic missing"
 TEST_ISOLATION_PROBE_COUNT=$((TEST_ISOLATION_PROBE_COUNT + 1))
 
 test_mode_log="$tmp_dir/test-mode-report-escape.log"
@@ -1410,6 +1622,21 @@ grep -Fq 'test dependency path must not traverse a symlink in test mode' "$test_
 TEST_ISOLATION_PROBE_COUNT=$((TEST_ISOLATION_PROBE_COUNT + 1))
 
 setup_fixture
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+NODE_EXTRA_CA_CERTS=/dev/null \
+NODE_USE_ENV_PROXY=1 \
+NODE_USE_SYSTEM_CA=1 \
+OPENSSL_CONF=/dev/null \
+SSL_CERT_FILE=/dev/null \
+SSL_CERT_DIR=/tmp/forged-ca-dir \
+HTTP_PROXY=http://127.0.0.1:1 \
+HTTPS_PROXY=http://127.0.0.1:1 \
+ALL_PROXY=socks5://127.0.0.1:1 \
+NO_PROXY='*' \
+http_proxy=http://127.0.0.1:1 \
+https_proxy=http://127.0.0.1:1 \
+all_proxy=socks5://127.0.0.1:1 \
+no_proxy='*' \
 expect_success "all-good fixture" good
 [[ -f "$report_dir/plan-readiness.log" ]] || fail "expected plan-readiness log"
 [[ -f "$report_dir/si-production-smoke.log" ]] || fail "expected SI production log"
@@ -1665,7 +1892,9 @@ assert_failed_check_metadata \
   "Owner-coordinated resolution of the unsafe external ../iroha source state"
 
 iroha_publication_proof_negative_cases=(
-  "legacy v1 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v1"
+  "legacy v2 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v2"
+  "wrong-phase Iroha publication proof stays local|plan-unpublished-iroha-wrong-report-phase"
+  "wrong-preflight-digest Iroha publication proof stays local|plan-unpublished-iroha-wrong-preflight-digest"
   "missing actual-branch Iroha publication proof stays local|plan-unpublished-iroha-missing-actual-proof"
   "forged actual-branch Iroha publication proof stays local|plan-unpublished-iroha-forged-actual-proof"
   "mismatched Iroha PR-head diagnostic stays local|plan-unpublished-iroha-mismatched-proof-failure"
@@ -1675,7 +1904,7 @@ iroha_publication_proof_negative_cases=(
   "invalid Iroha configured-ref proof stays local|plan-unpublished-iroha-invalid-configured-ref-proof"
   "missing Iroha ignored-output diagnostic stays local|plan-unpublished-iroha-missing-ignored-diagnostic"
   "stale Iroha local/current diagnostic stays local|plan-unpublished-iroha-stale-current-diagnostic"
-  "unrelated extra Iroha publication failure stays local|plan-unpublished-iroha-extra-failure"
+  "preflight/postflight source-row mismatch stays local|plan-unpublished-iroha-preflight-row-mismatch"
   "wrong Iroha postflight-continuity marker stays local|plan-unpublished-iroha-wrong-continuity-marker"
   "duplicate Iroha postflight-continuity marker stays local|plan-unpublished-iroha-duplicate-continuity-marker"
   "reordered Iroha postflight-continuity marker stays local|plan-unpublished-iroha-reordered-continuity-marker"
@@ -1770,11 +1999,21 @@ assert_failed_check_metadata \
 
 setup_fixture
 expect_failure "release unblock bundle verification failure" unblock-fail "Release unblock bundle export/verification failed"
-assert_summary "release unblock bundle verification failure" passed true 0 0 \
+assert_summary "release unblock bundle verification failure" failed true 1 0 \
   plan-readiness=passed \
-  release-pr-readiness=passed
-[[ -f "$report_dir/unblock-bundle/manifest.json" ]] ||
-  fail "expected release unblock bundle manifest before verification failure"
+  release-pr-readiness=passed \
+  release-unblock-bundle=failed
+assert_failed_check_metadata \
+  "release unblock bundle verification failure" \
+  "release-unblock-bundle" \
+  false \
+  "local-code" \
+  "Fix the release-unblock bundle exporter or verifier failure" \
+  "No external prerequisite is expected"
+[[ ! -e "$report_dir/unblock-bundle" ]] ||
+  fail "unverified release unblock bundle reached the canonical output path"
+grep -q "fake release unblock bundle verification failed" "$report_dir/release-unblock-bundle.log" ||
+  fail "expected terminal release unblock bundle failure log"
 
 setup_fixture
 expect_failure "single release PR failure" release-pr-fail "Release PR readiness"
@@ -1929,16 +2168,30 @@ assert_blocker_report "single Android public dependency handoff export failure" 
   "android public dependency handoff export failed for android-handoff-fail"
 
 setup_fixture
-expect_failure "single iOS shared-features delta failure" ios-delta-fail "iOS shared-features dependency delta"
-grep -q "shared-features delta audit failed for ios-delta-fail" "$report_dir/ios-shared-features-delta.log" ||
-  fail "expected iOS shared-features delta failure log"
-assert_summary "single iOS shared-features delta failure" failed true 1 0 \
+expect_failure "blocked iOS shared-features removal readiness" ios-delta-blocked "iOS shared-features dependency delta"
+grep -q -- "--require-ready rejected unresolved shared-features checkout mutation" "$report_dir/ios-shared-features-delta.log" ||
+  fail "expected full-live iOS shared-features gate to reject blocked removal readiness"
+grep -q '"status":"blocked"' "$workspace/fearless-iOS/build/reports/shared-features-delta-report.json" ||
+  fail "expected blocked iOS shared-features diagnostic report to be retained"
+assert_summary "blocked iOS shared-features removal readiness" failed true 1 0 \
   ios-shared-features-delta=failed \
   passkey-challenge-service=passed
-assert_blocker_report "single iOS shared-features delta failure" \
+assert_blocker_report "blocked iOS shared-features removal readiness" \
   "ios-shared-features-delta" \
-  "Restore the iOS shared-features delta self-test/report gate" \
-  "shared-features delta audit failed for ios-delta-fail"
+  "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
+  "removalReadiness.status must be ready, got blocked"
+assert_action_manifest "blocked iOS shared-features removal readiness" failed true 1 \
+  "ios-shared-features-delta" \
+  "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
+  "Upstream shared-features publication of carried compatibility and native-crypto deltas." \
+  "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
+assert_failed_check_metadata \
+  "blocked iOS shared-features removal readiness" \
+  "ios-shared-features-delta" \
+  true \
+  "upstream-dependency" \
+  "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
+  "Upstream shared-features publication"
 
 setup_fixture
 expect_failure "single iOS shared-features delta self-test failure" ios-delta-test-fail "iOS shared-features dependency delta"
@@ -1949,7 +2202,7 @@ assert_summary "single iOS shared-features delta self-test failure" failed true 
   passkey-challenge-service=passed
 assert_blocker_report "single iOS shared-features delta self-test failure" \
   "ios-shared-features-delta" \
-  "Restore the iOS shared-features delta self-test/report gate" \
+  "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
   "shared-features delta self-test failed for ios-delta-test-fail"
 
 setup_fixture
@@ -2046,13 +2299,13 @@ assert_action_manifest "single passkey production smoke failure" failed true 1 \
   "PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production"
 
 setup_fixture
-expect_failure "single Iroha/Nexus release readiness failure" iroha-fail "Iroha/Nexus release prerequisites"
+expect_failure "single Iroha Taira/Nexus release readiness failure" iroha-fail "Iroha Taira/Nexus release prerequisites"
 grep -q "audit-iroha-release-readiness.sh failed for iroha-fail" "$report_dir/iroha-release-readiness.log" ||
-  fail "expected Iroha/Nexus release readiness failure log"
-assert_summary "single Iroha/Nexus release readiness failure" failed true 1 0 \
+  fail "expected Iroha Taira/Nexus release readiness failure log"
+assert_summary "single Iroha Taira/Nexus release readiness failure" failed true 1 0 \
   iroha-release-readiness=failed \
   iroha-wallet-coverage=passed
-assert_blocker_report "single Iroha/Nexus release readiness failure" \
+assert_blocker_report "single Iroha Taira/Nexus release readiness failure" \
   "iroha-release-readiness" \
   "Do not edit or publish from an unfinished external Iroha Git operation" \
   "package.json exports ./ivm-artifact" \
@@ -2178,24 +2431,27 @@ setup_fixture
 expect_failure "Android XCM effective-registry policy drift" xcm-effective-report-policy-drift "Android XCM production evidence"
 grep -q "ready XCM evidence effective-registry policy mismatch" "$report_dir/android-xcm-production-evidence.log" ||
   fail "expected Android XCM effective-registry policy drift diagnostic"
-assert_summary "Android XCM effective-registry policy drift" failed true 1 0 \
+assert_summary "Android XCM effective-registry policy drift" failed true 2 0 \
   android-xcm-production-evidence=failed \
+  release-unblock-bundle=failed \
   web-bitcoin-broadcast-evidence=passed
 
 setup_fixture
 expect_failure "Android XCM effective-registry live mode drift" xcm-effective-report-mode-drift "Android XCM production evidence"
 grep -q "ready XCM evidence effective-registry report must be live and complete" "$report_dir/android-xcm-production-evidence.log" ||
   fail "expected Android XCM effective-registry live mode drift diagnostic"
-assert_summary "Android XCM effective-registry live mode drift" failed true 1 0 \
+assert_summary "Android XCM effective-registry live mode drift" failed true 2 0 \
   android-xcm-production-evidence=failed \
+  release-unblock-bundle=failed \
   web-bitcoin-broadcast-evidence=passed
 
 setup_fixture
 expect_failure "missing Android XCM effective-registry report" xcm-effective-report-missing "Android XCM production evidence"
 grep -q "expected effective XCM registry report was not written" "$report_dir/android-xcm-production-evidence.log" ||
   fail "expected missing Android XCM effective-registry report diagnostic"
-assert_summary "missing Android XCM effective-registry report" failed true 1 0 \
+assert_summary "missing Android XCM effective-registry report" failed true 2 0 \
   android-xcm-production-evidence=failed \
+  release-unblock-bundle=failed \
   web-bitcoin-broadcast-evidence=passed
 
 setup_fixture
@@ -2381,9 +2637,9 @@ grep -q "audit-passkey-backup-prerequisites.sh failed" "$report_dir/passkey-back
 grep -q "passkey production smoke failed" "$report_dir/passkey-production-smoke.log" ||
   fail "expected passkey production smoke failure log"
 grep -q "audit-iroha-release-readiness.sh failed" "$report_dir/iroha-release-readiness.log" ||
-  fail "expected Iroha/Nexus failure log"
+  fail "expected Iroha Taira/Nexus failure log"
 grep -q "audit-iroha-wallet-coverage.sh failed" "$report_dir/iroha-wallet-coverage.log" ||
-  fail "expected Iroha/Nexus wallet coverage failure log"
+  fail "expected Iroha Taira/Nexus wallet coverage failure log"
 grep -q "fearless-utils provenance failed" "$report_dir/android-public-dependency-provenance.log" ||
   fail "expected Android public dependency provenance failure log"
 grep -q "shared-features delta audit failed" "$report_dir/ios-shared-features-delta.log" ||
@@ -2441,6 +2697,10 @@ setup_fixture
 mkdir -p "$workspace/fearless-Android/build/reports"
 printf '%s\n' 'stale-effective-registry-report' > "$workspace/fearless-Android/build/reports/xcm-effective-registry-report.json"
 expect_success "skip-live fixture" live-fail --skip-live
+grep -q '"status":"blocked"' "$workspace/fearless-iOS/build/reports/shared-features-delta-report.json" ||
+  fail "expected --skip-live to retain blocked iOS shared-features diagnostics without treating them as live readiness"
+grep -q '"mutatesResolvedCheckout":true' "$workspace/fearless-iOS/build/reports/shared-features-delta-report.json" ||
+  fail "expected --skip-live iOS report to preserve checkout mutation state"
 [[ ! -f "$report_dir/github-governance.log" ]] ||
   fail "expected GitHub log to be absent when --skip-live is used"
 [[ ! -f "$report_dir/release-pr-readiness.log" ]] ||
@@ -2560,6 +2820,21 @@ expect_failure \
   live-fail \
   "blockers.md unexpected failed-checks section" \
   --skip-live
+assert_summary "stale success blocker report fixture" failed false 1 7 \
+  plan-readiness=passed \
+  source-publication-readiness=skipped \
+  release-output-contract=failed
+assert_failed_check_metadata \
+  "stale success blocker report fixture" \
+  "release-output-contract" \
+  false \
+  "local-code" \
+  "Fix the release-readiness summary, action manifest, or blocker-report contract failure" \
+  "No external prerequisite is expected"
+[[ ! -e "$report_dir/unblock-bundle" ]] ||
+  fail "invalid release-readiness outputs reached canonical bundle publication"
+grep -q "blockers.md unexpected failed-checks section" "$report_dir/release-output-contract.log" ||
+  fail "expected terminal release output-contract failure log"
 AUDIT_SCRIPT="$original_audit_script"
 
 setup_fixture

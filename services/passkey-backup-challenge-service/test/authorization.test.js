@@ -154,6 +154,37 @@ test('introspection maps denial and infrastructure failures to generic non-leaki
   );
 });
 
+test('introspection cancels rejected response bodies and aborts their transports', async () => {
+  for (const { status, contentType, code, expectedStatus } of [
+    { status: 401, contentType: 'application/json', code: 'request_authorization_failed', expectedStatus: 401 },
+    { status: 500, contentType: 'application/json', code: 'authorization_service_unavailable', expectedStatus: 503 },
+    { status: 200, contentType: 'text/plain', code: 'authorization_service_unavailable', expectedStatus: 503 },
+  ]) {
+    let cancelCalls = 0;
+    let requestSignal;
+    const response = {
+      status,
+      headers: { get: () => contentType },
+      body: {
+        cancel() {
+          cancelCalls += 1;
+          return Promise.resolve();
+        },
+      },
+    };
+
+    await assert.rejects(
+      () => authorizer(async (url, options) => {
+        requestSignal = options.signal;
+        return response;
+      }).authorize(context),
+      (error) => error?.code === code && error?.status === expectedStatus,
+    );
+    assert.equal(cancelCalls, 1, `${status} ${contentType}`);
+    assert.equal(requestSignal.aborted, true, `${status} ${contentType}`);
+  }
+});
+
 test('introspection timeout and oversized responses fail closed', async () => {
   const slow = createIntrospectionRequestAuthorizer({
     introspectionUrl: URL,

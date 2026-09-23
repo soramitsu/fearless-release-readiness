@@ -1,6 +1,6 @@
 # path	repository	head	base	pull_request
-fearless-Android	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	1258
-fearless-iOS	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	1301
+fearless-Android-production-consolidated-20260731	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260
+fearless-iOS-production-consolidated-20260731	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304
 fearless-wallet-web	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062
 fearless-site-web	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	45
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13

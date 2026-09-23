@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${IROHA_SEND_AGGREGATE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT_DIR_INPUT="${IROHA_SEND_AGGREGATE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+if ! ROOT_DIR="$(cd "$ROOT_DIR_INPUT" 2>/dev/null && pwd -P)"; then
+  echo "[iroha-production-send-readiness][error] aggregate root is not an accessible directory: $ROOT_DIR_INPUT" >&2
+  exit 1
+fi
 
 failures=()
 
@@ -12,8 +16,15 @@ record_failure() {
 
 run_gate() {
   local platform="$1"
-  local path="$2"
-  local label="$3"
+  local repo="$2"
+  local path="$3"
+  local label="$4"
+  local repo_input="$repo"
+  if ! repo="$(cd "$repo" 2>/dev/null && pwd -P)"; then
+    record_failure "$platform repository is missing or is not an accessible directory: $repo_input"
+    return
+  fi
+  path="$repo/scripts/$(basename "$path")"
   if [[ ! -f "$path" || -L "$path" ]]; then
     record_failure "$platform $label is missing or is not a regular file: $path"
     return
@@ -22,7 +33,10 @@ run_gate() {
     record_failure "$platform $label is not executable: $path"
     return
   fi
-  if ! bash "$path"; then
+  if ! (
+    cd "$repo" || exit 1
+    IROHA_SEND_AUDIT_ROOT="$repo" bash "$path"
+  ); then
     record_failure "$platform $label failed"
   fi
 }
@@ -30,8 +44,8 @@ run_gate() {
 run_platform() {
   local platform="$1"
   local repo="$2"
-  run_gate "$platform" "$repo/scripts/test-iroha-production-send-readiness-audit.sh" "adversarial self-test"
-  run_gate "$platform" "$repo/scripts/audit-iroha-production-send-readiness.sh" "blocked-readiness audit"
+  run_gate "$platform" "$repo" "test-iroha-production-send-readiness-audit.sh" "adversarial self-test"
+  run_gate "$platform" "$repo" "audit-iroha-production-send-readiness.sh" "blocked-readiness audit"
 }
 
 run_platform "android" "$ROOT_DIR/fearless-Android"

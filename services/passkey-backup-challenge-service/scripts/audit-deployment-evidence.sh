@@ -52,11 +52,14 @@ node <<'NODE'
 const childProcess = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const evidencePath = process.env.PASSKEY_DEPLOYMENT_EVIDENCE_FILE;
 const deploymentRoot = process.env.PASSKEY_DEPLOYMENT_ROOT;
 const requireReady = process.env.PASSKEY_DEPLOYMENT_REQUIRE_READY === '1';
 const expectedCommitOverride = process.env.PASSKEY_DEPLOYMENT_EXPECTED_COMMIT;
+const deploymentGhBin = process.env.PASSKEY_DEPLOYMENT_GH_BIN;
 const EXPECTED_BASE_URL = 'https://backup.fearlesswallet.io';
 const EXPECTED_HEALTH_URL = `${EXPECTED_BASE_URL}/api/passkey-backup/v1/health`;
 const EXPECTED_SERVICE = 'fearless-passkey-backup';
@@ -64,6 +67,14 @@ const EXPECTED_RP_ID = 'fearlesswallet.io';
 const EXPECTED_IMAGE = 'passkey-backup-challenge-service';
 const EXPECTED_IMAGE_REPOSITORY = 'ghcr.io/soramitsu/fearless-passkey-backup';
 const EXPECTED_IMAGE_PUBLICATION_WORKFLOW = '.github/workflows/passkey-image-publish.yml';
+const EXPECTED_PUBLICATION_REPOSITORY = 'soramitsu/fearless-release-readiness';
+const EXPECTED_PUBLICATION_BRANCH = 'main';
+const EXPECTED_PUBLICATION_EVENT = 'workflow_dispatch';
+const EXPECTED_PUBLICATION_SOURCE_REF = 'refs/heads/main';
+const EXPECTED_PROVENANCE_PREDICATE_TYPE = 'https://slsa.dev/provenance/v1';
+const GITHUB_API_VERSION = '2026-03-10';
+const EXPECTED_PUBLICATION_SIGNER_WORKFLOW =
+  `${EXPECTED_PUBLICATION_REPOSITORY}/${EXPECTED_IMAGE_PUBLICATION_WORKFLOW}`;
 const EXPECTED_IMAGE_PUBLICATION_COMMAND =
   'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>';
 const EXPECTED_IMAGE_PUBLICATION_RUN_URL =
@@ -338,6 +349,285 @@ function matchesCanonicalPublicationUrl(value, pattern) {
     !/[\u0000-\u001f\u007f]/u.test(value) &&
     pattern.test(value)
   );
+}
+
+function deploymentGhBinaryResult() {
+  if (typeof deploymentGhBin !== 'string' || deploymentGhBin.length === 0) {
+    return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must be set to an absolute executable gh binary for ready evidence' };
+  }
+  if (!path.isAbsolute(deploymentGhBin)) {
+    return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must be an absolute path for ready evidence' };
+  }
+  if (/[\u0000-\u001f\u007f]/u.test(deploymentGhBin)) {
+    return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must not contain control characters' };
+  }
+  try {
+    const stat = fs.lstatSync(deploymentGhBin);
+    if (stat.isSymbolicLink()) {
+      return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must not be a symbolic link' };
+    }
+    if (!stat.isFile()) {
+      return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must name a regular executable file' };
+    }
+    fs.accessSync(deploymentGhBin, fs.constants.X_OK);
+  } catch {
+    return { error: 'PASSKEY_DEPLOYMENT_GH_BIN must name an existing executable file' };
+  }
+  return { binary: deploymentGhBin };
+}
+
+function ghErrorDetail(error) {
+  return String(error?.stderr || error?.message || error || '').trim();
+}
+
+function runGh(ghBinary, args, label, options = {}) {
+  let output;
+  try {
+    output = childProcess.execFileSync(ghBinary, args, {
+      encoding: 'utf8',
+      env: { ...process.env, GH_HOST: 'github.com' },
+      maxBuffer: 4 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...options,
+    });
+  } catch (error) {
+    const detail = ghErrorDetail(error);
+    throw new Error(`${label} failed${detail ? `: ${detail}` : ''}`);
+  }
+  return output;
+}
+
+function runGhJson(ghBinary, args, label, options) {
+  const output = runGh(ghBinary, args, label, options);
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    throw new Error(`${label} response must be valid JSON: ${error.message}`);
+  }
+}
+
+function githubApiArgs(endpoint) {
+  return [
+    'api',
+    '--hostname',
+    'github.com',
+    '--method',
+    'GET',
+    '-H',
+    'Accept: application/vnd.github+json',
+    '-H',
+    `X-GitHub-Api-Version: ${GITHUB_API_VERSION}`,
+    endpoint,
+  ];
+}
+
+function positiveNumericUrlId(value) {
+  const id = String(value ?? '').slice(String(value ?? '').lastIndexOf('/') + 1);
+  return /^[1-9][0-9]*$/u.test(id) ? id : null;
+}
+
+function assertAuthenticated(condition, prefix, message) {
+  if (!condition) throw new Error(`${prefix}.${message}`);
+}
+
+function attestationIdFromBundleUrl(value) {
+  if (typeof value !== 'string') return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash) return null;
+  const match = url.pathname.match(/\/([1-9][0-9]*)\.json\.sn$/u);
+  return match?.[1] ?? null;
+}
+
+function authenticatePublicationRecord(record, index, ghBinary) {
+  const prefix = `deploymentEvidence[${index}]`;
+  const runId = positiveNumericUrlId(record.imagePublicationRunUrl);
+  const runEndpoint = `repos/${EXPECTED_PUBLICATION_REPOSITORY}/actions/runs/${runId}`;
+  const run = runGhJson(ghBinary, githubApiArgs(runEndpoint), `${prefix}.imagePublicationRunUrl`);
+
+  assertAuthenticated(isRecord(run), prefix, 'imagePublicationRunUrl GitHub API response must be an object');
+  assertAuthenticated(
+    Number.isSafeInteger(run.id) && run.id > 0 && String(run.id) === runId,
+    prefix,
+    'imagePublicationRunUrl run id must exactly match the evidence URL id',
+  );
+  assertAuthenticated(
+    run.html_url === record.imagePublicationRunUrl,
+    prefix,
+    'imagePublicationRunUrl html_url must exactly match the evidence URL',
+  );
+  assertAuthenticated(
+    isRecord(run.repository) && run.repository.full_name === EXPECTED_PUBLICATION_REPOSITORY,
+    prefix,
+    `imagePublicationRunUrl repository.full_name must be ${EXPECTED_PUBLICATION_REPOSITORY}`,
+  );
+  assertAuthenticated(
+    Number.isSafeInteger(run.repository?.id) && run.repository.id > 0,
+    prefix,
+    'imagePublicationRunUrl repository.id must be a positive integer',
+  );
+  assertAuthenticated(
+    isRecord(run.head_repository) && run.head_repository.full_name === EXPECTED_PUBLICATION_REPOSITORY,
+    prefix,
+    `imagePublicationRunUrl head_repository.full_name must be ${EXPECTED_PUBLICATION_REPOSITORY}`,
+  );
+  assertAuthenticated(
+    run.path === EXPECTED_IMAGE_PUBLICATION_WORKFLOW,
+    prefix,
+    `imagePublicationRunUrl path must be ${EXPECTED_IMAGE_PUBLICATION_WORKFLOW}`,
+  );
+  assertAuthenticated(
+    run.event === EXPECTED_PUBLICATION_EVENT,
+    prefix,
+    `imagePublicationRunUrl event must be ${EXPECTED_PUBLICATION_EVENT}`,
+  );
+  assertAuthenticated(
+    run.head_branch === EXPECTED_PUBLICATION_BRANCH,
+    prefix,
+    `imagePublicationRunUrl head_branch must be ${EXPECTED_PUBLICATION_BRANCH}`,
+  );
+  assertAuthenticated(run.status === 'completed', prefix, 'imagePublicationRunUrl status must be completed');
+  assertAuthenticated(run.conclusion === 'success', prefix, 'imagePublicationRunUrl conclusion must be success');
+  assertAuthenticated(
+    run.head_sha === record.deployedCommit,
+    prefix,
+    'imagePublicationRunUrl head_sha must exactly match deployedCommit',
+  );
+
+  const attestationId = positiveNumericUrlId(record.imageProvenanceAttestationUrl);
+  const attestationEndpoint =
+    `repos/${EXPECTED_PUBLICATION_REPOSITORY}/attestations/${record.imageDigest}` +
+    '?per_page=2&predicate_type=provenance';
+  const collection = runGhJson(
+    ghBinary,
+    githubApiArgs(attestationEndpoint),
+    `${prefix}.imageDigest attestation-list GitHub API request`,
+  );
+  assertAuthenticated(
+    isRecord(collection) && Array.isArray(collection.attestations),
+    prefix,
+    'imageDigest attestation-list response must contain an attestations array',
+  );
+  assertAuthenticated(
+    collection.attestations.length === 1,
+    prefix,
+    'imageDigest must resolve to exactly one provenance attestation',
+  );
+  const listedAttestation = collection.attestations[0];
+  assertAuthenticated(
+    isRecord(listedAttestation),
+    prefix,
+    'imageDigest provenance attestation entry must be an object',
+  );
+  assertAuthenticated(
+    Number.isSafeInteger(listedAttestation.repository_id) &&
+      listedAttestation.repository_id === run.repository.id,
+    prefix,
+    'imageDigest provenance attestation repository_id must match the authenticated Actions repository',
+  );
+  assertAuthenticated(
+    attestationIdFromBundleUrl(listedAttestation.bundle_url) === attestationId,
+    prefix,
+    'imageProvenanceAttestationUrl id must exactly match the digest-listed bundle_url id',
+  );
+
+  const privateDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'passkey-deployment-attestation-'));
+  fs.chmodSync(privateDirectory, 0o700);
+  try {
+    const subject = `oci://${record.imageRepository}@${record.imageDigest}`;
+    runGh(ghBinary, [
+      'attestation',
+      'download',
+      subject,
+      '--repo',
+      EXPECTED_PUBLICATION_REPOSITORY,
+      '--predicate-type',
+      EXPECTED_PROVENANCE_PREDICATE_TYPE,
+      '--limit',
+      '2',
+      '--hostname',
+      'github.com',
+    ], `${prefix}.imageProvenanceAttestationUrl gh attestation download`, {
+      cwd: privateDirectory,
+    });
+    const expectedBundleNames = new Set([
+      `${record.imageDigest}.jsonl`,
+      `${record.imageDigest.replace(':', '-')}.jsonl`,
+    ]);
+    const downloadedFiles = fs.readdirSync(privateDirectory);
+    assertAuthenticated(
+      downloadedFiles.length === 1 && expectedBundleNames.has(downloadedFiles[0]),
+      prefix,
+      'imageProvenanceAttestationUrl download must create exactly the digest-named bundle file',
+    );
+    const bundlePath = path.join(privateDirectory, downloadedFiles[0]);
+    const bundleStat = fs.lstatSync(bundlePath);
+    assertAuthenticated(
+      bundleStat.isFile() && !bundleStat.isSymbolicLink(),
+      prefix,
+      'imageProvenanceAttestationUrl download must create a regular non-symlink bundle file',
+    );
+    assertAuthenticated(
+      bundleStat.size > 0 && bundleStat.size <= 4 * 1024 * 1024,
+      prefix,
+      'imageProvenanceAttestationUrl downloaded bundle must be non-empty and bounded',
+    );
+    const bundleLines = fs.readFileSync(bundlePath, 'utf8')
+      .split(/\r?\n/u)
+      .filter((line) => line.length > 0);
+    assertAuthenticated(
+      bundleLines.length === 1,
+      prefix,
+      'imageProvenanceAttestationUrl download must contain exactly one Sigstore bundle',
+    );
+    let downloadedBundle;
+    try {
+      downloadedBundle = JSON.parse(bundleLines[0]);
+    } catch {
+      downloadedBundle = null;
+    }
+    assertAuthenticated(
+      isRecord(downloadedBundle) &&
+        typeof downloadedBundle.mediaType === 'string' && downloadedBundle.mediaType.length > 0 &&
+        isRecord(downloadedBundle.verificationMaterial) &&
+        isRecord(downloadedBundle.dsseEnvelope),
+      prefix,
+      'imageProvenanceAttestationUrl download must contain a structurally valid Sigstore bundle',
+    );
+    const verification = runGhJson(ghBinary, [
+      'attestation',
+      'verify',
+      subject,
+      '--bundle',
+      bundlePath,
+      '--repo',
+      EXPECTED_PUBLICATION_REPOSITORY,
+      '--signer-workflow',
+      EXPECTED_PUBLICATION_SIGNER_WORKFLOW,
+      '--source-digest',
+      record.deployedCommit,
+      '--source-ref',
+      EXPECTED_PUBLICATION_SOURCE_REF,
+      '--predicate-type',
+      EXPECTED_PROVENANCE_PREDICATE_TYPE,
+      '--deny-self-hosted-runners',
+      '--hostname',
+      'github.com',
+      '--format',
+      'json',
+    ], `${prefix}.imageProvenanceAttestationUrl gh attestation verify`);
+    assertAuthenticated(
+      Array.isArray(verification) && verification.length === 1 && isRecord(verification[0]),
+      prefix,
+      'imageProvenanceAttestationUrl verification must return exactly one verified provenance result',
+    );
+  } finally {
+    fs.rmSync(privateDirectory, { recursive: true, force: true });
+  }
 }
 
 function isCanonicalAndroidOrigin(value) {
@@ -619,6 +909,22 @@ if (Array.isArray(data.deploymentEvidence)) {
   });
 } else {
   fail('deploymentEvidence must be an array');
+}
+
+if (readyEvidenceRequired && !process.exitCode) {
+  const ghBinaryResult = deploymentGhBinaryResult();
+  if (ghBinaryResult.error) {
+    fail(ghBinaryResult.error);
+  } else {
+    for (let index = 0; index < data.deploymentEvidence.length; index += 1) {
+      try {
+        authenticatePublicationRecord(data.deploymentEvidence[index], index, ghBinaryResult.binary);
+      } catch (error) {
+        fail(error.message || String(error));
+        break;
+      }
+    }
+  }
 }
 
 if (process.exitCode) process.exit(process.exitCode);

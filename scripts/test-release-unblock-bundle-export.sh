@@ -21,6 +21,37 @@ bundle_dir="$tmp_dir/bundle"
 workspace_dir="$tmp_dir/workspace"
 report_dir="$workspace_dir/build/reports/release-readiness"
 outside_log="$tmp_dir/outside.log"
+single_snapshot_preload="$tmp_dir/source-publication-single-snapshot.cjs"
+
+cat > "$single_snapshot_preload" <<'NODE'
+const fs = require('node:fs')
+const path = require('node:path')
+const processArg = process.env.SOURCE_PUBLICATION_SNAPSHOT_PROCESS_ARG || ''
+if (processArg && process.argv.includes(processArg)) {
+  const targets = new Set((process.env.SOURCE_PUBLICATION_SNAPSHOT_PATHS || '').split('|').filter(Boolean).map((entry) => path.resolve(entry)))
+  const counts = new Map([...targets].map((entry) => [entry, 0]))
+  const originalReadFileSync = fs.readFileSync
+  fs.readFileSync = function readSourcePublicationSnapshotOnce(file, ...args) {
+    if (typeof file === 'string') {
+      const resolved = path.resolve(file)
+      if (targets.has(resolved)) {
+        const count = (counts.get(resolved) || 0) + 1
+        counts.set(resolved, count)
+        if (count > 1) throw new Error(`source publication artifact read more than once: ${resolved}`)
+      }
+    }
+    return originalReadFileSync.call(this, file, ...args)
+  }
+  process.on('exit', () => {
+    for (const [target, count] of counts) {
+      if (count !== 1) {
+        process.stderr.write(`source publication artifact read count ${count}, expected 1: ${target}\n`)
+        process.exitCode = 1
+      }
+    }
+  })
+}
+NODE
 
 write_fixture() {
   rm -rf "$report_dir" "$bundle_dir" "$workspace_dir"
@@ -1408,10 +1439,11 @@ TSV
   "blocker": null
 }
 JSON
-  node - "$workspace_dir" "$report_dir/source-publication-readiness-report.json" <<'NODE'
+  node - "$workspace_dir" "$report_dir/source-publication-preflight-report.json" "$report_dir/source-publication-readiness-report.json" <<'NODE'
+const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
-const [workspace, output] = process.argv.slice(2)
+const [workspace, preflightOutput, output] = process.argv.slice(2)
 const sha = 'a'.repeat(40)
 const configured = [
   ['fearless-Android', 'soramitsu/fearless-Android', 'codex/android-xcm-evidence-release-commit', 'develop', 1258],
@@ -1438,12 +1470,18 @@ function source(sourcePath, repository, head, base, prNumber) {
 const workspaceSource = source('.', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-broadcast-evidence', 'develop', 1061)
 workspaceSource.repositoryPath = workspace
 workspaceSource.requiredTrackedFiles = [
+  '.github/CODEOWNERS',
+  '.github/workflows/readiness.yml',
+  '.gitignore',
   'FEARLESS_PROJECT_PLAN.md',
+  'README.md',
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/source-freeze-20260801.md',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
+  'scripts/capture-source-freeze.mjs',
   'scripts/export-release-unblock-bundle.sh',
   'scripts/quarantine-source-publication-outputs.mjs',
   'scripts/run-pinned-yarn.sh',
@@ -1459,7 +1497,8 @@ workspaceSource.requiredTrackedFiles = [
   'services/passkey-backup-challenge-service/src/server.js',
 ]
 const report = {
-  schemaVersion: 2, generatedAt: '2026-06-28T00:00:00.000Z', status: 'passed', checkRemote: true,
+  schemaVersion: 3, phase: 'preflight', preflightReportSha256: null,
+  generatedAt: '2026-06-28T00:00:00.000Z', status: 'passed', checkRemote: true,
   workspaceRoot: workspace, workspaceParent: path.dirname(workspace),
   configFile: path.join(workspace, 'config/source-publication-readiness.tsv'),
   rootOwnerConfigFile: path.join(workspace, 'config/source-publication-root-owner.json'),
@@ -1468,6 +1507,10 @@ const report = {
   workspaceSource,
   repositories: configured.map((row) => source(...row)),
 }
+const preflightBytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`)
+fs.writeFileSync(preflightOutput, preflightBytes)
+report.phase = 'postflight'
+report.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`)
 NODE
 }
@@ -1531,6 +1574,30 @@ fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n')
 NODE
 }
 
+edit_source_publication_preflight_report() {
+  local script="$1"
+  node - "$report_dir/source-publication-preflight-report.json" "$script" <<'NODE'
+const fs = require('fs')
+const file = process.argv[2]
+const script = process.argv[3]
+const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+Function('data', script)(data)
+fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n')
+NODE
+}
+
+rebind_source_publication_postflight() {
+  node - "$report_dir/source-publication-preflight-report.json" "$report_dir/source-publication-readiness-report.json" <<'NODE'
+const crypto = require('crypto')
+const fs = require('fs')
+const [preflightFile, postflightFile] = process.argv.slice(2)
+const preflightBytes = fs.readFileSync(preflightFile)
+const postflight = JSON.parse(fs.readFileSync(postflightFile, 'utf8'))
+postflight.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
+fs.writeFileSync(postflightFile, JSON.stringify(postflight, null, 2) + '\n')
+NODE
+}
+
 set_reviewed_source_authoritative_current_drift_fixture() {
   node - "$report_dir/source-publication-readiness-report.json" <<'NODE'
 const fs = require('fs')
@@ -1538,6 +1605,7 @@ const file = process.argv[2]
 const data = JSON.parse(fs.readFileSync(file, 'utf8'))
 const iroha = data.repositories.find((row) => row.path === '../iroha')
 if (!iroha) throw new Error('Iroha source-publication fixture missing')
+const hasContinuity = iroha.failures.includes('source publication preflight did not pass before release checks')
 iroha.currentBranchRemotePresent = true
 iroha.currentBranchRemoteSha = '095afec25e64fdcf1d619c23a7e3b0a3906e7e8c'
 for (const key of ['stagedCount', 'unstagedCount', 'untrackedCount', 'unmergedCount']) iroha[key] = 0
@@ -1548,6 +1616,7 @@ iroha.failures = [
   `local HEAD ${iroha.headSha} does not match pull request head ${iroha.prHeadSha}`,
   `upstream mismatch: expected origin/${iroha.head}, received ${iroha.upstream}`,
   `cached upstream ${iroha.upstream} at ${iroha.upstreamSha} does not match authoritative current branch ${iroha.branch} at ${iroha.currentBranchRemoteSha}`,
+  ...(hasContinuity ? ['source publication preflight did not pass before release checks'] : []),
 ]
 fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n')
 NODE
@@ -1748,9 +1817,10 @@ NODE
 
 set_plan_readiness_blocker_fixture() {
   local variant="$1"
-  node - "$report_dir/summary.json" "$report_dir/actions.json" "$report_dir/plan-readiness.log" "$report_dir/source-publication-readiness-report.json" "$report_dir/source-publication-readiness.log" "$variant" <<'NODE'
+  node - "$report_dir/summary.json" "$report_dir/actions.json" "$report_dir/plan-readiness.log" "$report_dir/source-publication-preflight-report.json" "$report_dir/source-publication-readiness-report.json" "$report_dir/source-publication-readiness.log" "$variant" <<'NODE'
+const crypto = require('crypto')
 const fs = require('fs')
-const [summaryFile, actionsFile, logFile, sourceReportFile, sourceLogFile, variant] = process.argv.slice(2)
+const [summaryFile, actionsFile, logFile, preflightReportFile, sourceReportFile, sourceLogFile, variant] = process.argv.slice(2)
 const summary = JSON.parse(fs.readFileSync(summaryFile, 'utf8'))
 const actions = JSON.parse(fs.readFileSync(actionsFile, 'utf8'))
 const contracts = {
@@ -1835,6 +1905,19 @@ if (variant === 'external' || variant === 'external-reviewed-source') {
   sourceReport.totals.passed -= 1
   sourceReport.totals.failed += 1
   if (variant === 'external') sourceReport.totals.staged += 1
+  if (variant === 'external-reviewed-source') {
+    const preflightReport = JSON.parse(fs.readFileSync(preflightReportFile, 'utf8'))
+    const preflightIndex = preflightReport.repositories.findIndex((row) => row.path === '../iroha')
+    if (preflightIndex < 0) throw new Error('Iroha preflight source-publication fixture missing')
+    preflightReport.repositories[preflightIndex] = JSON.parse(JSON.stringify(iroha))
+    preflightReport.status = 'failed'
+    preflightReport.totals.passed -= 1
+    preflightReport.totals.failed += 1
+    fs.writeFileSync(preflightReportFile, `${JSON.stringify(preflightReport, null, 2)}\n`)
+    const preflightBytes = fs.readFileSync(preflightReportFile)
+    sourceReport.preflightReportSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
+    iroha.failures.push('source publication preflight did not pass before release checks')
+  }
   const sourceCheck = summary.checks.find((item) => item.slug === 'source-publication-readiness')
   if (!sourceCheck || sourceCheck.status !== 'passed') throw new Error('source-publication fixture must start passed')
   const sourceEvidence = '[source-publication-readiness][error] Source publication readiness failed:'
@@ -1937,10 +2020,15 @@ assert_success_bundle() {
   node - "$bundle_dir/manifest.json" <<'NODE'
 const fs = require('fs')
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
-if (manifest.schemaVersion !== 2) throw new Error('bad schemaVersion')
+if (manifest.schemaVersion !== 3) throw new Error('bad schemaVersion')
 if (manifest.blockerCount !== 12) throw new Error('bad blockerCount')
 if (manifest.sourcePublicationHandoff?.sourceCount !== 9 || manifest.sourcePublicationHandoff?.passedCount !== 9 || manifest.sourcePublicationHandoff?.repositories?.length !== 8) {
   throw new Error('bad nine-source publication handoff totals')
+}
+if (manifest.sourcePublicationHandoff?.preflightReportPath !== 'source-publication-preflight-report.json' ||
+    manifest.sourcePublicationHandoff?.preflightReportArtifact !== 'handoffs/source-publication-preflight-report.json' ||
+    manifest.sourcePublicationHandoff?.preflightReportSha256 !== manifest.artifacts.find((artifact) => artifact.path === 'handoffs/source-publication-preflight-report.json')?.sha256) {
+  throw new Error('missing exact preflight source publication handoff')
 }
 const irohaSource = manifest.sourcePublicationHandoff.repositories[7]
 if (irohaSource?.path !== '../iroha' || irohaSource?.repository !== 'hyperledger-iroha/iroha' || irohaSource?.head !== 'codex/kagemusha-selector-hardening' || irohaSource?.base !== 'optimizations' || irohaSource?.prNumber !== 5612) {
@@ -3511,6 +3599,9 @@ NODE
 write_fixture
 mkdir -p "$bundle_dir"
 printf '%s\n' stale > "$bundle_dir/stale.txt"
+SOURCE_PUBLICATION_SNAPSHOT_PATHS="$report_dir/source-publication-readiness-report.json|$report_dir/source-publication-preflight-report.json|$workspace_dir/config/source-publication-readiness.tsv|$workspace_dir/config/source-publication-root-owner.json" \
+  SOURCE_PUBLICATION_SNAPSHOT_PROCESS_ARG="$report_dir" \
+  NODE_OPTIONS="--require=$single_snapshot_preload" \
 expect_success "valid fixture"
 assert_success_bundle
 assert_no_bundle_temp_dirs
@@ -3678,7 +3769,6 @@ assert_no_bundle_temp_dirs
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks')"
 expect_success "reviewed-source postflight preflight-continuity marker fixture"
 assert_no_bundle_temp_dirs
 
@@ -3704,7 +3794,6 @@ expect_failure "reviewed-source authoritative-current drift pull-request head eq
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
 set_reviewed_source_authoritative_current_drift_fixture
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks')"
 expect_success "reviewed-source authoritative-current drift postflight fixture"
 assert_no_bundle_temp_dirs
 
@@ -3745,15 +3834,14 @@ edit_source_publication_report "const iroha = data.repositories.find((row) => ro
 expect_failure "reviewed-source synchronized current with full drift diagnostics fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
-set_plan_readiness_blocker_fixture external-reviewed-source
-set_reviewed_source_authoritative_current_drift_fixture
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('unrelated authoritative-current diagnostic')"
-expect_failure "reviewed-source authoritative-current drift unrelated seventh diagnostic fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
+edit_source_publication_preflight_report "const row = data.repositories[0]; const sha = 'b'.repeat(40); for (const key of ['prHeadSha', 'headSha', 'upstreamSha', 'remoteHeadSha', 'currentBranchRemoteSha']) row[key] = sha"
+rebind_source_publication_postflight
+expect_failure "source publication preflight passed-source identity mismatch fixture" "sourcePublicationHandoff.sources[1].prHeadSha must match across preflight and postflight"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
 set_reviewed_source_authoritative_current_drift_fixture
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks', 'unrelated postflight diagnostic')"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('unrelated postflight diagnostic')"
 expect_failure "reviewed-source authoritative-current drift six plus marker plus extra fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3769,22 +3857,22 @@ expect_failure "reviewed-source synchronized nonzero worktree count fixture" "pl
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight passed before release checks')"
-expect_failure "reviewed-source forged preflight-continuity marker fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); const marker = 'source publication preflight did not pass before release checks'; iroha.failures.splice(iroha.failures.indexOf(marker), 1)"
+expect_failure "reviewed-source missing exact failed-preflight continuity marker fixture" "sourcePublicationHandoff.sources[8].failures must contain the exact failed-preflight continuity diagnostic"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.splice(3, 0, 'source publication preflight did not pass before release checks')"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); const marker = 'source publication preflight did not pass before release checks'; iroha.failures.splice(iroha.failures.indexOf(marker), 1); iroha.failures.splice(3, 0, marker)"
 expect_failure "reviewed-source reordered preflight-continuity marker fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks', 'source publication preflight did not pass before release checks')"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks')"
 expect_failure "reviewed-source duplicate preflight-continuity marker fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('source publication preflight did not pass before release checks', 'unrelated postflight diagnostic')"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.failures.push('unrelated postflight diagnostic')"
 expect_failure "reviewed-source preflight-continuity marker plus unrelated failure fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3839,7 +3927,7 @@ expect_failure "reviewed-source missing authoritative current-branch proof fixtu
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
-edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.currentBranchRemoteSha = iroha.headSha; iroha.failures[3] = 'local HEAD ' + iroha.headSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha; iroha.failures[4] = 'cached upstream ' + iroha.upstream + ' at ' + iroha.upstreamSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha"
+edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); const marker = 'source publication preflight did not pass before release checks'; const markerIndex = iroha.failures.indexOf(marker); iroha.currentBranchRemoteSha = iroha.headSha; iroha.failures.splice(markerIndex, 0, 'local HEAD ' + iroha.headSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha, 'cached upstream ' + iroha.upstream + ' at ' + iroha.upstreamSha + ' does not match authoritative current branch ' + iroha.branch + ' at ' + iroha.currentBranchRemoteSha)"
 expect_failure "reviewed-source obsolete authoritative current-branch drift diagnostics fixture" "plan-readiness unblock contract variant must match plan-readiness log classification"
 
 write_fixture
@@ -3865,8 +3953,7 @@ expect_failure "failed Iroha matching-branch remote proof mismatch fixture" "sou
 write_fixture
 set_plan_readiness_blocker_fixture external
 edit_source_publication_report "const iroha = data.repositories.find((row) => row.path === '../iroha'); iroha.remoteHeadSha = null; iroha.currentBranchRemoteSha = null"
-expect_success "failed Iroha malformed matching-branch remote response fixture"
-assert_no_bundle_temp_dirs
+expect_failure "failed Iroha malformed matching-branch remote response fixture" "sourcePublicationHandoff.sources[8].currentBranchRemoteSha must match across preflight and postflight"
 
 write_fixture
 set_plan_readiness_blocker_fixture external-reviewed-source
@@ -3939,12 +4026,34 @@ ln -s "$outside_workspace_config" "$workspace_dir/config"
 expect_failure "workspace handoff symlinked parent fixture" "must not use a symlinked path component"
 
 write_fixture
+rm "$report_dir/source-publication-preflight-report.json"
+expect_failure "missing source publication preflight report fixture" "sourcePublicationHandoff.preflightReportPath missing"
+
+write_fixture
+edit_source_publication_report "data.phase = 'preflight'"
+expect_failure "source publication wrong postflight phase fixture" "source-publication-readiness-report.json.phase must be postflight"
+
+write_fixture
+edit_source_publication_preflight_report "data.phase = 'postflight'; data.preflightReportSha256 = 'a'.repeat(64)"
+rebind_source_publication_postflight
+expect_failure "source publication wrong preflight phase fixture" "source-publication-preflight-report.json.phase must be preflight"
+
+write_fixture
+edit_source_publication_report "data.preflightReportSha256 = 'f'.repeat(64)"
+expect_failure "source publication preflight digest mismatch fixture" "sourcePublicationHandoff.postflight preflightReportSha256 must match the exact preflight report bytes"
+
+write_fixture
+edit_source_publication_preflight_report "data.generatedAt = '2026-06-28T00:01:00.000Z'"
+rebind_source_publication_postflight
+expect_failure "source publication preflight chronology fixture" "sourcePublicationHandoff.preflight report must not postdate the postflight report"
+
+write_fixture
 edit_source_publication_report "data.repositories[0].repositoryPath = '/tmp/attacker-controlled-source'"
 expect_failure "source publication repository path forgery fixture" "source-publication-readiness-report.json.repositories[0].repositoryPath mismatch"
 
 write_fixture
-edit_source_publication_report "data.schemaVersion = 1"
-expect_failure "source publication legacy schema fixture" "source-publication-readiness-report.json.schemaVersion must be 2"
+edit_source_publication_report "data.schemaVersion = 2"
+expect_failure "source publication legacy schema fixture" "source-publication-readiness-report.json.schemaVersion must be 3"
 
 write_fixture
 edit_source_publication_report "data.repositories.pop()"
@@ -4061,7 +4170,7 @@ Object.assign(source, {
 })
 fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n')
 NODE
-expect_failure "source publication unlisted root owner release row fixture" "sourcePublicationHandoff.root owner must have exactly one matching merged release PR config row"
+expect_failure "source publication unlisted root owner release row fixture" "sourcePublicationHandoff.sources[0].repository must match across preflight and postflight"
 
 write_fixture
 edit_source_publication_report "data.rootOwnerConfigFile = '/tmp/attacker-root-owner.json'"
@@ -4618,6 +4727,10 @@ expect_failure "passkey production compose symlink fixture" "passkey-production-
 write_fixture
 perl -0pi -e 's/"127\.0\.0\.1:8789:8789"/"0.0.0.0:8789:8789"/' "$workspace_dir/services/passkey-backup-challenge-service/docker-compose.production.yml"
 expect_failure "public passkey production compose port fixture" "passkey-production-smoke.passkeyProductionContract.compose must include - \"127.0.0.1:8789:8789\""
+
+write_fixture
+perl -0pi -e 's#    image: "\$\{PASSKEY_BACKUP_IMAGE_REPOSITORY:\?[^\n]+#    image: passkey-backup-challenge-service:release#' "$workspace_dir/services/passkey-backup-challenge-service/docker-compose.production.yml"
+expect_failure "mutable passkey production compose image fixture" "passkey-production-smoke.passkeyProductionContract.compose must include image: \"\${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:\${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}\""
 
 write_fixture
 perl -0pi -e 's#https://fearlesswallet.io,https://backup.fearlesswallet.io#https://example.invalid#g' "$workspace_dir/services/passkey-backup-challenge-service/docker-compose.production.yml"

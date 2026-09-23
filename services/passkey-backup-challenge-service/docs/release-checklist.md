@@ -136,7 +136,9 @@ Use this checklist for every production release of
   closed or cannot rotate the per-client rate-limit key.
 - Confirm `PASSKEY_TRUSTED_PROXY_CIDRS` contains only the direct TLS proxy peer
   and prove the same forwarded header from an untrusted direct peer is rejected.
-- Confirm persisted schema-v3 records contain the credential AAGUID,
+- Rehearse the [schema-v3 to schema-v4 migration](credential-store-migration.md)
+  on a private copy, proving credential/counter/tombstone preservation and index integrity.
+- Confirm persisted schema-v4 records contain the credential AAGUID,
   registration platform, and domain-separated wallet-owner subject hash, never
   the raw subject or Bearer grant.
 - Confirm final credential revocation persists a bounded empty owner tombstone,
@@ -154,6 +156,9 @@ Use this checklist for every production release of
 - Run `PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production`
   against the deployed service and confirm the route-level production smoke
   passes.
+- Produce release evidence through the root full-live runner so ambient Node
+  TLS, proxy, CA, OpenSSL, and npm configuration cannot redirect or weaken the
+  production smoke transport.
 - Update `scripts/production-deployment-evidence.json`, set `releaseEnabled: true`,
   record image repository, image digest, publication run URL, provenance
   attestation URL, deployment ID, deployed commit, live health response, and the
@@ -169,11 +174,17 @@ Use this checklist for every production release of
   `PASSKEY_DEPLOYMENT_EXPECTED_COMMIT` to the exact 40-character release commit,
   then run
   `npm run audit:deployment-evidence -- --require-ready`.
+  The ready audit must authenticate the exact recorded Actions run and exact attestation ID, then verify that attestation's returned Sigstore bundle with
+  `gh attestation verify --bundle` against the reviewed repository, signer
+  workflow, protected-main source digest/ref, and hosted-runner policy. A URL
+  shape or a different valid attestation for the same image is not sufficient.
+  Outside the root release corridor, set `PASSKEY_DEPLOYMENT_GH_BIN` to the
+  reviewed absolute `gh` executable; blocked diagnostic mode must make no GitHub call.
 - Confirm rollback owner, monitoring owner, alert route, and release
   communication channel.
 - Walk through [`rollback-checklist.md`](rollback-checklist.md). Confirm private,
   encrypted pre-release and rollback-time snapshot procedures preserve the
-  existing schema-v3 credential store, counters, revocations, and empty owner
+  existing schema-v4 credential store and index, counters, revocations, and empty owner
   tombstones; exactly one writer is allowed; `docker compose down -v` and older
   unreconciled snapshot restores are forbidden; and server revoke-all must
   persist before cloud-record deletion.

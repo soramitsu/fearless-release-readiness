@@ -10,7 +10,7 @@ fail() {
 }
 
 TEST_CASE_INDEX=0
-EXPECTED_TEST_CASE_CATALOG=4191
+EXPECTED_TEST_CASE_CATALOG=4211
 TEST_CASE_START="${PLAN_READINESS_TEST_START_CASE:-1}"
 TEST_CASE_END="${PLAN_READINESS_TEST_END_CASE:-}"
 MUTATION_TARGET_SCAN="${PLAN_READINESS_MUTATION_TARGET_SCAN:-false}"
@@ -18,7 +18,7 @@ PERL_MUTATION_COUNT=0
 mutation_target_noops=()
 if [[ "${PLAN_READINESS_CURRENT_RELEASE_STATE_ONLY:-false}" == "true" ]]; then
   TEST_CASE_START=4111
-  TEST_CASE_END=4191
+  TEST_CASE_END=4211
 elif [[ "${PLAN_READINESS_ANDROID_CURRENT_ONLY:-false}" == "true" ]]; then
   TEST_CASE_START=3970
   TEST_CASE_END=3977
@@ -384,6 +384,7 @@ write_iroha_production_send_fixture() {
 write_android_iroha_staged_bridge_fixture() {
   local repo="$1"
   local materializer_test="$repo/scripts/test-iroha-core-jvm-materializer.sh"
+  local source_android="$SCRIPT_DIR/../fearless-Android"
 
   mkdir -p \
     "$repo/iroha-sdk-bridge/src/main/java/jp/co/soramitsu/iroha/bridge" \
@@ -391,93 +392,16 @@ write_android_iroha_staged_bridge_fixture() {
     "$repo/iroha-sdk-bridge/src/test/resources" \
     "$repo/iroha-sdk-bridge-kotlin-smoke/src/test/kotlin/jp/co/soramitsu/iroha/bridge"
 
-  write_file "$repo/config/iroha-production-send-readiness.json" \
-    "{" \
-    '  "schemaVersion": 1,' \
-    '  "platform": "android",' \
-    '  "status": "blocked",' \
-    '  "releaseEnabled": false,' \
-    '  "nexusEnabledByDefault": false,' \
-    '  "upstream": { "tag": "v2.0.0-rc.2.1-fearless-mobile-sdk.3" },' \
-    '  "artifact": { "name": "iroha-mobile-sdk-android-v2.0.0-rc.2.1-fearless-mobile-sdk.3.zip", "bytes": 116992564, "reviewThresholdBytes": 100000000 },' \
-    '  "stagedIntegration": {' \
-    '    "archiveReview": "passed",' \
-    '    "applicationRuntimeDependency": false,' \
-    '    "fixtureAssetDefinitionId": "61CtjvNd9T3THAR65GsMVHr82Bjc",' \
-    '    "liveTairaObservedNativeXorDefinitionId": "6TEAJqbb8oEPmLncoNiMRbLEK6tw",' \
-    '    "liveTairaNodeVersionObserved": "2.0.0-rc.2.0",' \
-    '    "liveTairaNodeCommitPrefixObserved": "039af2d",' \
-    '    "sdkReleaseTagCommit": "4f8cfbdd17aa6a3b049e619f23ec02501e5297b6",' \
-    '    "sdkDeployedNodeCompatibility": "not-proven",' \
-    '    "feePolicy": "not-recorded",' \
-    '    "pinnedSdkHasherStatus": "known-defective-fixed-u64-length",' \
-    '    "liveTairaReceiptParity": "not-recorded"' \
-    '  },' \
-    '  "blocker": { "code": "android_staged_bridge_production_gates_required", "defaultSigner": "UnavailableIrohaTransferSigner" }' \
-    "}"
-
-  write_file "$repo/docs/iroha-production-send-readiness.md" \
-    "# Android Iroha production send" \
-    "BLOCKED / fail closed" \
-    "The reviewed archive is larger than 100000000 bytes: 116992564." \
-    "Pinned v2.0.0-rc.2.1-fearless-mobile-sdk.3 digest 24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6." \
-    "The structural and dependency review is now complete for core JAR 33f449700948641c73eeaa4e4a8ab9e39d3d6a642a50b6b7d8c30a9f6aff19ce." \
-    "Blocker android_staged_bridge_production_gates_required remains." \
-    "Canonical hash 2332d0004eb24d97fd965fe68f6f31b0e51339764b4dd80f3ea50a3b6f7e5003; defective SDK hash 2b5e69a0a3d333756f4ac2a54bf7eaff88a2c87484d89e6e7da98abea659662d." \
-    "Fixture 61CtjvNd9T3THAR65GsMVHr82Bjc differs from live 6TEAJqbb8oEPmLncoNiMRbLEK6tw. Neither identifier may be hard-coded." \
-    "The deployed Taira node reports version \`2.0.0-rc.2.0\` at 039af2d." \
-    "Bouncy Castle retains an internal private-key copy without a destruction API." \
-    "Production DI still uses \`UnavailableIrohaTransferSigner\`." \
-    "Wire, hash, registry, and fee compatibility across that revision gap has not been proven." \
-    "Passing this gate does **not** make Iroha send production-ready."
-
-  write_file "$repo/scripts/audit-iroha-production-send-readiness.sh" \
-    "#!/usr/bin/env bash" \
-    'EXPECTED_MANIFEST_SHA256="751f648c7fb838029b83ab1f34b223ea50ddb9cb67aecd5addd578cb7cdffba8"' \
-    'EXPECTED_VECTOR_SHA256="63e75a1183fe42763353c950d53ab159a9f8d37a67b7b86177e71bcc6c6e0c20"' \
-    "echo \"manifest.status === 'blocked'\"" \
-    "echo 'manifest.releaseEnabled === false'" \
-    "echo 'manifest.nexusEnabledByDefault === false'" \
-    "echo 'manifest.artifact.bytes > manifest.artifact.reviewThresholdBytes'" \
-    "echo \"staged?.archiveReview === 'passed'\"" \
-    "echo 'staged?.applicationRuntimeDependency === false'" \
-    "echo \"staged?.productionAssetMappingStatus === 'authoritative-live-registry-required-no-hardcoded-id'\"" \
-    "echo \"staged?.sdkDeployedNodeCompatibility === 'not-proven'\"" \
-    "echo \"staged?.feePolicy === 'not-recorded'\"" \
-    "echo \"staged?.hashParity?.liveTairaReceiptParity === 'not-recorded'\"" \
-    "echo \"manifest.blocker?.code === 'android_staged_bridge_production_gates_required'\"" \
-    "echo 'production exit criteria drifted'" \
-    "echo 'required regular file is missing or is a symlink'" \
-    "echo 'staged Iroha SDK dependency leaked outside the two audited staging modules'" \
-    "echo 'must not import the pinned defective SignedTransactionHasher'" \
-    "echo 'Iroha SDK/native binary material must remain generated and untracked'"
-  write_file "$repo/scripts/test-iroha-production-send-readiness-audit.sh" \
-    "#!/usr/bin/env bash" \
-    "expect_failure() { :; }" \
-    "expect_failure 'manifest tamper'" \
-    "expect_failure 'manifest symlink'" \
-    "expect_failure 'provider bypass'" \
-    "expect_failure 'production DI signer injection'" \
-    "expect_failure 'signer no longer fails explicitly'" \
-    "expect_failure 'Nexus enabled'" \
-    "expect_failure 'untracked production SDK dependency'" \
-    "expect_failure 'untracked production bridge project dependency'" \
-    "expect_failure 'tracked native bridge'" \
-    "expect_failure 'production bridge imports defective SDK hasher'" \
-    "expect_failure 'compact boundary and overlong test removed'" \
-    "expect_failure 'compact hash vector tamper'" \
-    "expect_failure 'independent hash verifier gate removed'" \
-    "expect_failure 'app runtime boundary removed'" \
-    "expect_failure 'CI staged bridge gate removed'" \
-    "expect_failure 'fail-closed test removed'" \
-    "expect_failure 'mismatch test removed'" \
-    "expect_failure 'release evidence redacted'" \
-    "expect_failure 'live registry evidence redacted'" \
-    "expect_failure 'hard-coded production ID claim'" \
-    "expect_failure 'SDK deployed-node compatibility promoted'" \
-    "expect_failure 'stale pre-review documentation'" \
-    "expect_failure 'capability claim regressed'" \
-    "echo 'all adversarial fixtures passed'"
+  # Keep the aggregate fixture on the exact production schema and digest pins.
+  # The remaining files below are deliberately small staging-boundary fixtures.
+  cp "$source_android/config/iroha-production-send-readiness.json" \
+    "$repo/config/iroha-production-send-readiness.json"
+  cp "$source_android/docs/iroha-production-send-readiness.md" \
+    "$repo/docs/iroha-production-send-readiness.md"
+  cp "$source_android/scripts/audit-iroha-production-send-readiness.sh" \
+    "$repo/scripts/audit-iroha-production-send-readiness.sh"
+  cp "$source_android/scripts/test-iroha-production-send-readiness-audit.sh" \
+    "$repo/scripts/test-iroha-production-send-readiness-audit.sh"
 
   append_file "$repo/settings.gradle" \
     "include ':iroha-sdk-bridge'" \
@@ -545,8 +469,8 @@ write_android_iroha_staged_bridge_fixture() {
   write_file "$repo/scripts/materialize-iroha-core-jvm.sh" \
     "#!/usr/bin/env bash" \
     'readonly IROHA_CORE_TAG="v2.0.0-rc.2.1-fearless-mobile-sdk.3"' \
-    'readonly IROHA_CORE_ARCHIVE_SHA256="24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6"' \
-    'readonly IROHA_CORE_ARCHIVE_BYTES="116992564"' \
+    'readonly IROHA_CORE_ARCHIVE_SHA256="50e37369e3b08e4435f15ae31d1baca28dd55eae82686000df8f39b85feee7e6"' \
+    'readonly IROHA_CORE_ARCHIVE_BYTES="116231129"' \
     'readonly IROHA_CORE_JAR_SHA256="33f449700948641c73eeaa4e4a8ab9e39d3d6a642a50b6b7d8c30a9f6aff19ce"' \
     'flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)' \
     'snapshot = tempfile.TemporaryFile(prefix="iroha-core-archive-snapshot.")' \
@@ -611,7 +535,7 @@ write_ios_iroha_v2_readiness_fixture() {
     "{" \
     '  "schemaVersion": 2,' \
     '  "platform": "ios",' \
-    '  "assessedAt": "2026-07-11",' \
+    '  "assessedAt": "2026-08-23",' \
     '  "status": "blocked",' \
     '  "releaseEnabled": false,' \
     '  "nexusEnabledByDefault": false,' \
@@ -656,27 +580,39 @@ write_ios_iroha_v2_readiness_fixture() {
     '    "liveReceiptParity": "not-recorded"' \
     '  },' \
     '  "networkReadiness": {' \
-    '    "routeLabel": "iroha3-taira", "routeLabelCurrentlyPassedAsSigningChainId": true,' \
-    '    "protocolChainIdMapping": "not-authoritatively-confirmed",' \
-    '    "fixtureAssetDefinitionId": "61CtjvNd9T3THAR65GsMVHr82Bjc",' \
-    '    "liveTairaNativeXorDefinitionId": "6TEAJqbb8oEPmLncoNiMRbLEK6tw",' \
-    '    "liveTairaNativeXorScale": 9, "liveTairaNativeXorAliasPresent": false,' \
-    '    "canonicalAssetMapping": "drifted-authoritative-live-registry-required",' \
-    '    "authoritativeFeePolicy": "absent", "currentFeeEstimate": "hardcoded-zero",' \
-    '    "liveTairaNodeVersion": "2.0.0-rc.2.0",' \
-    '    "liveTairaNodeCommit": "039af2d65e10b773be5031ab8fc07cf27b40e30d",' \
+    '    "protocolChainId": "fc56984b-2be7-431d-840e-21514d1883f0",' \
+    '    "protocolChainIdMapping": "canonical-first-release-profile-configured",' \
+    '    "canonicalTairaNativeXorDefinitionId": "6TEAJqbb8oEPmLncoNiMRbLEK6tw",' \
+    '    "canonicalTairaNativeXorScale": 9, "canonicalTairaNativeXorSymbol": "XOR",' \
+    '    "canonicalTairaNativeXorDecimals": 9, "liveTairaObservedNativeXorScale": null,' \
+    '    "canonicalAssetMapping": "exact-base58-with-torii-definition-validation",' \
+    '    "fanoutReadPolicy": "require-six-complete-fanout-headers-reject-partial-or-malformed",' \
+    '    "authoritativeFeePolicy": "absent",' \
+    '    "currentFeeEstimate": "fail-closed-typed-error-authoritative-policy-unavailable",' \
+    '    "liveTairaObservation": {' \
+    '      "observedAt": "2026-08-23",' \
+    '      "buildCommit": "7efcc118eb50e3369d004d092f9b9d0b4d31ac52",' \
+    '      "blocks": 6, "peers": 2, "chainProgressStalenessApproxMinutes": 41,' \
+    '      "chainIdReported": null, "statusExposesAbsoluteManifestPath": true,' \
+    '      "canonicalXorFanoutAttempted": 5, "canonicalXorFanoutSucceeded": 1,' \
+    '      "canonicalXorScale": null, "alternateScaleNineDefinitionPrefixObserved": "61Ct",' \
+    '      "committedValidatorDnsTotal": 4, "committedValidatorDnsResolved": 0,' \
+    '      "deploymentAuthority": "workspace-root-live-gate"' \
+    '    },' \
     '    "sdkToDeployedNodeCompatibility": "not-proven"' \
     '  },' \
     '  "securityBoundary": {' \
     '    "defaultSigner": "UnavailableIrohaTransferSigner",' \
     '    "secretRequestRepresentation": "immutable-swift-string", "secretCopiesReliablyZeroizable": false,' \
     '    "secretLifecycleReview": "required-before-sdk-adapter",' \
-    '    "submissionHashPolicy": "local-hash-preferred-without-receipt-equality-check",' \
-    '    "receiptHashEqualityRequired": true, "acceptedAndFinalizedStatusEvidenceRequired": true' \
+    '    "submissionHashPolicy": "require-local-top-level-transaction-receipt-final-hash-equality-and-applied-finality-via-mcp-submit-and-wait",' \
+    '    "canonicalHashFormat": "[0-9a-f]{63}[13579bdf]",' \
+    '    "allSubmissionHashesEqualityRequired": true, "appliedTerminalRequired": true,' \
+    '    "acceptedAndFinalizedStatusEvidenceRequired": true' \
     '  },' \
     '  "liveEvidence": {' \
     '    "fundedTairaBroadcast": "missing", "fundedNexusBroadcast": "missing",' \
-    '    "localToReceiptHashEquality": "missing", "acceptedStatus": "missing",' \
+    '    "localToAllSubmissionHashesEquality": "missing", "acceptedStatus": "missing",' \
     '    "finalizedStatus": "missing", "nexusProductionEndpoint": "unconfirmed"' \
     '  },' \
     '  "blocker": { "code": "apple_xcframework_review_and_materialization_required", "defaultSigner": "UnavailableIrohaTransferSigner" },' \
@@ -691,13 +627,18 @@ write_ios_iroha_v2_readiness_fixture() {
     'binary require iOS `15.0`.' \
     "None matches the corresponding published release slice." \
     "The unpublished correction is diagnostic only." \
-    "The locally computed canonical hash must exactly match Torii." \
+    'The protocol chain ID is `fc56984b-2be7-431d-840e-21514d1883f0`.' \
+    'Native XOR is `6TEAJqbb8oEPmLncoNiMRbLEK6tw` at scale 9.' \
+    'Reads require all six complete fanout headers.' \
+    'Fee estimation fails closed instead of displaying a fabricated zero fee.' \
+    'The current observed live build is `7efcc118eb50e3369d004d092f9b9d0b4d31ac52`.' \
+    "The top-level, transaction, receipt, and final-status hash all equal the local hash and both terminal kinds are Applied." \
     "No funded Taira broadcast, funded Nexus broadcast, or finality evidence exists." \
     "Passing it does **not** make Iroha send production-ready."
 
   write_file "$audit" \
     "#!/usr/bin/env bash" \
-    'EXPECTED_MANIFEST_SHA256="3e35a7667af81feff4d6a3dbb88babb6d56e8697672bd7d244215ae4e5855920"' \
+    'EXPECTED_MANIFEST_SHA256="3f1d4f8ca65d86abd86c3ac28f7142d24702472b07266477585bc70000bb68a4"' \
     "echo \"manifest.status === 'blocked'\"" \
     "echo 'manifest.releaseEnabled === false'" \
     "echo 'manifest.nexusEnabledByDefault === false'" \
@@ -708,6 +649,9 @@ write_ios_iroha_v2_readiness_fixture() {
     "echo 'local correction must not be release evidence'" \
     "echo 'live evidence fundedTairaBroadcast must remain unavailable'" \
     "echo 'submission finality behavior changed without readiness review'" \
+    "echo 'typed fee-unavailable fail-closed behavior'" \
+    "echo 'all submit-and-wait hashes must match locally'" \
+    "echo 'Applied terminal status must remain mandatory'" \
     "echo 'Fearless app deployment target must remain iOS 14.1'" \
     "echo 'IrohaSwift/NoritoBridge was added to the Xcode dependency graph before review'" \
     "echo 'IrohaSwift/NoritoBridge was added to CocoaPods before review'" \
@@ -731,9 +675,13 @@ write_ios_iroha_v2_readiness_fixture() {
     'expect_failure "service bypass"' \
     'expect_failure "tracked XCFramework"' \
     'expect_failure "local fix promoted"' \
+    'expect_failure "fee estimation bypassed"' \
+    'expect_failure "denied fanout header removed"' \
+    'expect_failure "submit-and-wait hash match removed"' \
+    'expect_failure "submit-and-wait Applied finality removed"' \
     'expect_failure "release checklist gate removed"'
   local fixture_index
-  for fixture_index in $(seq 14 74); do
+  for fixture_index in $(seq 18 100); do
     append_file "$audit_test" "expect_failure \"fixture-$fixture_index\""
   done
   append_file "$audit_test" \
@@ -744,8 +692,10 @@ write_ios_iroha_v2_readiness_fixture() {
     "Require an explicit iOS 14.1 versus SDK iOS 15 support decision." \
     "Require canonical compact transaction-hash parity." \
     "Require authoritative protocol chain ID mapping." \
+    "Require typed fail-closed fee estimation." \
     "Require a zeroizable secret-lifecycle boundary." \
-    "Require exact local/Torii receipt-hash equality." \
+    "Require exact local/top-level/transaction/receipt/final MCP hash equality." \
+    'Require an `Applied` terminal status.' \
     "Require funded Taira and Nexus broadcast evidence." \
     "The local unpublished upstream correction is diagnostic only."
 }
@@ -1551,9 +1501,9 @@ write_android_repo() {
     'buildConfigField "boolean", "ENABLE_PRODUCTION_XCM_TRANSFERS", "false"'
   append_file "$repo/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/di/WalletFeatureModule.kt" \
     "BuildConfig.ENABLE_PRODUCTION_XCM_TRANSFERS" \
-    "UnavailableXcmTransferEngine" \
-    "if (!BuildConfig.ENABLE_PRODUCTION_XCM_TRANSFERS)" \
-    "return ApprovedXcmRouteRegistry.unavailable()" \
+    "MutationGuardedXcmTransferEngine" \
+    "transfersEnabled = BuildConfig.ENABLE_PRODUCTION_XCM_TRANSFERS" \
+    "selectApprovedXcmRouteRegistry(enabled = true)" \
     'context.assets.open("local_chains.json")' \
     'context.assets.open("approved_xcm_routes.tsv")' \
     "ApprovedXcmRouteRegistryLoader.load" \
@@ -1830,6 +1780,26 @@ write_android_repo() {
     cp "$fixture_source/$relative_path" "$repo/$relative_path"
   done
 
+  # Keep the migration fixture aligned with the current aggregate inventory
+  # while the dedicated migration checkout still carries the predecessor
+  # evidence totals.
+  append_file "$repo/scripts/test-android-migration-instrumentation-results.sh" \
+    "EXPECTED_NEGATIVE_COUNT=34"
+  append_file "$repo/scripts/verify-android-migration-instrumentation-results.sh" \
+    "        required_total = 340" \
+    '"common": {' \
+    '  "minimum": 5' \
+    '}' \
+    '"core-db": {' \
+    '  "minimum": 290' \
+    '}' \
+    '"app": {' \
+    '  "minimum": 41' \
+    '}' \
+    '"feature-account-impl": {' \
+    '  "minimum": 4' \
+    '}'
+
   # These seven unrelated runtime/UI fixtures are still owned by the canonical
   # Android integration checkout and have not yet landed in the migration
   # candidate worktree. Keep the fallback explicit and narrowly bounded.
@@ -1997,7 +1967,22 @@ write_ios_repo() {
     "echo 'still treats shared-features-spm fixes as optional'"
   write_file "$repo/scripts/deps/audit-shared-features-delta-report.sh" \
     "#!/usr/bin/env bash" \
+    'REQUIRE_READY=false' \
     'REMOVAL_READINESS_STATUS="blocked"' \
+    'MUTATES_RESOLVED_CHECKOUT=true' \
+    'REMOVAL_MUTATION_CALL_SITES=(' \
+    "  '.github/workflows/codecov.yml|scripts/spm-shared-features-fixes.sh'" \
+    "  '.github/workflows/codecov.yml|scripts/deps/prepare-native-crypto-checkout.sh'" \
+    "  'scripts/dev-setup.sh|scripts/spm-shared-features-fixes.sh'" \
+    "  'scripts/dev-setup.sh|scripts/deps/prepare-native-crypto-checkout.sh'" \
+    "  'scripts/ci/bootstrap.sh|scripts/spm-shared-features-fixes.sh'" \
+    "  'scripts/ci/bootstrap.sh|scripts/deps/prepare-native-crypto-checkout.sh'" \
+    "  'scripts/ci/run-pr.sh|scripts/spm-shared-features-fixes.sh'" \
+    "  'scripts/ci/run-pr.sh|scripts/deps/prepare-native-crypto-checkout.sh'" \
+    "  'scripts/test-matrix.sh|scripts/spm-shared-features-fixes.sh'" \
+    "  'scripts/test-matrix.sh|scripts/deps/prepare-native-crypto-checkout.sh'" \
+    ')' \
+    "echo '--require-ready removalReadiness.status must be ready mutatesResolvedCheckout must be false removalReadiness.blockers must be empty remaining checkout-mutation call in'" \
     "echo 'mutatesResolvedCheckout removalReadiness requiredAbsentMarkersBeforeResolved carriedDeltas duplicate shared-features carried delta id carried delta metadata array length mismatch strict-required-patch-accounting HANDOFF_EXPORT_SCRIPT'" \
     "exit 0"
   write_file "$repo/scripts/deps/export-shared-features-upstream-delta.sh" \
@@ -2013,6 +1998,11 @@ write_ios_repo() {
     "echo 'duplicate carried delta id'" \
     "echo 'carried delta metadata length mismatch'" \
     "echo 'removalReadiness status must remain blocked'" \
+    "echo 'blocked removal readiness cannot authorize release'" \
+    "echo 'remaining checkout-mutation call in .github/workflows/codecov.yml'" \
+    "echo 'diagnostic report must preserve checkout mutation state'" \
+    "echo 'ready declaration with remaining mutation call is rejected'" \
+    "echo 'ready declaration passes only after all mutation calls are removed'" \
     "echo 'missing SoraKeystore delta'" \
     "echo 'handoff manifest schemaVersion must be 1'" \
     "echo 'missing upstream handoff export script'" \
@@ -2572,7 +2562,7 @@ write_ios_repo() {
 
   write_common_release_checklist "$repo" \
     "Run bash ./scripts/deps/check-dependency-contracts.sh \"\$PWD\"." \
-    "Run bash ./scripts/deps/test-shared-features-delta-report.sh && bash ./scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json, then review carriedDeltas and removalReadiness.status." \
+    "Run bash ./scripts/deps/test-shared-features-delta-report.sh && bash ./scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready, then review carriedDeltas, removalReadiness.status, mutatesResolvedCheckout=false, and the empty blocker list." \
     "Run bash ./scripts/deps/export-shared-features-upstream-delta.sh before upstream handoff." \
     "Run bash ./scripts/test-transaction-builder-tests-audit.sh && bash ./scripts/audit-transaction-builder-tests.sh." \
     'Run `bash ./scripts/test-testflight-publication-readiness-audit.sh && bash ./scripts/audit-testflight-publication-readiness.sh` and review the exact tracked publication snapshot. Do not mark the TestFlight build release-enabled until an in-place TestFlight update preserves the existing app container, five cold launches pass, store integrity is unchanged, and the remaining third-party symbolication follow-up is closed or explicitly accepted by release review.' \
@@ -4528,55 +4518,96 @@ write_iroha_repo() {
 
   write_file "$repo/ci/check_kagemusha_reviewed_cargo_lock.sh" \
     '#!/usr/bin/env bash' \
-    'EXPECTED_BYTES=315548' \
-    'EXPECTED_SHA256="ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409"' \
-    'if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:' \
-    'if before.st_mode & 0o111:' \
-    'flags |= os.O_NOFOLLOW' \
-    'identity = (before.st_dev, before.st_ino, before.st_mtime_ns)' \
+    'SECURE_READ_HELPER="${SCRIPT_DIR}/kagemusha_secure_read.py"' \
+    'SECURE_READ_HELPER_EXPECTED_BYTES=48947' \
+    'SECURE_READ_HELPER_EXPECTED_SHA256="dd9a7e3b21f04ff3ad425ab5525bd92bb5e440b94e30e6aa7fc0a395c77559da"' \
+    'EXPECTED_BYTES=319284' \
+    'EXPECTED_SHA256="467a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3"' \
+    'REVIEWED_LOCK="${ROOT_DIR}/fixtures/kagemusha/cargo-lock.reviewed.v2"' \
+    'LEGACY_EXPECTED_BYTES=315548' \
+    'LEGACY_EXPECTED_SHA256="ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409"' \
+    'LEGACY_REVIEWED_LOCK="${ROOT_DIR}/fixtures/kagemusha/cargo-lock.reviewed.v1"' \
+    'RECEIPT_EXPECTED_BYTES=3912' \
+    'RECEIPT_EXPECTED_SHA256="a9fc5d64780ae00a381b7d1ca40e123c3ed024ccc48568551ce70c6c47e244e3"' \
+    'RECEIPT="${ROOT_DIR}/fixtures/kagemusha/cargo-lock.reviewed.v2.receipt.json"' \
+    'INPUTS_EXPECTED_BYTES=3555' \
+    'INPUTS_EXPECTED_SHA256="2de438363be7a1166d5545b5fff50f2c2071cca6ad266b4bb171103c452d9421"' \
+    'INPUTS="${ROOT_DIR}/fixtures/kagemusha/cargo-lock.reviewed.v2.inputs"' \
+    'SEED_EXPECTED_BYTES=321889' \
+    'SEED_EXPECTED_SHA256="4f59dc1fae8d5aee0dcc6d46531a5a009a041193771f75ee1444420a59532b9c"' \
+    'SEED="${ROOT_DIR}/fixtures/kagemusha/cargo-lock.reviewed.v2.seed"' \
+    'def load_secure_reader() -> dict[str, object]:' \
     'flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)' \
+    'before_identity = (before.st_nlink, before.st_mtime_ns)' \
+    'after_identity = (after.st_nlink, after.st_mtime_ns)' \
+    'if before_identity != after_identity:' \
+    'if hashlib.sha256(source).hexdigest() != helper_expected_sha256:' \
+    'exec(compile(source, str(helper_path), "exec"), namespace)' \
+    'raise SystemExit("reviewed-lock secure reader lacks stable_read")' \
+    'def load_secure_reader() -> dict[str, object]:' \
     'flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)' \
-    'output_flags = os.O_WRONLY | getattr(os, "O_BINARY", 0)' \
+    'raise SystemExit("reviewed-lock secure reader lacks stable_read")' \
+    'def load_secure_reader() -> dict[str, object]:' \
     'flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)' \
-    'os.link(temporary, destination, follow_symlinks=False)' \
+    'if hashlib.sha256(helper_source).hexdigest() != helper_expected_sha256:' \
+    'exec(compile(helper_source, str(helper_path), "exec"), namespace)' \
+    'raise SystemExit("reviewed-lock secure reader lacks atomic_materialize")' \
     'echo "workspace Kagemusha Cargo.lock is not byte-identical to its reviewed artifact"' \
-    'locks_are_byte_identical() {' \
-    'python3 - "${REVIEWED_LOCK}" "${WORKSPACE_LOCK}" "${EXPECTED_BYTES}"' \
-    'limit = int(sys.argv[3]) + 1' \
-    'with Path(sys.argv[1]).open("rb") as reviewed_file:' \
-    'reviewed = reviewed_file.read(limit)' \
-    'with Path(sys.argv[2]).open("rb") as workspace_file:' \
-    'workspace = workspace_file.read(limit)' \
-    'raise SystemExit(0 if reviewed == workspace else 1)' \
-    'if locks_are_byte_identical; then' \
+    'verify_reviewed_evidence() {' \
+    'verify_lock "${REVIEWED_LOCK}" "reviewed Kagemusha Cargo.lock artifact"' \
+    'verify_lock "${LEGACY_REVIEWED_LOCK}" "historical Kagemusha Cargo.lock v1 artifact"' \
+    'verify_receipt' \
+    'verify_lock "${INPUTS}" "reviewed Cargo resolution-input inventory"' \
+    'verify_lock "${SEED}" "reviewed Kagemusha Cargo.lock v2 seed"' \
+    '}' \
+    'verify_pair() {' \
+    'verify_reviewed_evidence' \
+    'verify_lock "${WORKSPACE_LOCK}" "workspace Kagemusha Cargo.lock"' \
+    'secure_reader["atomic_materialize"](' \
+    'source,' \
+    'destination,' \
+    'expected_bytes,' \
+    'expected_sha256,' \
+    'destination_collision_for_test=collision_for_test,' \
+    '--materialize|--self-test-materialize)' \
+    'verify_reviewed_evidence' \
+    'materialize_reviewed_lock' \
     'verify_pair' \
-    'else' \
-    'canonicalize_platform_lock() {' \
-    'if len(canonical) != expected_bytes or hashlib.sha256(canonical).hexdigest() != expected_sha256:' \
-    'platform_payload = canonical.replace(b"\n", b"\r\n")' \
-    'if payload != platform_payload:' \
-    'echo "is not the exact authenticated CRLF derivative"' \
-    'os.link(destination, quarantine, follow_symlinks=False)' \
-    'if not os.path.samefile(destination, quarantine):' \
-    'if quarantined_payload != platform_payload or not os.path.samefile(destination, quarantine):' \
-    'destination.unlink()' \
-    'if destination.exists() or destination.is_symlink():' \
-    'canonicalize_platform_lock' \
-    'publish_reviewed_lock' \
-    'verify_pair' \
-    'printf '\''#!/usr/bin/env bash\nexit 0\n'\'' >"${temporary}/text-mode-bin/cmp"' \
-    'PATH="${temporary}/text-mode-bin:${PATH}"' \
-    '"$0" --materialize' \
-    'cmp -s -- "${REVIEWED_LOCK}" "${temporary}/Cargo.lock"' \
-    'before_unsafe="$(shasum -a 256 "${temporary}/Cargo.lock")"' \
-    'echo "mutated platform-normalized Cargo.lock negative control unexpectedly passed"' \
-    'after_unsafe="$(shasum -a 256 "${temporary}/Cargo.lock")"' \
-    'echo "mutated platform-normalized Cargo.lock was modified"' \
-    'echo "artifact/root missing, exact CRLF canonicalization under a text-normalizing cmp, CRLF byte/link drift, copy-step removal, root/artifact byte drift, root/artifact symlink, hard link, no-clobber destination, atomic publish collision"'
+    'echo "reviewed Kagemusha Cargo.lock negative controls passed: production split-root verify/materialize rejection without mutation, v2/v1/receipt/root missing, v1-only rejection, receipt links/byte/duplicate/field drift, resolution inventory/seed/source-closure drift, source-parent symlink/replacement rejection, mapping/semantic-delta drift, v1 byte drift, CRLF preservation and fail-closed rejection despite text-normalizing cmp, CRLF byte/link drift, copy-step removal, root/artifact byte drift, root/artifact symlink, hard link, no-clobber destination, atomic no-replace publish collision"'
   chmod +x "$repo/ci/check_kagemusha_reviewed_cargo_lock.sh"
   mkdir -p "$repo/fixtures/kagemusha"
+  write_file "$repo/ci/kagemusha_secure_read.py" \
+    'def stable_read(' \
+    'def _validated_size(metadata):' \
+    'not stat.S_ISREG(metadata.st_mode)' \
+    'metadata.st_nlink != 1' \
+    'metadata.st_mode & 0o111' \
+    'child_fd = os.open(component, flags, dir_fd=parent_fd)' \
+    'def atomic_materialize(' \
+    'output_flags = (' \
+    'os.O_EXCL' \
+    'os.O_NOFOLLOW' \
+    'getattr(os, "O_NONBLOCK", 0)' \
+    'getattr(os, "O_BINARY", 0)' \
+    'os.link(' \
+    'temporary_name,' \
+    'leaf_name,' \
+    'src_dir_fd=parent_fd,' \
+    'dst_dir_fd=parent_fd,' \
+    'follow_symlinks=False' \
+    'rename.replace_if_exists = 0' \
+    'Kagemusha secure-reader and parent-pinned no-replace writer controls passed'
+  truncate -s 48947 "$repo/ci/kagemusha_secure_read.py"
   write_file "$repo/fixtures/kagemusha/cargo-lock.reviewed.v1" ""
   truncate -s 315548 "$repo/fixtures/kagemusha/cargo-lock.reviewed.v1"
+  write_file "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2" ""
+  truncate -s 319284 "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2"
+  write_file "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.receipt.json" ""
+  truncate -s 3912 "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.receipt.json"
+  write_file "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.inputs" ""
+  truncate -s 3555 "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.inputs"
+  write_file "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.seed" ""
+  truncate -s 321889 "$repo/fixtures/kagemusha/cargo-lock.reviewed.v2.seed"
 
   write_file "$repo/ci/check_kagemusha_recursive_spend_payload_bench.sh" \
     '#!/usr/bin/env bash' \
@@ -4589,35 +4620,36 @@ write_iroha_repo() {
     '    "schema", "generator", "generator_dependency", "generator_sha256",' \
     '    "cargo_lock", "cargo_lock_sha256", "proof_bytes", "records",' \
     '}' \
-    'CARGO_LOCK_SHA256 = "ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409"' \
+    'reviewed_cargo_lock_relative = "fixtures/kagemusha/cargo-lock.reviewed.v2"' \
+    'CARGO_LOCK_SHA256 = "467a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3"' \
     'EXPECTED_ARCHIVES = {' \
     '    "request": (' \
-    '        612,' \
-    '        "2faefadfb5f25dfb838e300bb0cb64c36ff7ce845dd5428d4a602d5991cb3eb1",' \
+    '        614,' \
+    '        "03c308b70ca7d7eb0016249f404ecb5aca5effdf92b66e00bb97aac688d8fcc9",' \
     '    ),' \
     '    "acknowledgement": (' \
     '        370,' \
-    '        "4ee22699384122cf7cd8d5e45aeda7d71201d7cfefa56d1742b85a719c7e9f37",' \
+    '        "10df2bf6b39e6a962573c910dd823381220dbdaef1f8e77a7b62fc44045a91ef",' \
     '    ),' \
     '    "payment-depth-1-hop-1": (' \
-    '        15_920,' \
-    '        "e976c0ea36f684174d1b1adc4c88a16c3165c8546bcdb3aa48b2e33fd663cce3",' \
+    '        16_863,' \
+    '        "0e919555969feaa5368308341573f93350ea8f768738e83c2210efe5e5bb7e91",' \
     '    ),' \
     '    "payment-depth-8-hop-8": (' \
-    '        16_091,' \
-    '        "31be978f0ea4ca8122f7680ba4977774edd57007b44eca2586ad11e921a95958",' \
+    '        17_034,' \
+    '        "b9a5c359853f2c8ae6528d8c619f17d38154d5a5f9694f8eb7ca8959f1a306f6",' \
     '    ),' \
     '    "payment-depth-16-hop-8": (' \
-    '        16_283,' \
-    '        "cf49098bc6b2ab7c767c9a81004c627ee08c5838e32455c2f1c54243c31c0c0d",' \
+    '        17_226,' \
+    '        "a8d93e9ca015115c53f15305dde48754e2fe206859e36f9ad7899cd31e4ab0df",' \
     '    ),' \
     '    "payment-depth-32-hop-8": (' \
-    '        16_667,' \
-    '        "2fb5d09c84458307aa555633685cd9fdf273806e41d884f84cac411601f4dcff",' \
+    '        17_610,' \
+    '        "c3aa58a4aabeabe48803e4a8cdae2c245aa48fd721a400c33248c6fe1f7c11ef",' \
     '    ),' \
     '    "payment-depth-64-hop-8": (' \
-    '        17_435,' \
-    '        "c1a063495f07e66161f27dd5f484bb2914d11da9c967b49aa34a32eba56890b5",' \
+    '        18_378,' \
+    '        "71816aa146287f28a4f2e9a29381aab94d6612f589a3bce9009f5651b4c62e53",' \
     '    ),' \
     '}' \
     'document = json.loads(raw, object_pairs_hook=reject_duplicate_keys)' \
@@ -4647,7 +4679,7 @@ write_iroha_repo() {
     '    archive: to_bytes(&request)?,' \
     '    payment.validate_public_binding()?;' \
     '    archive: to_bytes(&payment)?,' \
-    '    archive: ack.canonical_archive_for_payment_v4(&request, &bundle)?,' \
+    '    archive: acknowledgement.canonical_archive_for_payment_v4(request, bundle)?,' \
     '}'
   write_file "$repo/crates/iroha_data_model/Cargo.toml" \
     '[features]' \
@@ -4666,18 +4698,18 @@ write_iroha_repo() {
     '  "schema": "iroha.kagemusha.peer_transport_measurements.v1",' \
     '  "generator": "crates/iroha_data_model/src/bin/kagemusha_peer_transport_fixtures.rs",' \
     '  "generator_dependency": "crates/iroha_data_model/src/offline/peer_transport_fixtures.rs",' \
-    '  "generator_sha256": "b4db2ba01e6fbe477e833750accc06a557b8bbe281fc64de995a9168611caed2",' \
-    '  "cargo_lock": "fixtures/kagemusha/cargo-lock.reviewed.v1",' \
-    '  "cargo_lock_sha256": "ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409",' \
+    '  "generator_sha256": "3e1153d1b5a7341e7a53d376046c8b064716cb12738251c48405b09e2a2f080c",' \
+    '  "cargo_lock": "fixtures/kagemusha/cargo-lock.reviewed.v2",' \
+    '  "cargo_lock_sha256": "467a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3",' \
     '  "proof_bytes": 4096,' \
     '  "records": [' \
-    '    {"label":"request","kind":"request","branch_depth":0,"peer_hops":0,"archive_bytes":612,"archive_sha256":"2faefadfb5f25dfb838e300bb0cb64c36ff7ce845dd5428d4a602d5991cb3eb1","archive_hex":"4e525430"},' \
-    '    {"label":"acknowledgement","kind":"acknowledgement","branch_depth":0,"peer_hops":0,"archive_bytes":370,"archive_sha256":"4ee22699384122cf7cd8d5e45aeda7d71201d7cfefa56d1742b85a719c7e9f37","archive_hex":"4e525430"},' \
-    '    {"label":"payment-depth-1-hop-1","kind":"payment","branch_depth":1,"peer_hops":1,"archive_bytes":15920,"archive_sha256":"e976c0ea36f684174d1b1adc4c88a16c3165c8546bcdb3aa48b2e33fd663cce3","archive_hex":"4e525430"},' \
-    '    {"label":"payment-depth-8-hop-8","kind":"payment","branch_depth":8,"peer_hops":8,"archive_bytes":16091,"archive_sha256":"31be978f0ea4ca8122f7680ba4977774edd57007b44eca2586ad11e921a95958","archive_hex":"4e525430"},' \
-    '    {"label":"payment-depth-16-hop-8","kind":"payment","branch_depth":16,"peer_hops":8,"archive_bytes":16283,"archive_sha256":"cf49098bc6b2ab7c767c9a81004c627ee08c5838e32455c2f1c54243c31c0c0d","archive_hex":"4e525430"},' \
-    '    {"label":"payment-depth-32-hop-8","kind":"payment","branch_depth":32,"peer_hops":8,"archive_bytes":16667,"archive_sha256":"2fb5d09c84458307aa555633685cd9fdf273806e41d884f84cac411601f4dcff","archive_hex":"4e525430"},' \
-    '    {"label":"payment-depth-64-hop-8","kind":"payment","branch_depth":64,"peer_hops":8,"archive_bytes":17435,"archive_sha256":"c1a063495f07e66161f27dd5f484bb2914d11da9c967b49aa34a32eba56890b5","archive_hex":"4e525430"}' \
+    '    {"label":"request","kind":"request","branch_depth":0,"peer_hops":0,"archive_bytes":614,"archive_sha256":"03c308b70ca7d7eb0016249f404ecb5aca5effdf92b66e00bb97aac688d8fcc9","archive_hex":"4e525430"},' \
+    '    {"label":"acknowledgement","kind":"acknowledgement","branch_depth":0,"peer_hops":0,"archive_bytes":370,"archive_sha256":"10df2bf6b39e6a962573c910dd823381220dbdaef1f8e77a7b62fc44045a91ef","archive_hex":"4e525430"},' \
+    '    {"label":"payment-depth-1-hop-1","kind":"payment","branch_depth":1,"peer_hops":1,"archive_bytes":16863,"archive_sha256":"0e919555969feaa5368308341573f93350ea8f768738e83c2210efe5e5bb7e91","archive_hex":"4e525430"},' \
+    '    {"label":"payment-depth-8-hop-8","kind":"payment","branch_depth":8,"peer_hops":8,"archive_bytes":17034,"archive_sha256":"b9a5c359853f2c8ae6528d8c619f17d38154d5a5f9694f8eb7ca8959f1a306f6","archive_hex":"4e525430"},' \
+    '    {"label":"payment-depth-16-hop-8","kind":"payment","branch_depth":16,"peer_hops":8,"archive_bytes":17226,"archive_sha256":"a8d93e9ca015115c53f15305dde48754e2fe206859e36f9ad7899cd31e4ab0df","archive_hex":"4e525430"},' \
+    '    {"label":"payment-depth-32-hop-8","kind":"payment","branch_depth":32,"peer_hops":8,"archive_bytes":17610,"archive_sha256":"c3aa58a4aabeabe48803e4a8cdae2c245aa48fd721a400c33248c6fe1f7c11ef","archive_hex":"4e525430"},' \
+    '    {"label":"payment-depth-64-hop-8","kind":"payment","branch_depth":64,"peer_hops":8,"archive_bytes":18378,"archive_sha256":"71816aa146287f28a4f2e9a29381aab94d6612f589a3bce9009f5651b4c62e53","archive_hex":"4e525430"}' \
     '  ]' \
     '}'
   write_file "$repo/.github/workflows/pr_kagemusha_payload_bench.yml" \
@@ -4686,6 +4718,10 @@ write_iroha_repo() {
     '    paths:' \
     '      - "Cargo.lock"' \
     '      - "fixtures/kagemusha/cargo-lock.reviewed.v1"' \
+    '      - "fixtures/kagemusha/cargo-lock.reviewed.v2"' \
+    '      - "fixtures/kagemusha/cargo-lock.reviewed.v2.inputs"' \
+    '      - "fixtures/kagemusha/cargo-lock.reviewed.v2.seed"' \
+    '      - "fixtures/kagemusha/cargo-lock.reviewed.v2.receipt.json"' \
     '      - "ci/check_kagemusha_*.sh"' \
     '      - "crates/iroha_crypto/**"' \
     '      - "crates/iroha_data_model/src/**"' \
@@ -4777,7 +4813,8 @@ write_iroha_repo() {
     '          if [[ -e target ]]; then' \
     '            echo "C# native release build requires a fresh target directory" >&2' \
     '          fi' \
-    '          cargo build --locked --release -p connect_norito_bridge --target "$target"'
+    '          target_rustflags_key="CARGO_TARGET_$(printf '\''%s'\'' "$target" | tr '\''[:lower:]-'\'' '\''[:upper:]_'\'')_RUSTFLAGS"' \
+    '          env -u "$target_rustflags_key" -u CARGO_ENCODED_RUSTFLAGS -u CARGO_BUILD_RUSTFLAGS -u RUSTFLAGS cargo build --locked --release -p connect_norito_bridge --target "$target"'
   write_file "$repo/IrohaSwift/Sources/IrohaSwift/KagemushaRecursiveSpendV2Native.swift" \
     'typealias KagemushaV2FreeFn = @convention(c) (UnsafeMutablePointer<UInt8>?) -> Void'
   write_file "$repo/IrohaSwift/Tests/IrohaSwiftTests/KagemushaRecursiveSpendV2Tests.swift" \
@@ -4823,7 +4860,7 @@ write_iroha_repo() {
   write_file "$repo/specs/offline_kagemusha.md" \
     'KAGEMUSHA_RECURSIVE_SPEND_PROOF_BACKEND_AVAILABLE remains compile-time gated.' \
     'The kagemusha-production-enabled feature is a safety gate.' \
-    'The exact authenticated ABI-21/V4 artifact set must be installed.' \
+    'The exact authenticated ABI-21/V4 material referenced by that transaction must validate.' \
     'The peer_transport_measurements_v1.json evidence is mandatory.'
   write_file "$repo/artifacts/openapi/torii.json" \
     '{"openapi":"3.1.0","paths":{"/v1/offline/v2/notes/redeem":{}}}'
@@ -6086,13 +6123,18 @@ write_root_readiness_scripts() {
   write_file "$workspace/FEARLESS_PROJECT_PLAN.md" \
     "# FEARLESS Project Plan" \
     "" \
-	    "Last updated: 2026-07-11" \
+	    "Last updated: 2026-08-24" \
+	    "## 2026-08-23 Taira first-release contract hardening" \
+	    'Established one non-compatibility Taira identity: `fc56984b-2be7-431d-840e-21514d1883f0`, `6TEAJqbb8oEPmLncoNiMRbLEK6tw`, `xor#universal`, and decimal scale `9`; every wallet rejects the retired `iroha3-taira` identifier.' \
+	    'Wallets fail closed on incomplete routed fanout, derive precision from `spec.scale`, return a fee-unavailable error, never a fabricated zero-fee quote, and require a matching terminal `Applied` receipt.' \
+	    'The live snapshot observed build `7efcc118eb50e3369d004d092f9b9d0b4d31ac52`, two peers, one of five routed asset reads succeeding, canonical XOR with a null scale, and zero of four committed validator names resolving.' \
+	    'No live deployment, reset, DNS change, funded write canary, or external publication was performed; release requires the full live gate passes against that exact commit.' \
 	    "### 2026-07-11 Android Iroha Core Staging And Release-Handoff Hardening" \
-	    'The current owner-approved 116,992,564-byte republished release ZIP is pinned to SHA-256 `24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6`; its JAR SHA-256 `33f449700948641c73eeaa4e4a8ab9e39d3d6a642a50b6b7d8c30a9f6aff19ce`.' \
+	    'The current owner-approved 116,231,129-byte republished release ZIP is pinned to SHA-256 `50e37369e3b08e4435f15ae31d1baca28dd55eae82686000df8f39b85feee7e6`; its JAR SHA-256 `33f449700948641c73eeaa4e4a8ab9e39d3d6a642a50b6b7d8c30a9f6aff19ce`.' \
 	    "The materializer passed 63 negative/adversarial scenarios." \
 	    "The staged bridge passed eight Java tests and one Kotlin isolation test; its independent compact-hash verifier passed 29 adversarial scenarios and 11 ULEB128 boundaries." \
-	    "The Android blocked-readiness self-test passed 23 destructive fixtures." \
-	    'The release-tag test asset is `61CtjvNd9T3THAR65GsMVHr82Bjc`; the registry reports native XOR as `6TEAJqbb8oEPmLncoNiMRbLEK6tw`; the deployed node reports `2.0.0-rc.2.0` at commit prefix `039af2d`; the SDK tag points at `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`.' \
+	    "The Android blocked-readiness self-test passed 39 destructive fixtures." \
+	    'Native Taira XOR is exactly `6TEAJqbb8oEPmLncoNiMRbLEK6tw` at scale `9`; `61CtjvNd9T3THAR65GsMVHr82Bjc` may coexist only as a secondary fixture. The observed build `7efcc118eb50e3369d004d092f9b9d0b4d31ac52` has canonical scale `null` with one of five routed asset reads succeeding; the SDK tag points at `4f8cfbdd17aa6a3b049e619f23ec02501e5297b6`.' \
 	    'Android production send remains **Blocked** under `android_staged_bridge_production_gates_required`. Production DI still uses `UnavailableIrohaTransferSigner`; the staged bridge is not an app dependency.' \
 	    'Release handoff requires the canonical `/run/secrets/passkey-smoke-grant-helper` as a readable executable; every PI deployment/smoke handoff uses the root-pinned Yarn runner; root release readiness retained 194 scenarios plus three production override-injection checks.' \
 	    '### 2026-07-11 iOS Iroha Assessment And Upstream Compact Codec Closure' \
@@ -6130,25 +6172,35 @@ write_root_readiness_scripts() {
   mkdir -p "$workspace/build/ios-release-2e45e55dc-20260731T181700Z"
   cp "$SCRIPT_DIR/../build/ios-release-2e45e55dc-20260731T181700Z/testflight-publication-attestation.json" \
     "$workspace/build/ios-release-2e45e55dc-20260731T181700Z/testflight-publication-attestation.json"
+  write_file "$workspace/.github/workflows/passkey-image-publish.yml" \
+    "name: Passkey image publication" \
+    "jobs:" \
+    "  publish:" \
+    "    runs-on: ubuntu-latest" \
+    "    steps:" \
+    "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5"
   # The root audit validates the real mutation catalog's routing and cardinality.
-  # Copy the authoritative catalog so fixture audits exercise all 4,189 actual
+  # Copy the authoritative catalog so fixture audits exercise all 4,211 actual
   # top-level cases instead of a synthetic collection of empty routed blocks.
   cp "$SCRIPT_DIR/test-plan-readiness-audit.sh" "$workspace/scripts/test-plan-readiness-audit.sh"
   write_file "$workspace/scripts/audit-github-governance.sh" \
     "#!/usr/bin/env bash" \
-    'REPOS=("sora-xor/polkaswap-indexer")' \
+    'REPOS=("sora-xor/polkaswap-indexer" "soramitsu/fearless-release-readiness")' \
     "expected_default_branch() {" \
     "  case \"\$1\" in" \
+    "    soramitsu/fearless-release-readiness) echo \"main\" ;;" \
     "    tonswap-org/ton-indexer|solswap-io/solswap-indexer|sora-xor/polkaswap-indexer) echo \"master\" ;;" \
     "    *) echo \"develop\" ;;" \
     "  esac" \
     "}" \
     "expected_status_contexts() {" \
     "  case \"\$1\" in" \
+    "    soramitsu/fearless-release-readiness) printf '%s\\n' validate verify ;;" \
     "    sora-xor/polkaswap-indexer) printf '%s\\n' branch-flow validate verify ;;" \
     "    *) printf '%s\\n' validate verify ;;" \
     "  esac" \
     "}" \
+    "expected_protected_branches() { printf '%s\\n' main develop master; }" \
     "api_get() { echo 'Accept: application/vnd.github+json X-GitHub-Api-Version: 2026-03-10'; }" \
     "apply_required_status_checks() { echo 'apply required status checks'; }" \
     "classic_protection_policy_gaps() { echo 'strict classic protection gap detector'; }" \
@@ -6167,7 +6219,7 @@ write_root_readiness_scripts() {
     "saw_api_version=false" \
     "echo 'missing pinned GitHub JSON Accept header'" \
     "echo 'missing pinned GitHub API version'" \
-    "echo 'private-wallet private-indexer wrong-indexer-default polkaswap-unprotected polkaswap-missing-branch-flow missing-status-check apply-status-404-fallback missing-review-policy weak-review-policy apply-review-403 ruleset-fallback ruleset-missing-branch-flow ruleset-bypass'" \
+    "echo 'private-wallet private-indexer private-root wrong-root-default root-missing-main root-missing-status-check wrong-indexer-default polkaswap-unprotected polkaswap-missing-branch-flow missing-status-check apply-status-404-fallback missing-review-policy weak-review-policy apply-review-403 ruleset-fallback ruleset-missing-branch-flow ruleset-bypass'" \
     "echo 'weak classic policy fixture'" \
     "echo 'classic bypass fixture'" \
     "echo 'ruleset apply fixture'" \
@@ -6177,6 +6229,7 @@ write_root_readiness_scripts() {
     "exit 0"
   write_file "$workspace/config/release-readiness-prs.tsv" \
     $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-universal-wallet-readiness\tdevelop\t1257\tfe4b4a5907db9ebe50b2a11148ffeadf257862de' \
+    $'# required_check_provenance_pin\trepo\thead\tbase\tcheck_name\tkind\tactor_id\tactor_slug\tauthority_id\tauthority_value' \
     "# repo	head	base	required_state	required_checks" \
     "soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merged	validate,build-and-test" \
     $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-xcm-evidence-release-commit\tdevelop\t1258\t38fb2f3b328e3a041c15e253b0abafe405ef8314' \
@@ -6254,8 +6307,11 @@ write_root_readiness_scripts() {
 	    "const inspectedLocalState = localStateFingerprint(source);" \
 	    "function localStateFingerprint() { const gitOperationState = snapshotGitOperationState(repositoryPath); JSON.stringify({ records, gitOperationState }); }" \
 	    "source identity changed between release preflight and postflight" \
-	    "const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 2;" \
+	    "const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 3;" \
 	    'if (report.schemaVersion !== SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION) usage(`source publication preflight report schemaVersion must be ${SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION}`);' \
+	    "rawReport = fs.readFileSync(target); const sha256 = crypto.createHash('sha256').update(rawReport).digest('hex'); earlyReportContext.preflightReportSha256 = sha256; if (report.phase !== 'preflight') usage(); if (report.preflightReportSha256 !== null) usage(); return { report, sha256 };" \
+	    "const report = { schemaVersion: SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION, phase, preflightReportSha256: preflightSnapshot?.sha256 ?? null };" \
+	    "if (earlyReportContext.phase === 'postflight' && !SHA256.test(earlyReportContext.preflightReportSha256 ?? '')) return;" \
 	    'const identityFields = [prHeadSha, headSha, upstreamSha, currentBranchRemoteSha, currentBranchRemotePresent, remoteHeadSha, remoteBranchPresent]' \
 	    "if (source.status === 'passed' && (!SHA1.test(source.prHeadSha ?? '') || source.prHeadSha !== source.headSha)) invalid();" \
 	    'function validateCurrentBranchRemote(source, addFailure) { if (source.branch === source.head) return; const endpoint = `repos/${source.repository}/git/ref/heads/${source.branch}`; }' \
@@ -6307,7 +6363,9 @@ write_root_readiness_scripts() {
 	    "iroha-actual-branch-remote-malformed authoritative current branch response is malformed: optimizations" \
 	    "matching-current-branch-reuses-configured-head" \
 	    'iroha-modeled-live-state iroha.headSha !== localHead iroha.prHeadSha !== prHead iroha.upstreamSha !== localHead currentBranchRemotePresent !== true currentBranchRemoteSha !== actualRemoteHead remoteBranchPresent !== false remoteHeadSha !== null expectedFailures = [ current branch mismatch: expected codex/kagemusha-selector-hardening, received optimizations local HEAD ${localHead} does not match authoritative current branch optimizations at ${actualRemoteHead} local HEAD ${localHead} does not match pull request head ${prHead} upstream mismatch: expected origin/codex/kagemusha-selector-hardening, received origin/optimizations cached upstream origin/optimizations at ${localHead} does not match authoritative current branch optimizations at ${actualRemoteHead} JSON.stringify(iroha.failures) !== JSON.stringify(expectedFailures)' \
-	    "legacy-v1-preflight-report" \
+	    "legacy-v2-preflight-report" \
+	    "expect_failure wrong-phase-preflight-report source publication preflight report phase must be preflight" \
+	    "expect_failure self-bound-preflight-report source publication preflight report must not bind another preflight report" \
 	    'FAKE_GH_QUERY_DIR duplicate authoritative ref query: $repository:$head matching-current-branch-reuses-configured-head' \
     "source publication readiness adversarial cases passed"
   local source_publication_fixture_index
@@ -6366,12 +6424,25 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/audit-release-pr-readiness.sh" \
     "#!/usr/bin/env bash" \
     "echo '--write-report'" \
+    "echo '--verify-open-candidate'" \
+    "echo '--verify-open-candidate cannot write a release-readiness report'" \
+    "echo 'if (open.isDraft !== false)'" \
+    "echo '__VERIFIED_OPEN_MERGE_CANDIDATE__'" \
+    "echo 'Protected-merge candidate verification passed against'" \
+    "echo 'protected merge requires an exact open-PR thread inventory'" \
+    "echo \"const hasCurrentHeadApproval = Array.isArray(open.reviews) && open.reviews.some((review) => review && review.state === 'APPROVED' && approvalCommit === reviewedHeadSha); if (open.reviewDecision !== 'APPROVED' || !hasCurrentHeadApproval) { blockers.push('protectedMergeCurrentHeadApprovalRequired=true'); }\"" \
     "echo 'RELEASE_PR_READINESS_REPORT'" \
     "echo 'requirements'" \
     "gh pr list --json headRefOid,isDraft,reviewDecision,mergeStateStatus,reviews" \
     "query_pr_list_rest_fallback" \
     "load_review_pins" \
+    "load_required_check_provenance_pins" \
     "echo 'missing immutable reviewed PR number/head commit pin'" \
+    "echo 'missing required-check provenance pin for example/repo:head -> base:check'" \
+    "echo \"['github-actions', 'check-run-app', 'commit-status']\"" \
+    "echo 'githubActionsChecks statusEntry'" \
+    "echo 'const provenanceResolution = validateRequiredProvenance(name, matches); if (!provenanceResolution.valid) { continue; } const authoritativeMatches = provenanceResolution.authoritativeMatches; const outcomes = new Set(authoritativeMatches.map((entry) => entry.outcome));'" \
+    "echo 'required-check-source-kind-mismatch check-run-app-mismatch actions-workflow-id-mismatch commit-status-creator-mismatch commit-status-target-origin-mismatch'" \
     "gh api repos/example/repo/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs?filter=latest&per_page=100" \
     'gh api repos/example/repo/check-suites/$suite_id' \
     "gh api repos/example/repo/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/status" \
@@ -6490,6 +6561,19 @@ write_root_readiness_scripts() {
     "echo 'wrong check-suite head SHA provenance fixture'" \
     "echo 'wrong check-suite identity provenance fixture'" \
     "echo 'wrong status-context head SHA provenance fixture'" \
+    "echo 'singleton required-check fixture missing provenance pin'" \
+    "echo 'singleton wrong GitHub app provenance fixture'" \
+    "echo 'singleton wrong workflow provenance fixture'" \
+    "echo 'wrong singleton status creator provenance fixture'" \
+    "echo 'wrong singleton status target origin provenance fixture'" \
+    "echo 'authoritative open ready protected-merge handoff fixture'" \
+    "echo 'protected-merge handoff rejects empty approval inventory fixture'" \
+    "echo 'protected-merge handoff rejects stale-only approval inventory fixture'" \
+    "echo 'protected-merge handoff rejects missing review-thread inventory fixture'" \
+    "echo 'protected-merge report isolation sentinel changed'" \
+    "echo 'protected-merge handoff cannot overwrite readiness report fixture'" \
+    "echo 'required_check_provenance_pin example/repo head base DCO check-run-app 19000 dco - -'" \
+    "echo 'required_check_provenance_pin example/repo head base Vercel commit-status 17000 vercel - https://vercel.com'" \
     "echo 'secret-safe provenance diagnostic fixture'" \
     "echo 'secret-safe check query failure fixture'" \
     "echo 'secret-safe check-suite query failure fixture'" \
@@ -6527,6 +6611,21 @@ write_root_readiness_scripts() {
     "exit 0"
   write_file "$workspace/scripts/merge-release-prs.sh" \
     "#!/usr/bin/env bash" \
+    'SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"' \
+    'ROOT_DIR="/fixture"' \
+    'CONFIG_FILE="/fixture/config/release-readiness-prs.tsv"' \
+    'GH_BIN="gh"' \
+    'READINESS_AUDIT="$SCRIPT_DIR/audit-release-pr-readiness.sh"' \
+    'verify_authoritative_open_candidate() {' \
+    '  local repo="$1" head="$2" base="$3" number="$4" sha="$5"' \
+    '  RELEASE_PR_READINESS_ROOT="$ROOT_DIR" \' \
+    '  RELEASE_PR_READINESS_CONFIG="$CONFIG_FILE" \' \
+    '  RELEASE_PR_READINESS_REPORT= \' \
+    '  GH_BIN="$GH_BIN" \' \
+    '    bash "$READINESS_AUDIT" \' \
+    '      --config "$CONFIG_FILE" \' \
+    '      --verify-open-candidate "$repo" "$head" "$base" "$number" "$sha"' \
+    '}' \
     "echo '--dry-run'" \
     "echo '--apply'" \
     "echo 'RELEASE_PR_MERGE_CONFIRM'" \
@@ -6549,9 +6648,22 @@ write_root_readiness_scripts() {
     "echo 'is_safe_branch_ref'" \
     "echo 'invalid head branch ref'" \
     "echo 'invalid base branch ref'" \
+    '      if ! verify_authoritative_open_candidate "$row_repo" "$row_head" "$row_base" "$row_number" "$row_sha"; then' \
+    '        exit 1' \
+    '      fi' \
+    '  if ! verify_authoritative_open_candidate "$repo" "$head" "$base" "$number" "$sha"; then' \
+    '    exit 1' \
+    '  fi' \
+    '  "$GH_BIN" pr merge "$number" --match-head-commit "$sha"' \
     "exit 0"
   write_file "$workspace/scripts/test-release-pr-merge.sh" \
     "#!/usr/bin/env bash" \
+    "echo 'expect_failure_without_merge'" \
+    "echo '# reviewed_pr_pin example/repo codex/release develop 42 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'" \
+    "echo '# required_check_provenance_pin example/repo codex/release develop validate github-actions 15368 github-actions 9001 .github/workflows/branch-flow.yml'" \
+    "echo 'repos/example/repo/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs?filter=latest&per_page=100'" \
+    "echo 'repos/example/repo/check-suites/1001'" \
+    "echo 'repos/example/repo/actions/runs?check_suite_id=1001&per_page=100'" \
     "echo 'ready dry-run'" \
     "echo 'apply confirmation gate'" \
     "echo 'missing-check:'" \
@@ -6565,6 +6677,10 @@ write_root_readiness_scripts() {
     "echo 'invalid head branch ref config'" \
     "echo 'invalid base branch ref config'" \
     "echo 'merge failure'" \
+    "echo 'singleton wrong GitHub app authority fixture'" \
+    "echo 'singleton wrong GitHub Actions workflow authority fixture'" \
+    "echo 'reviewed candidate identity mismatch fixture'" \
+    "echo 'malformed isDraft central preflight fixture'" \
     "exit 0"
   chmod +x "$workspace/scripts/resolve-release-pr-review-threads.sh" "$workspace/scripts/test-release-pr-review-thread-resolver.sh" "$workspace/scripts/merge-release-prs.sh" "$workspace/scripts/test-release-pr-merge.sh"
   write_file "$workspace/scripts/audit-private-overlay-readiness.sh" "#!/usr/bin/env bash" "exit 0"
@@ -6614,6 +6730,9 @@ write_root_readiness_scripts() {
 	    "echo 'audit:deployment-evidence'" \
 	    "echo 'deployment secret-like value gate'" \
 	    "echo 'secret-like value negative test'" \
+	    "echo 'authenticated GitHub publication-run gate'" \
+	    "echo 'exact attestation bundle verification gate'" \
+	    "echo 'blocked no-GitHub-call test'" \
 	    "echo 'production-smoke.mjs'" \
 	    "echo 'test/production-smoke.test.js'" \
 	    "echo 'production smoke registration challenge route'" \
@@ -6645,6 +6764,11 @@ write_root_readiness_scripts() {
 	    "echo 'missing deployment evidence template ready negative test'" \
 	    "echo 'missing deployment secret-like value gate'" \
 	    "echo 'missing secret-like value negative test'" \
+	    "echo 'missing authenticated GitHub publication-run gate'" \
+	    "echo 'missing exact attestation bundle verification gate'" \
+	    "echo 'missing explicit deployment gh authority gate'" \
+	    "echo 'missing blocked no-GitHub-call test'" \
+	    "echo 'missing exact attestation-bundle verification docs'" \
 	    "echo 'missing production Docker Compose contract'" \
     "echo 'bad production Docker Compose port'" \
     "echo 'bad production Docker Compose origins'" \
@@ -6815,7 +6939,7 @@ write_root_readiness_scripts() {
   write_file "$workspace/services/passkey-backup-challenge-service/docker-compose.production.yml" \
     "services:" \
     "  passkey-backup-challenge-service:" \
-	    "    image: passkey-backup-challenge-service:release" \
+	    '    image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"' \
 	    "    restart: unless-stopped" \
 	    "    read_only: true" \
 	    "    cap_drop:" \
@@ -6868,7 +6992,9 @@ write_root_readiness_scripts() {
 	    "scripts/production-deployment-evidence.json" \
 	    "npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json" \
 	    "PASSKEY_DEPLOYMENT_EXPECTED_COMMIT" \
-	    "npm run audit:deployment-evidence -- --require-ready"
+	    "npm run audit:deployment-evidence -- --require-ready" \
+	    "PASSKEY_DEPLOYMENT_GH_BIN exact recorded GitHub Actions run gh attestation verify --bundle" \
+	    "blocked diagnostic mode does not contact GitHub"
 	  write_file "$workspace/services/passkey-backup-challenge-service/docs/release-checklist.md" \
 	    "docker build -t passkey-backup-challenge-service:release ." \
 	    "docker compose -f docker-compose.production.yml up -d --build" \
@@ -6881,7 +7007,9 @@ write_root_readiness_scripts() {
 	    "npm run test:deployment-evidence-audit" \
 	    "PASSKEY_DEPLOYMENT_EXPECTED_COMMIT" \
 	    "npm run audit:deployment-evidence -- --require-ready" \
-	    "scripts/production-deployment-evidence.json"
+	    "scripts/production-deployment-evidence.json" \
+	    "PASSKEY_DEPLOYMENT_GH_BIN exact recorded Actions run and exact attestation ID gh attestation verify --bundle" \
+	    "blocked diagnostic mode must make no GitHub call"
 	  mkdir -p "$workspace/services/passkey-backup-challenge-service/scripts"
 	  write_file "$workspace/services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json" \
 	    '{' \
@@ -6913,6 +7041,18 @@ write_root_readiness_scripts() {
 	    "echo 'imageDigest must not be a placeholder image digest'" \
 	    "echo 'deployedCommit must not be a placeholder git commit'" \
 	    "echo 'PASSKEY_DEPLOYMENT_EXPECTED_COMMIT'" \
+	    "echo 'PASSKEY_DEPLOYMENT_GH_BIN'" \
+	    "echo 'function authenticatePublicationRecord(record, index, ghBinary)'" \
+	    'echo "actions/runs/${runId}"' \
+	    'echo "attestations/${record.imageDigest}"' \
+	    "echo 'run.repository.full_name === EXPECTED_PUBLICATION_REPOSITORY'" \
+	    "echo 'run.path === EXPECTED_IMAGE_PUBLICATION_WORKFLOW'" \
+	    "echo 'run.event === EXPECTED_PUBLICATION_EVENT'" \
+	    "echo 'run.head_sha === record.deployedCommit'" \
+	    "echo 'imageProvenanceAttestationUrl download must contain exactly one Sigstore bundle'" \
+	    "echo \"'--bundle' '--signer-workflow' '--source-digest' '--source-ref' '--deny-self-hosted-runners'\"" \
+	    "echo \"GH_HOST: 'github.com'\"" \
+	    "echo 'readyEvidenceRequired && !process.exitCode'" \
 	    "echo 'git -C service rev-parse HEAD'" \
 	    "echo 'deployedCommit must match expected deployment commit'" \
 	    "echo 'deploymentId must not be a placeholder deployment id'" \
@@ -6974,6 +7114,11 @@ write_root_readiness_scripts() {
 	    "echo 'multiple independently bound fresh deployment records'" \
 	    "echo 'fresh record cannot mask stale second deployment'" \
 	    "echo 'cross-deployment live health attestation substitution'" \
+	    "echo 'blocked evidence makes zero GitHub calls'" \
+	    "echo 'ready evidence authenticates exact GitHub Actions run and attestation bundle'" \
+	    "echo 'authenticated Actions run drift is rejected'" \
+	    "echo 'missing malformed or incomplete exact attestation bundle is rejected'" \
+	    "echo 'attestation verification failure is fail closed'" \
 	    "echo 'forged payload digest'" \
 	    "echo 'blocked evidence with partial record'" \
 	    "echo 'historical leap-day smoke is stale ready evidence'" \
@@ -7075,6 +7220,7 @@ write_root_readiness_scripts() {
     "function registrationCoordinationKey(storageKey, ownerSubjectHash) {}" \
     "function releaseRegistration(storageKey, ownerSubjectHash) {}" \
     "function storageMutationVersion(storageKey, ownerSubjectHash) {}" \
+    "function commitStateWithAppliedCallback() {}" \
     "// durable tombstone prevents final-owner takeover" \
     "const credential_store_invalid = true;" \
     "const credential_store_unavailable = true;" \
@@ -7141,7 +7287,7 @@ write_root_readiness_scripts() {
 	    "test('claimed registrations count toward capacity and release capacity after completion', () => {})" \
 	    "test('failed durable revocation does not mutate the in-memory credential state', () => {})" \
 	    "test('unknown-owner revoke-all cannot interfere with another subject claimed registration', () => {})" \
-	    "test('post-rename fsync and close failures keep durable and in-memory state aligned', () => {})"
+	    "test('post-rename failures keep durable state aligned and lifecycle guards active', () => {})"
 	  write_file "$workspace/services/passkey-backup-challenge-service/test/authorization.test.js" \
 	    "test('authorization scopes cover every ceremony and credential-lifecycle route exactly', () => {})" \
 	    "test('introspection fails closed on claim, binding, platform, expiry, and schema drift', () => {})"
@@ -7197,10 +7343,15 @@ write_root_readiness_scripts() {
 	    "echo --require-ready" \
 	    "echo 'SORA Nexus production evidence secret-like value gate'" \
 	    "echo 'SORA Nexus production evidence secret-like value negative test'" \
+	    'NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID="sora:nexus:global"' \
+	    "echo 'Strict SORA Nexus production evidence requires committed NEXUS_EXPECTED_CHAIN_ID to equal the canonical evidence chain identity'" \
 	    "echo 'Body preview'" \
 	    "echo 'Curl output'" \
 	    "echo \"--proto '=https'\"" \
-	    "echo 'curl --disable -sS'" \
+	    'run_isolated_nexus_curl() { /usr/bin/env -u CURL_CA_BUNDLE -u SSL_CERT_FILE -u SSL_CERT_DIR -u OPENSSL_CONF -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY -u http_proxy -u https_proxy -u all_proxy -u no_proxy curl "$@"; }' \
+	    'run_isolated_nexus_evidence_audit() { /usr/bin/env -u NEXUS_RECEIPT_BASE_URL -u NODE_OPTIONS -u SSL_CERT_FILE bash "$@"; }' \
+	    "echo 'run_isolated_nexus_curl --disable --version'" \
+	    "echo 'run_isolated_nexus_curl --disable -sS'" \
 	    "echo \"--proto-redir '=https'\"" \
 	    "echo '--max-redirs 0'" \
 	    "echo '--output \"\$response_file\"'" \
@@ -7258,7 +7409,9 @@ write_root_readiness_scripts() {
 		  write_file "$workspace/scripts/test-iroha-release-readiness-audit.sh" \
 		    "#!/usr/bin/env bash" \
 		    "echo configured mobile SDK release tag partial JS SDK GitHub release source" \
-		    "echo 'blocked Nexus production evidence cannot satisfy strict release'" \
+	    "echo 'blocked Nexus production evidence cannot satisfy strict release'" \
+	    "echo 'strict Nexus production evidence rejects a divergent live-health chain identity'" \
+	    "echo 'nested Nexus evidence audit ignores ambient transport authority'" \
 		    "echo 'missing Nexus production evidence secret-like value gate'" \
 		    "echo 'missing Nexus production evidence secret-like value negative test'" \
 		    "echo 'Nexus live health invalid body'" \
@@ -7270,8 +7423,9 @@ write_root_readiness_scripts() {
 	    "echo 'Nexus live health requires Nexus mode'" \
 	    "echo 'Nexus live health queue coherence'" \
 	    "echo 'Nexus live health response size bound'" \
-	    "echo 'curl argv disables ambient curlrc before every option'" \
+	    "echo 'curl transport boundary neutralizes ambient curlrc proxy and CA authority'" \
 	    "echo 'ambient curlrc cannot alter the Nexus request'" \
+	    "echo 'ambient CURL_CA_BUNDLE cannot alter the Nexus request'" \
 	    "echo 'Nexus curl contract rejects redirect following'" \
 	    "echo 'Nexus curl contract rejects insecure TLS'" \
 	    "echo 'Nexus curl contract rejects broadened transport protocols'" \
@@ -7574,6 +7728,7 @@ write_root_readiness_scripts() {
 	    "exit 0"
 	  write_file "$workspace/scripts/audit-iroha-production-send-readiness.sh" \
 	    "#!/usr/bin/env bash" \
+	    'run_gate() { local repo="$2" path="$3"; cd "$repo" || exit 1; IROHA_SEND_AUDIT_ROOT="$repo" bash "$path"; }' \
 	    "run_platform \"android\"" \
 	    "run_platform \"ios\"" \
 	    "run_platform \"browser-extension\"" \
@@ -7581,6 +7736,9 @@ write_root_readiness_scripts() {
 	    "echo 'blocked-readiness audit'"
 	  write_file "$workspace/scripts/test-iroha-production-send-readiness-audit.sh" \
 	    "#!/usr/bin/env bash" \
+	    "echo 'aggregate did not bind exact platform root'" \
+	    "echo 'aggregate did not enter exact platform working directory'" \
+	    "echo 'IROHA_SEND_AUDIT_ROOT=\"\$TMP_DIR/forged-ambient-root\" run_audit'" \
 	    "echo 'expected all six platform gates to run'" \
 	    "echo 'missing platform audit was not rejected'" \
 	    "echo 'non-executable platform self-test was not rejected'"
@@ -7633,11 +7791,40 @@ write_root_readiness_scripts() {
     "  NPM_BIN" \
     "  YARN_BIN" \
     "  BITCOIN_BROADCAST_EVIDENCE_ROOT" \
+    "  PASSKEY_DEPLOYMENT_GH_BIN" \
+    "  PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES" \
+    "  PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS" \
+    "  NODE_TLS_REJECT_UNAUTHORIZED" \
+    "  NODE_EXTRA_CA_CERTS" \
+    "  NODE_USE_ENV_PROXY" \
+    "  NODE_USE_SYSTEM_CA" \
+    "  OPENSSL_CONF" \
+    "  CURL_CA_BUNDLE" \
+    "  SSL_CERT_FILE" \
+    "  SSL_CERT_DIR" \
+    "  HTTP_PROXY" \
+    "  HTTPS_PROXY" \
+    "  ALL_PROXY" \
+    "  NO_PROXY" \
+    "  http_proxy" \
+    "  https_proxy" \
+    "  all_proxy" \
+    "  no_proxy" \
+    "  TON_INDEXER_SMOKE_TIMEOUT_MS" \
+    "  TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES" \
+    "  TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC" \
+    "  SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS" \
+    "  SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES" \
+    "  SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC" \
+    "  POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS" \
+    "  POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES" \
+    "  POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC" \
     ")" \
     "reject_production_environment_overrides() {" \
     "  echo 'NPM_CONFIG_*|npm_config_*|COREPACK_*|YARN_*|GIT_*'" \
     "  echo 'exported shell functions are forbidden outside explicit RELEASE_READINESS_TEST_MODE=1'" \
     "}" \
+    'resolve_canonical_tool() { local candidate resolved; resolved="$(/bin/realpath "$candidate" 2>/dev/null || true)"; printf '\''%s'\'' "$resolved"; }' \
     'PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"' \
     'NODE_BIN="$(resolve_canonical_tool node)"' \
     'NPM_BIN="$(resolve_canonical_tool npm)"' \
@@ -7652,6 +7839,7 @@ write_root_readiness_scripts() {
     "echo 'invalid release-readiness check status'" \
     "echo 'skipped release-readiness check must not carry exit code or log file'" \
     'validate_release_output_contracts() { echo "function assertObjectKeys"; echo "function assertUtcTimestamp"; echo "function assertNonNegativeInteger"; echo "function assertString"; echo "function assertLogFile"; echo "summary.json check keys"; echo "actions blocker keys"; echo "summary.json schemaVersion mismatch"; echo "actions.json schemaVersion mismatch"; echo "assertObjectKeys(summary, summaryKeys, '\''summary.json'\'')"; echo "assertObjectKeys(actions, actionsKeys, '\''actions.json'\'')"; echo "assertObjectKeys(summary.totals, totalsKeys, '\''summary.json totals'\'')"; echo "assertObjectKeys(actions.totals, totalsKeys, '\''actions.json totals'\'')"; echo "UTC ISO-8601 timestamp"; echo "must be a non-negative integer"; echo "actions.json generatedAt must match summary.json"; echo "blockers.md generatedAt must match summary.json"; echo "summary.json runLive must be boolean"; echo "actions.json runLive must be boolean"; echo "actions.json runLive must match summary.json"; echo "summary.json status mismatch"; echo "actions.json status mismatch"; echo "summary.json passed total mismatch"; echo "summary.json failed total mismatch"; echo "summary.json skipped total mismatch"; echo "summary.json total mismatch"; echo "actions.json passed total mismatch"; echo "actions.json failed total mismatch"; echo "actions.json skipped total mismatch"; echo "actions.json total mismatch"; echo "summary.json checks must be an array"; echo "actions.json blockers must be an array"; echo "summary.json check count mismatch"; echo "actions.json blocker count mismatch"; echo "blockers.md heading mismatch"; echo "blockers.md generatedAt line count mismatch"; echo "blockers.md runLive mismatch"; echo "blockers.md totals mismatch"; echo "blockers.md failed heading count mismatch"; echo "blockers.md failed heading order mismatch"; echo "blockers.md exit code mismatch"; echo "blockers.md log path mismatch"; echo "blockers.md recommended action mismatch"; echo "blockers.md externalPrerequisite mismatch"; echo "blockers.md unblockCategory mismatch"; echo "blockers.md verificationCommand mismatch"; echo "log file must be a regular file"; echo "failed log file must be non-empty"; echo "function logEvidencePreview"; echo "summary name for"; echo "summary exitCode for"; echo "summary logFile for"; echo "summary requiresExternalAction mismatch"; echo "summary recommendedAction mismatch"; echo "summary unblockCategory mismatch"; echo "summary externalPrerequisite mismatch"; echo "summary verificationCommand mismatch"; echo "actions requiresExternalAction mismatch"; echo "actions slug at index"; echo "actions name mismatch"; echo "actions exitCode for"; echo "actions exitCode mismatch"; echo "actions logFile for"; echo "actions logFile mismatch"; echo "actions recommendedAction mismatch"; echo "actions unblockCategory mismatch"; echo "actions externalPrerequisite mismatch"; echo "actions verificationCommand for"; echo "actions verificationCommand mismatch"; echo "blockers.md requiresExternalAction mismatch"; echo "actions blocker order mismatch"; echo "blockers.md section order mismatch"; echo "blockers.md missing slug line"; echo "blockers.md duplicate slug line"; echo "blockers.md unexpected failed-checks section"; echo "blockers.md unexpected no-blockers success message"; echo "blockers.md missing skipped-checks section"; echo "blockers.md skipped section order mismatch"; echo "actions evidencePreview mismatch"; echo "blockers.md evidence preview mismatch"; echo "blockers.md evidence preview block count mismatch"; echo "Validated release-readiness output contracts"; echo "Release readiness output contract validation failed"; }' \
+	'terminal_output_contract_failure_contract() { output_contract_log="$REPORT_DIR/release-output-contract.log"; : > "$output_contract_log"; if validate_release_output_contracts > "$output_contract_log" 2>&1; then :; else printf '\''%s\n'\'' "Release readiness output contract validation failed" >> "$output_contract_log"; record_check_result "Release readiness output contracts" "release-output-contract" "failed" 1 "$output_contract_log"; write_summary; write_action_manifest; write_blocker_report; output_contract_revalidation_log="$REPORT_DIR/release-output-contract-revalidation.log"; : > "$output_contract_revalidation_log"; validate_release_output_contracts > "$output_contract_revalidation_log" 2>&1; fi; }' \
     "echo 'actions evidencePreview must be a string'" \
     "echo 'fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io'" \
     "echo '--root \"\$ROOT_DIR/fearless-site-web\"'" \
@@ -7715,7 +7903,11 @@ write_root_readiness_scripts() {
     'unblock_category_for_slug() { echo "local-code"; }' \
     'external_prerequisite_for_slug() { echo "No external prerequisite is expected"; }' \
     'write_action_manifest() { echo "\"recommendedAction\": \"fix\""; echo "\"requiresExternalAction\": true"; echo "\"unblockCategory\": \"local-code\""; echo "\"externalPrerequisite\": \"No external prerequisite is expected\""; echo "\"verificationCommand\": \"bash scripts/audit-plan-readiness.sh\""; echo "\"evidencePreview\": \"evidence\""; echo "actions.json"; }' \
-    'export_unblock_bundle() { echo "export-release-unblock-bundle.sh"; echo "verify-release-unblock-bundle.sh"; echo "Release unblock bundle export/verification failed"; }' \
+	'export_unblock_bundle() { local export_script="export-release-unblock-bundle.sh"; local verify_script="verify-release-unblock-bundle.sh"; local log_file="release-unblock-bundle.log"; "$export_script" --verify-with "$verify_script" > "$log_file" 2>&1; echo "Release unblock bundle export/verification failed"; }' \
+	'terminal_bundle_failure_contract() { if ! export_unblock_bundle; then record_check_result "Release unblock bundle export/verification" "release-unblock-bundle" "failed" 1 "release-unblock-bundle.log"; write_summary; write_action_manifest; write_blocker_report; validate_release_output_contracts; fi; }' \
+	'echo "Upstream or vendor every carried iOS shared-features/native-crypto delta"' \
+	'echo "requires_external_action_for_slug() ios-shared-features-delta"' \
+	'echo "ios-delta-blocked expected --skip-live to retain blocked iOS shared-features diagnostics"' \
 	    'write_blocker_report() { echo "# Release Readiness Blockers"; echo "Recommended action"; echo "Requires external action:"; echo "Unblock category:"; echo "External prerequisite:"; echo "Verification command:"; echo "Get every PR in config/release-readiness-prs.tsv approved"; echo "all GitHub review conversations resolved including outdated unresolved threads"; echo "resolve-release-pr-review-threads.sh --dry-run"; echo "merge-release-prs.sh --dry-run"; echo "Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift"; echo "Android public artifact boundary and handoff bundle"; echo "public dependency upstream handoff bundle"; echo "Restore the iOS shared-features delta self-test/report gate"; echo "Record the passkey backup image digest"; echo "healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json"; echo "independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate"; echo "PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate"; echo "AAB upload-key evidence is rejected"; echo "absence or mismatch keeps passkey flags disabled"; echo "live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "keep Android/iOS passkey backup flags disabled"; echo "Pin NEXUS_EXPECTED_BUILD_COMMIT in config/iroha-release-readiness.env to the exact deployed Iroha build"; echo "bounded, non-redirecting HTTP 200 application/json Torii/Nexus status response with fresh observed_at_ms and last_block_committed_at_ms"; echo "exact ordered SORA routing policy (default 0/0, governance 1/1, smartcontract::deploy 2/2)"; echo "unsealed dataspace_catalog containing ready canonical 0/0, 1/1, and 2/2 targets"; echo "Nexus route publication, canary, and wallet live transfer smoke evidence"; echo "Record E2E transfer evidence for every required Android XCM route"; echo "xcm-production-evidence.json, with one record per scripts/xcm-required-routes.tsv route"; echo "0x-prefixed 32-byte extrinsicHash"; echo "--require-gap-file scripts/xcm-discovery-only-routes.tsv"; echo "Run a funded Bitcoin testnet send through the web wallet smoke flow"; echo "confirmed indexer status.block_time proof"; echo "evidence timestamp is at or after the confirmed block time"; echo "registry/mainnet.json with reviewed non-placeholder mainnet contract addresses"; echo "Record the TI Docker image digest"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=ti.soramitsu.io with TON mainnet identity"; echo "healthInfo.serviceId=ti.soramitsu.io"; echo "healthInfo.lastMasterSeqno"; echo "Record the SI Docker image digest"; echo "Deploy the current SI image with Solana mainnet configuration"; echo "Current SI image deployed with Solana mainnet configuration"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with solana mainnet identity"; echo "healthInfo.ok=true with healthInfo.serviceId=si.soramitsu.io"; echo "PI production smoke is failing at https://pi.soramitsu.io/graphql until the current image is deployed"; echo "Record operator-attested evidence only after the current-image production smoke passes"; echo "Record the PI Docker image digest"; echo "health.service=polkaswap-indexer"; echo "health.serviceId=ti.soramitsu.io"; echo "TI production smoke also requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=ti.soramitsu.io"; echo "chainId=ton:mainnet"; echo "OpenAPI title TONSWAP Indexer API"; echo "health no longer advertises api.testnet.solana.com"; echo "SI production smoke requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=si.soramitsu.io"; echo "chainId=solana:mainnet"; echo "OpenAPI title Solswap Indexer API"; echo "Deploy the current polkaswap-indexer image to https://pi.soramitsu.io/graphql"; echo "health.serviceId=pi.soramitsu.io"; echo "health.schemaVersion=1"; echo "health.ecosystem=sora2"; echo "health.chainId=sora:mainnet"; echo "health.publicBaseUrl=https://pi.soramitsu.io/graphql"; echo "TON and Solana/Solswap indexer contracts"; }' \
 	    "echo 'serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with Solana mainnet identity'" \
 	    "echo 'healthInfo with ok=true, serviceId=si.soramitsu.io'" \
@@ -7771,7 +7963,9 @@ write_root_readiness_scripts() {
     "echo 'secret-like Bitcoin broadcast evidence value'" \
     "echo 'secret-like deployment evidence value'" \
     "echo 'source_publication_report_has_unsafe_iroha_state()'" \
-    "echo \"report.schemaVersion !== 2 report.status !== 'failed' report.checkRemote !== true irohaRows.length !== 1\"" \
+    "echo \"preflightBytes = fs.readFileSync(preflightPath) preflightSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex') report.schemaVersion !== 3 report.phase !== 'postflight' report.preflightReportSha256 !== preflightSha256 report.status !== 'failed' report.checkRemote !== true preflight.schemaVersion !== 3 preflight.phase !== 'preflight' preflight.preflightReportSha256 !== null irohaRows.length !== 1\"" \
+    "echo \"expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha'] identityFields = [ preflightSources = [preflight.workspaceSource postflightSources = [report.workspaceSource source publication preflight did not pass before release checks preflightSources.length === 9 && postflightSources.length === 9 preflightSource.path !== expectedSourcePaths[index] postflightSource.path !== expectedSourcePaths[index] preflightSource.status === 'passed' hasOwn(preflightSource, field) hasOwn(postflightSource, field) preflightSource[field] === postflightSource[field] postflightSource.failures.includes(preflightContinuityDiagnostic) if (!hasExactPreflightPostflightPair) process.exit(1)\"" \
+    "echo \"identityFields = ['path', 'repository', 'head', 'base', 'prNumber', 'prUrl', 'prState', 'prHeadSha', 'repositoryPath', 'originUrl', 'originRepository', 'branch', 'headSha', 'upstream', 'upstreamSha', 'currentBranchRemoteSha', 'currentBranchRemotePresent', 'remoteHeadSha', 'remoteBranchPresent']\"" \
     "echo 'unsafeFailures = new Set( MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_START sequencer'" \
     "echo 'hasCanonicalCounts unmergedFailure iroha.unmergedCount > 0 report.totals.unmerged >= iroha.unmergedCount iroha.failures.includes(unmergedFailure) hasOperation || hasUnmergedIndex'" \
     "echo \"expectedHead = 'codex/kagemusha-selector-hardening' expectedBase = 'optimizations' expectedPrNumber = 5612 expectedPrUrl = 'https://github.com/hyperledger-iroha/iroha/pull/5612' hasCanonicalReviewedSourceIdentity iroha.head === expectedHead iroha.base === expectedBase iroha.prNumber === expectedPrNumber iroha.prUrl === expectedPrUrl iroha.prState === 'merged' branchMismatchFailure upstreamMismatchFailure current branch mismatch: expected \${iroha.head}, received \${iroha.branch} hasReviewedSourceMismatch hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch\"" \
@@ -7782,7 +7976,7 @@ write_root_readiness_scripts() {
     "echo 'failure_count += 1'" \
     "echo 'if (\$0 !~ /^  - \\.\\.\\/iroha /) invalid = 1'" \
     "echo 'marker_count == 1 && failure_count > 0 && invalid == 0'" \
-    "echo 'source_publication_report_has_unsafe_iroha_state \"\$source_report\"'" \
+    "echo 'source_publication_report_has_unsafe_iroha_state \"\$source_report\" \"\$SOURCE_PUBLICATION_PREFLIGHT_REPORT\"'" \
     "echo 'recommended_action_for_check() plan_readiness_is_external_iroha_only \"\$log_file\" Do not edit or publish from the unsafe external ../iroha checkout'" \
     "echo \"requires_external_action_for_check() printf 'true'\"" \
     "echo 'unblock_category_for_check() upstream-dependency'" \
@@ -7794,8 +7988,55 @@ write_root_readiness_scripts() {
     "echo 'Do not edit or publish from an unfinished external Iroha Git operation'" \
     "echo 'Have its owner produce a stable reviewed source commit and restore the pinned Iroha JS SDK release artifact so package.json exports ./ivm-artifact and the packaged runtime/declaration surface passes the wallet artifact validator'" \
     "echo 'A stable owner-reviewed Iroha source commit; a pinned Iroha JS SDK release artifact exporting ./ivm-artifact and passing packaged runtime/declaration validation'" \
-    'run_passkey_deployment_evidence() { cd services/passkey-backup-challenge-service; template_report="build/reports/production-deployment-evidence-template.json"; "$ROOT_DIR/scripts/test-passkey-android-origin-parity-audit.sh"; "$NPM_BIN" run generate:deployment-evidence-template -- --output "$template_report"; cp "$template_report" "$REPORT_DIR/passkey-deployment-evidence-template.json"; if [[ "$RUN_LIVE" == true ]]; then "$NPM_BIN" run audit:deployment-evidence -- --require-ready; "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh" --require-ready; else "$NPM_BIN" run audit:deployment-evidence; "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh"; fi; }' \
-	    'run_passkey_production_smoke() { cd services/passkey-backup-challenge-service; PASSKEY_BACKUP_BASE_URL="https://backup.fearlesswallet.io" PASSKEY_BACKUP_SMOKE_GRANT_HELPER="/run/secrets/passkey-smoke-grant-helper" PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 "$NPM_BIN" run smoke:production; }' \
+    'run_passkey_deployment_evidence() {' \
+    '  cd services/passkey-backup-challenge-service' \
+    '  template_report="build/reports/production-deployment-evidence-template.json"' \
+    '  "$ROOT_DIR/scripts/test-passkey-android-origin-parity-audit.sh"' \
+    '  "$NPM_BIN" run generate:deployment-evidence-template -- --output "$template_report"' \
+    '  cp "$template_report" "$REPORT_DIR/passkey-deployment-evidence-template.json"' \
+    '  if [[ "$RUN_LIVE" == true ]]; then' \
+    '    PASSKEY_DEPLOYMENT_EVIDENCE_ROOT="$ROOT_DIR/services/passkey-backup-challenge-service" \' \
+    '      PASSKEY_DEPLOYMENT_GH_BIN="$RELEASE_GH_BIN" \' \
+    '      "$NPM_BIN" run audit:deployment-evidence -- --require-ready' \
+    '    "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh" --require-ready' \
+    '  else' \
+    '    "$NPM_BIN" run audit:deployment-evidence' \
+    '    "$ROOT_DIR/scripts/audit-passkey-android-origin-parity.sh"' \
+    '  fi' \
+    '}' \
+	    'run_passkey_production_smoke() {' \
+	    '  cd services/passkey-backup-challenge-service' \
+	    '  /usr/bin/env \' \
+	    '    -u NODE_TLS_REJECT_UNAUTHORIZED \' \
+	    '    -u NODE_EXTRA_CA_CERTS \' \
+	    '    -u NODE_USE_ENV_PROXY \' \
+	    '    -u NODE_USE_SYSTEM_CA \' \
+	    '    -u OPENSSL_CONF \' \
+	    '    -u SSL_CERT_FILE \' \
+	    '    -u SSL_CERT_DIR \' \
+	    '    -u HTTP_PROXY \' \
+	    '    -u HTTPS_PROXY \' \
+	    '    -u ALL_PROXY \' \
+	    '    -u NO_PROXY \' \
+	    '    -u http_proxy \' \
+	    '    -u https_proxy \' \
+	    '    -u all_proxy \' \
+	    '    -u no_proxy \' \
+	    '    -u NODE_PATH \' \
+	    '    HOME=/var/empty \' \
+	    '    XDG_CONFIG_HOME=/var/empty \' \
+	    '    NPM_CONFIG_USERCONFIG=/dev/null \' \
+	    '    npm_config_userconfig=/dev/null \' \
+	    '    NPM_CONFIG_GLOBALCONFIG=/dev/null \' \
+	    '    npm_config_globalconfig=/dev/null \' \
+	    '    NODE_OPTIONS= \' \
+	    '    PASSKEY_BACKUP_BASE_URL="https://backup.fearlesswallet.io" \' \
+	    '    PASSKEY_BACKUP_SMOKE_GRANT_HELPER="/run/secrets/passkey-smoke-grant-helper" \' \
+	    '    PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 \' \
+	    '    PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=1048576 \' \
+	    '    PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS=2000 \' \
+	    '    "$NPM_BIN" run smoke:production' \
+	    '}' \
 	    "echo 'cd services/passkey-backup-challenge-service && PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production'" \
 	    "echo 'Provision PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper as a readable executable'" \
 	    "echo 'route surface, plus PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper provisioned as a readable executable'" \
@@ -7813,10 +8054,11 @@ write_root_readiness_scripts() {
     'echo "$forbidden is forbidden outside explicit RELEASE_READINESS_TEST_MODE=1"' \
     'echo "SOURCE_PUBLICATION_WRAPPER_TEST_MODE SOURCE_PUBLICATION_WRAPPER_TEST_ROOT SOURCE_PUBLICATION_NODE_BIN"' \
     'clear_release_owned_preflight_outputs() { return 0; }' \
+    'validate_release_cleanup_target() { return 0; }' \
     'rm -f "$template_report" "$release_template_report"' \
     'run_polkaswap_deployment_evidence() { template_report="build/reports/production-deployment-evidence-template.json"; "$YARN_BIN" generate:deployment-evidence-template --output "$template_report"; "$YARN_BIN" audit:deployment-evidence --require-ready; }' \
     'run_android_public_dependency_provenance() { cd fearless-Android; FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android ./scripts/ensure-fearless-utils.sh; bash ./scripts/test-public-dependency-upstream-delta-export.sh; bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta; ./scripts/audit-public-artifacts.sh --strict-provenance; }' \
-    'run_ios_shared_features_delta() { cd fearless-iOS; bash scripts/deps/test-shared-features-delta-report.sh; bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json; }' \
+    'run_ios_shared_features_delta() { cd fearless-iOS; bash scripts/deps/test-shared-features-delta-report.sh; local -a readiness_args=(); if [[ "$RUN_LIVE" == true ]]; then readiness_args+=(--require-ready); fi; bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json "${readiness_args[@]}"; }' \
     "run_check_with_network_retries \"GitHub governance\" \"github-governance\" run_github_governance" \
     "RELEASE_READINESS_NETWORK_ATTEMPTS" \
     "bash scripts/audit-github-governance.sh" \
@@ -7858,9 +8100,11 @@ write_root_readiness_scripts() {
     "run_check 'TI deployment evidence' 'ti-deployment-evidence' run_ton_deployment_evidence" \
     "run_check 'SI deployment evidence' 'si-deployment-evidence' run_solswap_deployment_evidence" \
     "run_check 'PI deployment evidence' 'pi-deployment-evidence' run_polkaswap_deployment_evidence" \
-    "TON_INDEXER_BASE_URL=https://ti.soramitsu.io npm run smoke:production" \
-    "SOLSWAP_INDEXER_BASE_URL=https://si.soramitsu.io npm run smoke:production" \
-    'run_polkaswap_production_smoke() { POLKASWAP_INDEXER_BASE_URL="https://pi.soramitsu.io/graphql" "$YARN_BIN" smoke:production; }' \
+    'run_ton_production_smoke() {' \
+    '  TON_INDEXER_BASE_URL="https://ti.soramitsu.io" TON_INDEXER_SMOKE_TIMEOUT_MS=10000 TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC=300 "$NPM_BIN" run smoke:production' \
+    '}' \
+    'run_solswap_production_smoke() { SOLSWAP_INDEXER_BASE_URL="https://si.soramitsu.io" SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS=10000 SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC=120 "$NPM_BIN" run smoke:production; }' \
+    'run_polkaswap_production_smoke() { POLKASWAP_INDEXER_BASE_URL="https://pi.soramitsu.io/graphql" POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS=10000 POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC=300 "$YARN_BIN" smoke:production; }' \
     "from ../polkaswap-indexer, rerun POLKASWAP_INDEXER_BASE_URL=https://pi.soramitsu.io/graphql bash ../fearless/scripts/run-pinned-yarn.sh smoke:production" \
     "write_summary" \
     "write_action_manifest" \
@@ -7869,8 +8113,10 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/test-release-readiness-audit.sh" \
     "#!/usr/bin/env bash" \
     "echo 'SOURCE_PUBLICATION_WRAPPER_TEST_MODE|1'" \
+    "echo 'ios-delta-blocked'" \
+    "echo 'expected --skip-live to retain blocked iOS shared-features diagnostics'" \
     "assert_summary() { echo 'summary.json must exist'; echo 'check summary recommendedAction'; echo 'check summary requiresExternalAction'; echo 'check summary unblockCategory'; echo 'check summary externalPrerequisite'; echo 'check summary verificationCommand'; }" \
-    "assert_action_manifest() { echo 'actions.json must exist'; echo 'blocker requiresExternalAction'; echo 'blocker unblockCategory'; echo 'blocker externalPrerequisite'; echo 'blocker verificationCommand'; echo 'MAX_EVIDENCE_PREVIEW_CHARS=20'; echo 'line capped to final 20 characters'; echo 'excerpt capped at 20 characters'; echo 'release unblock bundle verification failure'; echo 'unblock-bundle/manifest.json'; echo 'unblock-bundle/verify-blockers.sh'; echo 'unblock-bundle/SHA256SUMS'; }" \
+    "assert_action_manifest() { echo 'actions.json must exist'; echo 'blocker requiresExternalAction'; echo 'blocker unblockCategory'; echo 'blocker externalPrerequisite'; echo 'blocker verificationCommand'; echo 'MAX_EVIDENCE_PREVIEW_CHARS=20'; echo 'line capped to final 20 characters'; echo 'excerpt capped at 20 characters'; echo 'release unblock bundle verification failure'; echo 'release-unblock-bundle=failed'; echo 'unverified release unblock bundle reached the canonical output path'; echo 'release-unblock-bundle.log'; echo 'release-output-contract=failed'; echo 'invalid release-readiness outputs reached canonical bundle publication'; echo 'release-output-contract.log'; echo 'grep -q \"blockers.md unexpected failed-checks section\" \"\$report_dir/release-output-contract.log\"'; echo '\"\$verifier\" --bundle \"\$output\" --published-path \"\$final_output\"'; echo 'unblock-bundle/manifest.json'; echo 'unblock-bundle/verify-blockers.sh'; echo 'unblock-bundle/SHA256SUMS'; }" \
     "echo 'check slugs must be unique'" \
     "echo 'duplicate check slug fixture'" \
     "echo 'invalid check status fixture'" \
@@ -7884,13 +8130,18 @@ write_root_readiness_scripts() {
     "echo 'source publication self-test failure'" \
 	    "echo 'skip-live Iroha-only plan failure ignores stale live source report'" \
 	    "echo 'expected skip-live stale-report regression to export and verify an unblock bundle'" \
-	    "echo 'totals:{sources:9,passed:failed?8:9,failed:failed?1:0,staged:0}'" \
-	    "echo 'postflight-continuity Iroha-only plan failure plan-unpublished-iroha-postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift-postflight-continuity authoritative-current drift may equal merged PR head plan-unpublished-iroha-drift-current-equals-pr legacy v1 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v1 missing actual-branch Iroha publication proof stays local|plan-unpublished-iroha-missing-actual-proof forged actual-branch Iroha publication proof stays local|plan-unpublished-iroha-forged-actual-proof mismatched Iroha PR-head diagnostic stays local|plan-unpublished-iroha-mismatched-proof-failure missing Iroha PR-head SHA proof stays local|plan-unpublished-iroha-missing-pr-head forged Iroha PR-head SHA proof stays local|plan-unpublished-iroha-forged-pr-head missing Iroha PR-head mismatch diagnostic stays local|plan-unpublished-iroha-missing-pr-diagnostic invalid Iroha configured-ref proof stays local|plan-unpublished-iroha-invalid-configured-ref-proof missing Iroha ignored-output diagnostic stays local|plan-unpublished-iroha-missing-ignored-diagnostic stale Iroha local/current diagnostic stays local|plan-unpublished-iroha-stale-current-diagnostic unrelated extra Iroha publication failure stays local|plan-unpublished-iroha-extra-failure wrong Iroha postflight-continuity marker stays local|plan-unpublished-iroha-wrong-continuity-marker duplicate Iroha postflight-continuity marker stays local|plan-unpublished-iroha-duplicate-continuity-marker reordered Iroha postflight-continuity marker stays local|plan-unpublished-iroha-reordered-continuity-marker Iroha postflight-continuity marker plus unrelated failure stays local|plan-unpublished-iroha-continuity-marker-plus-extra missing Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-missing-current-diagnostic missing Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-missing-cached-diagnostic reordered Iroha authoritative-current drift diagnostics stay local|plan-unpublished-iroha-drift-reordered-diagnostics forged Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-forged-current-diagnostic forged Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-forged-cached-diagnostic unrelated extra Iroha authoritative-current drift failure stays local|plan-unpublished-iroha-drift-unrelated-extra wrong Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-wrong-continuity-marker duplicate Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-duplicate-continuity-marker Iroha authoritative-current drift marker plus unrelated failure stays local|plan-unpublished-iroha-drift-continuity-marker-plus-extra Iroha authoritative-current drift proof with synchronized current SHA stays local|plan-unpublished-iroha-drift-current-equals-local Iroha authoritative-current drift proof with divergent cached upstream stays local|plan-unpublished-iroha-drift-upstream-differs-from-local Iroha authoritative-current drift proof with local PR head stays local|plan-unpublished-iroha-drift-pr-equals-local Iroha authoritative-current drift proof with present configured ref stays local|plan-unpublished-iroha-drift-configured-ref-present Iroha authoritative-current drift proof with configured-ref SHA stays local|plan-unpublished-iroha-drift-configured-ref-sha Iroha authoritative-current drift proof with not-present current ref stays local|plan-unpublished-iroha-drift-current-ref-not-present Iroha authoritative-current drift proof with nonzero worktree count stays local|plan-unpublished-iroha-drift-nonzero-count'" \
-	    "echo 'passkey production smoke must use the canonical grant helper path'" \
+	    "echo 'stablePaths = [\".\",\"fearless-Android\",\"fearless-iOS\",\"fearless-wallet-web\",\"fearless-site-web\",\"../ton-indexer\",\"../solswap-indexer\",\"../polkaswap-indexer\"] repositories = [...stableSources.slice(1), currentIrohaRow] sources = [workspaceSource, ...repositories] totals:{sources:9,...sourceTotals}'" \
+	    "echo 'postflight-continuity Iroha-only plan failure plan-unpublished-iroha-postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift postflight-continuity authoritative-current drift Iroha-only plan failure plan-unpublished-iroha-drift-postflight-continuity authoritative-current drift may equal merged PR head plan-unpublished-iroha-drift-current-equals-pr legacy v2 Iroha publication proof stays local|plan-unpublished-iroha-legacy-v2 wrong-phase Iroha publication proof stays local|plan-unpublished-iroha-wrong-report-phase wrong-preflight-digest Iroha publication proof stays local|plan-unpublished-iroha-wrong-preflight-digest missing actual-branch Iroha publication proof stays local|plan-unpublished-iroha-missing-actual-proof forged actual-branch Iroha publication proof stays local|plan-unpublished-iroha-forged-actual-proof mismatched Iroha PR-head diagnostic stays local|plan-unpublished-iroha-mismatched-proof-failure missing Iroha PR-head SHA proof stays local|plan-unpublished-iroha-missing-pr-head forged Iroha PR-head SHA proof stays local|plan-unpublished-iroha-forged-pr-head missing Iroha PR-head mismatch diagnostic stays local|plan-unpublished-iroha-missing-pr-diagnostic invalid Iroha configured-ref proof stays local|plan-unpublished-iroha-invalid-configured-ref-proof missing Iroha ignored-output diagnostic stays local|plan-unpublished-iroha-missing-ignored-diagnostic stale Iroha local/current diagnostic stays local|plan-unpublished-iroha-stale-current-diagnostic preflight/postflight source-row mismatch stays local|plan-unpublished-iroha-preflight-row-mismatch wrong Iroha postflight-continuity marker stays local|plan-unpublished-iroha-wrong-continuity-marker duplicate Iroha postflight-continuity marker stays local|plan-unpublished-iroha-duplicate-continuity-marker reordered Iroha postflight-continuity marker stays local|plan-unpublished-iroha-reordered-continuity-marker Iroha postflight-continuity marker plus unrelated failure stays local|plan-unpublished-iroha-continuity-marker-plus-extra missing Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-missing-current-diagnostic missing Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-missing-cached-diagnostic reordered Iroha authoritative-current drift diagnostics stay local|plan-unpublished-iroha-drift-reordered-diagnostics forged Iroha authoritative-current drift diagnostic stays local|plan-unpublished-iroha-drift-forged-current-diagnostic forged Iroha cached-upstream drift diagnostic stays local|plan-unpublished-iroha-drift-forged-cached-diagnostic unrelated extra Iroha authoritative-current drift failure stays local|plan-unpublished-iroha-drift-unrelated-extra wrong Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-wrong-continuity-marker duplicate Iroha authoritative-current drift continuity marker stays local|plan-unpublished-iroha-drift-duplicate-continuity-marker Iroha authoritative-current drift marker plus unrelated failure stays local|plan-unpublished-iroha-drift-continuity-marker-plus-extra Iroha authoritative-current drift proof with synchronized current SHA stays local|plan-unpublished-iroha-drift-current-equals-local Iroha authoritative-current drift proof with divergent cached upstream stays local|plan-unpublished-iroha-drift-upstream-differs-from-local Iroha authoritative-current drift proof with local PR head stays local|plan-unpublished-iroha-drift-pr-equals-local Iroha authoritative-current drift proof with present configured ref stays local|plan-unpublished-iroha-drift-configured-ref-present Iroha authoritative-current drift proof with configured-ref SHA stays local|plan-unpublished-iroha-drift-configured-ref-sha Iroha authoritative-current drift proof with not-present current ref stays local|plan-unpublished-iroha-drift-current-ref-not-present Iroha authoritative-current drift proof with nonzero worktree count stays local|plan-unpublished-iroha-drift-nonzero-count'" \
+	    "echo 'passkey production smoke must use the canonical helper, timeout, response-size, and isolated Node TLS/proxy/CA environment'" \
+	    "echo 'passkey production smoke inherited forbidden Node TLS/proxy/CA environment'" \
+	    "echo 'passkey production smoke must isolate Node and npm configuration'" \
+	    "echo 'passkey ready evidence must receive the root authenticated gh authority'" \
 	    "echo 'passkey smoke recommended action missing executable grant helper'" \
 	    "echo 'passkey smoke external prerequisite missing executable grant helper'" \
     "echo 'production exported-function injection unexpectedly passed'" \
     "echo 'production PATH sanitization invoked an injected executable'" \
+    "echo 'production cleanup followed an intermediate build symlink'" \
+    "echo 'test mode report-parent equality deleted the isolated workspace'" \
     "echo 'test mode unexpectedly targeted the production workspace root'" \
     "echo 'stale deployment templates cannot survive successful no-op generators'" \
     "echo 'skipped check metadata fixture'" \
@@ -8052,6 +8303,9 @@ write_root_readiness_scripts() {
     "echo passkey-production-smoke=failed" \
     "echo passkey-production-smoke=skipped" \
     "echo 'single passkey production smoke failure'" \
+    "echo 'TI production smoke must use the canonical timeout, response-size, and health-lag limits'" \
+    "echo 'SI production smoke must use the canonical timeout, response-size, and health-age limits'" \
+    "echo 'PI production smoke must use the canonical timeout, response-size, and indexer-age limits'" \
     "echo android-xcm-production-evidence=passed" \
     "echo 'xcm-registry-fail'" \
     "echo 'xcm-effective-test-fail'" \
@@ -8086,9 +8340,37 @@ write_root_readiness_scripts() {
     "production_override_cases=(" \
     "  'NPM_BIN|/usr/bin/true'" \
     "  'YARN_BIN|/usr/bin/true'" \
-    "  'SOURCE_PUBLICATION_WRAPPER_TEST_MODE|1'"
+    "  'SOURCE_PUBLICATION_WRAPPER_TEST_MODE|1'" \
+    "  'PASSKEY_DEPLOYMENT_GH_BIN|/tmp/forged-passkey-gh'" \
+    "  'PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES|5242880'" \
+    "  'PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS|10000'" \
+    "  'NODE_TLS_REJECT_UNAUTHORIZED|0'" \
+    "  'NODE_EXTRA_CA_CERTS|/tmp/forged-ca.pem'" \
+    "  'NODE_USE_ENV_PROXY|1'" \
+    "  'NODE_USE_SYSTEM_CA|1'" \
+    "  'OPENSSL_CONF|/tmp/forged-openssl.cnf'" \
+    "  'CURL_CA_BUNDLE|/tmp/forged-ca.pem'" \
+    "  'SSL_CERT_FILE|/tmp/forged-ca.pem'" \
+    "  'SSL_CERT_DIR|/tmp/forged-ca-dir'" \
+    "  'HTTP_PROXY|http://127.0.0.1:1'" \
+    "  'HTTPS_PROXY|http://127.0.0.1:1'" \
+    "  'ALL_PROXY|socks5://127.0.0.1:1'" \
+    "  'NO_PROXY|*'" \
+    "  'http_proxy|http://127.0.0.1:1'" \
+    "  'https_proxy|http://127.0.0.1:1'" \
+    "  'all_proxy|socks5://127.0.0.1:1'" \
+    "  'no_proxy|*'" \
+    "  'TON_INDEXER_SMOKE_TIMEOUT_MS|60000'" \
+    "  'TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'" \
+    "  'TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC|3600'" \
+    "  'SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS|60000'" \
+    "  'SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'" \
+    "  'SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC|900'" \
+    "  'POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS|60000'" \
+    "  'POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES|5242880'" \
+    "  'POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC|900'"
   local release_override_fixture_index
-  for release_override_fixture_index in $(seq 4 118); do
+  for release_override_fixture_index in $(seq 31 145); do
     append_file "$workspace/scripts/test-release-readiness-audit.sh" \
       "  'FIXTURE_OVERRIDE_$release_override_fixture_index|value-$release_override_fixture_index'"
   done
@@ -8099,6 +8381,7 @@ write_root_readiness_scripts() {
     'echo "[release-readiness-test] all tests passed ($SCENARIO_COUNT aggregate scenarios, $PRODUCTION_OVERRIDE_PROBE_COUNT production override probes, $PRODUCTION_PATH_PROBE_COUNT production tool-path/function probes, and $TEST_ISOLATION_PROBE_COUNT test-mode isolation probes)"'
   write_file "$workspace/scripts/export-release-unblock-bundle.sh" \
     "#!/usr/bin/env bash" \
+    "echo 'sourcePublicationWorkspaceRequiredFiles .github/CODEOWNERS .github/workflows/readiness.yml .gitignore README.md docs/source-freeze-20260801.md scripts/capture-source-freeze.mjs'" \
     "echo 'manifest.json'" \
     "echo 'unblock.md'" \
     "echo 'function assertRegularDirectory('" \
@@ -8140,6 +8423,13 @@ write_root_readiness_scripts() {
     "echo 'staged SHA256SUMS changed before publication'" \
     "echo 'staged bundle file set changed before publication'" \
     "echo 'staged bundle content changed before publication'" \
+    "echo '--verify-with)'" \
+    "echo 'function verifyStagedBundleBeforePublication('" \
+    "echo \"path.join(workspaceRoot, 'scripts', 'verify-release-unblock-bundle.sh')\"" \
+    "echo \"spawnSync(verifierPath, ['--bundle', outputRoot, '--published-path', finalOutputRoot]\"" \
+    "echo 'validateStagedBundleForPublication()'" \
+    "echo 'verifyStagedBundleBeforePublication()'" \
+    "echo 'validateStagedBundleForPublication()'" \
     "echo 'function rollbackPublication('" \
     "echo 'function publishStagedBundle()'" \
     "echo 'fs.renameSync(finalOutputRoot, previousPath)'" \
@@ -8159,6 +8449,7 @@ write_root_readiness_scripts() {
     "echo 'Run every blocker verification command from the bundle directory'" \
     "echo 'Run one blocker by slug from the bundle directory'" \
     "echo 'max-age-hours 24'" \
+    "echo 'shellQuote(finalOutputRoot)'" \
     "echo 'cd \"\$WORKSPACE_ROOT\"'" \
     "echo 'require_workspace_root'" \
     "echo '! -e \"\$WORKSPACE_ROOT\"'" \
@@ -8214,7 +8505,7 @@ write_root_readiness_scripts() {
     "echo 'must match expected unblock metadata'" \
     "echo \"externalIrohaOnlyPlanContract = Object.freeze({ recommendedAction: 'Do not edit or publish from the unsafe external ../iroha checkout', requiresExternalAction: true, unblockCategory: 'upstream-dependency', externalPrerequisite: 'Owner-coordinated resolution of the unsafe external ../iroha source state' })\"" \
     "echo 'function isExternalIrohaOnlyPlanReadinessLog('" \
-    "echo \"sourceReportHasUnsafeIrohaState hasCanonicalReviewedSourceIdentity report.schemaVersion === 2 hyperledger-iroha/iroha codex/kagemusha-selector-hardening optimizations 5612 iroha.prState === 'merged' canonicalSha(iroha.headSha) iroha.upstreamSha === iroha.headSha canonicalSha(iroha.prHeadSha) iroha.prHeadSha !== iroha.headSha iroha.remoteBranchPresent === false iroha.remoteHeadSha === null iroha.currentBranchRemotePresent === true canonicalSha(iroha.currentBranchRemoteSha) authoritativeCurrentBranchFailure local HEAD \${iroha.headSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} cachedUpstreamAuthoritativeCurrentBranchFailure cached upstream \${iroha.upstream} at \${iroha.upstreamSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} hasCanonicalSynchronizedFailureCountAndContinuity iroha.failures.length === 4 || iroha.failures.length === 5 && iroha.failures[4] === preflightContinuityFailure hasCanonicalSynchronizedReviewedSourceMismatch iroha.currentBranchRemoteSha === iroha.headSha hasCanonicalSynchronizedFailureCountAndContinuity && hasCanonicalDriftFailureCountAndContinuity iroha.failures.length === 6 || iroha.failures.length === 7 && iroha.failures[6] === preflightContinuityFailure hasCanonicalDriftReviewedSourceMismatch iroha.currentBranchRemoteSha !== iroha.headSha hasCanonicalDriftFailureCountAndContinuity && iroha.failures[1] === branchMismatchFailure iroha.failures[2] === authoritativeCurrentBranchFailure iroha.failures[3] === pullRequestHeadFailure iroha.failures[4] === upstreamMismatchFailure iroha.failures[5] === cachedUpstreamAuthoritativeCurrentBranchFailure hasReviewedSourceMismatch counts.every((key) => iroha[key] === 0) hasCanonicalSynchronizedReviewedSourceMismatch || hasCanonicalDriftReviewedSourceMismatch hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch\"" \
+    "echo \"sourceReportHasUnsafeIrohaState hasCanonicalReviewedSourceIdentity report.schemaVersion === 3 report.phase === 'postflight' preflightReportSha256 hyperledger-iroha/iroha codex/kagemusha-selector-hardening optimizations 5612 iroha.prState === 'merged' canonicalSha(iroha.headSha) iroha.upstreamSha === iroha.headSha canonicalSha(iroha.prHeadSha) iroha.prHeadSha !== iroha.headSha iroha.remoteBranchPresent === false iroha.remoteHeadSha === null iroha.currentBranchRemotePresent === true canonicalSha(iroha.currentBranchRemoteSha) authoritativeCurrentBranchFailure local HEAD \${iroha.headSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} cachedUpstreamAuthoritativeCurrentBranchFailure cached upstream \${iroha.upstream} at \${iroha.upstreamSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} hasCanonicalSynchronizedFailureCountAndContinuity iroha.failures.length === 4 || iroha.failures.length === 5 && iroha.failures[4] === preflightContinuityFailure hasCanonicalSynchronizedReviewedSourceMismatch iroha.currentBranchRemoteSha === iroha.headSha hasCanonicalSynchronizedFailureCountAndContinuity && hasCanonicalDriftFailureCountAndContinuity iroha.failures.length === 6 || iroha.failures.length === 7 && iroha.failures[6] === preflightContinuityFailure hasCanonicalDriftReviewedSourceMismatch iroha.currentBranchRemoteSha !== iroha.headSha hasCanonicalDriftFailureCountAndContinuity && iroha.failures[1] === branchMismatchFailure iroha.failures[2] === authoritativeCurrentBranchFailure iroha.failures[3] === pullRequestHeadFailure iroha.failures[4] === upstreamMismatchFailure iroha.failures[5] === cachedUpstreamAuthoritativeCurrentBranchFailure hasReviewedSourceMismatch counts.every((key) => iroha[key] === 0) hasCanonicalSynchronizedReviewedSourceMismatch || hasCanonicalDriftReviewedSourceMismatch hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch\"" \
     "echo 'isExternalIrohaOnlyPlanReadinessLog(blockerLogContent, sourcePublicationReport) external-iroha-only unblock contract variant must match plan-readiness log classification'" \
     "echo 'Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation'" \
     "echo 'pinned Iroha JS SDK release artifact so package.json exports ./ivm-artifact and the packaged runtime/declaration surface passes the wallet artifact validator'" \
@@ -8272,16 +8563,20 @@ write_root_readiness_scripts() {
     "echo 'handoffs/release-pr-readiness-report.json'" \
     "echo 'function assertSourcePublicationReport('" \
     "echo 'function assertSourcePublicationHandoff('" \
+    "echo 'function assertSourcePublicationPair sha256(preflightBytes) preflightReportSha256 must match the exact preflight report bytes preflight report must not postdate the postflight report preflight report is stale for the postflight report sources must contain exactly nine ordered preflight/postflight rows identityFields source publication preflight did not pass before release checks must match across preflight and postflight failures must contain the exact failed-preflight continuity diagnostic'" \
+    "echo 'function copyArtifactContent Buffer.isBuffer(content) fs.writeFileSync(destination, content) sha256: sha256(content) bytes: content.length function readSourcePublicationArtifactSnapshots reportBytes = fs.readFileSync(reportSource) preflightReportBytes = fs.readFileSync(preflightReportSource) configBytes = fs.readFileSync(configSource) rootOwnerConfigBytes = fs.readFileSync(rootOwnerConfigSource) const sourcePublicationArtifactSnapshots = actions.runLive ? readSourcePublicationArtifactSnapshots() : null sourcePublicationReportForClassification = sourcePublicationArtifactSnapshots?.report validateActionBlockers(actions, sourcePublicationReportForClassification) buildSourcePublicationHandoff(actions, summary, artifacts, sourcePublicationArtifactSnapshots)'" \
+    "echo 'function buildSourcePublicationHandoff copyArtifactContent(preflightReportSource, sourcePublicationPreflightReportArtifactPath, artifacts, preflightReportBytes) copyArtifactContent(reportSource, sourcePublicationReportArtifactPath, artifacts, reportBytes) copyArtifactContent(configSource, sourcePublicationConfigArtifactPath, artifacts, configBytes) copyArtifactContent(rootOwnerConfigSource, sourcePublicationRootOwnerConfigArtifactPath, artifacts, rootOwnerConfigBytes)'" \
     "echo 'function assertSourcePublicationSource prHeadSha remoteBranchPresent currentBranchRemoteSha currentBranchRemotePresent for (const field of [prHeadSha]'" \
     "echo \"'prState', 'prHeadSha', 'repositoryPath'\"" \
     "echo 'prHeadSha headSha upstreamSha remoteHeadSha currentBranchRemoteSha lowercase 40-character SHA-1'" \
     "echo 'function assertPassedSourcePublicationSemantics for (const field of [prHeadSha] is required for a passed source source.prHeadSha !== source.headSha prHeadSha must match headSha for a passed source currentBranchRemotePresent must match remoteBranchPresent for a passed source currentBranchRemoteSha must match remoteHeadSha for a passed source merged current branch is absent'" \
     "echo 'source.remoteBranchPresent !== true && source.remoteHeadSha !== null remoteHeadSha must be null when remoteBranchPresent is false or null source.currentBranchRemotePresent !== true && source.currentBranchRemoteSha !== null currentBranchRemoteSha must be null when currentBranchRemotePresent is false or null source.branch === source.head currentBranchRemotePresent must match remoteBranchPresent when branch matches head currentBranchRemoteSha must match remoteHeadSha when branch matches head'" \
-    "echo 'report.schemaVersion !== 2'" \
+    "echo 'report.schemaVersion !== 3 report.phase !== expectedPhase preflightReportSha256 must be lowercase SHA-256 for postflight preflightReportSha256 must be null'" \
     "echo 'repositories: report.repositories.map branch: sourceRow.branch prHeadSha: sourceRow.prHeadSha remoteHeadSha: sourceRow.remoteHeadSha remoteBranchPresent: sourceRow.remoteBranchPresent currentBranchRemoteSha: sourceRow.currentBranchRemoteSha currentBranchRemotePresent: sourceRow.currentBranchRemotePresent'" \
-    "echo 'const manifest = { schemaVersion: 2'" \
+    "echo 'const manifest = { schemaVersion: 3'" \
     "echo 'sourcePublicationHandoff required for full-live bundle'" \
     "echo 'handoffs/source-publication-readiness-report.json'" \
+    "echo 'handoffs/source-publication-preflight-report.json preflightReportPath preflightReportArtifact preflightReportSha256'" \
     "echo 'handoffs/source-publication-readiness.tsv'" \
     "echo 'scripts/quarantine-source-publication-outputs.mjs scripts/run-source-publication-quarantine.sh scripts/test-source-publication-quarantine.sh'" \
     "echo 'handoffs/source-publication-root-owner.json'" \
@@ -8294,6 +8589,7 @@ write_root_readiness_scripts() {
     "echo 'Release PR status report handoff:'" \
     "echo 'function buildSourcePublicationHandoff('" \
     "echo 'handoffs/source-publication-readiness-report.json'" \
+    "echo 'handoffs/source-publication-preflight-report.json preflightReportPath preflightReportArtifact preflightReportSha256'" \
     "echo 'handoffs/source-publication-readiness.tsv'" \
     "echo 'Source Publication Attestation'" \
     "echo 'blockedPrs'" \
@@ -8486,6 +8782,7 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/test-release-unblock-bundle-export.sh" \
     "#!/usr/bin/env bash" \
     "echo 'valid fixture'" \
+    "echo 'source-publication-single-snapshot.cjs SOURCE_PUBLICATION_SNAPSHOT_PATHS source publication artifact read more than once source-publication-readiness-report.json source-publication-preflight-report.json source-publication-readiness.tsv source-publication-root-owner.json SOURCE_PUBLICATION_SNAPSHOT_PROCESS_ARG valid fixture'" \
     "echo 'late validation preserves existing valid bundle fixture'" \
     "echo 'late validation publishes no partial bundle fixture'" \
     "echo 'staged artifact checksum tamper fixture'" \
@@ -8498,10 +8795,12 @@ write_root_readiness_scripts() {
     "echo 'exact external-Iroha-only plan blocker fixture'" \
     "echo 'unmerged-Iroha-only plan blocker fixture'" \
     "echo 'reviewed-source-mismatch Iroha-only plan blocker fixture'" \
+    "echo 'source publication preflight passed-source identity mismatch fixture reviewed-source missing exact failed-preflight continuity marker fixture'" \
     "echo 'reviewed-source missing pull-request head SHA fixture reviewed-source forged pull-request head SHA fixture reviewed-source missing pull-request head diagnostic fixture reviewed-source invalid configured-ref relation fixture'" \
     "echo 'reviewed-source malformed ignored-output diagnostic fixture reviewed-source obsolete extra current-branch diagnostic fixture reviewed-source forged local HEAD fixture reviewed-source forged cached upstream SHA fixture reviewed-source stale authoritative current-branch diagnostic fixture reviewed-source missing authoritative current-branch proof fixture reviewed-source obsolete authoritative current-branch drift diagnostics fixture reviewed-source authoritative-current drift live-shape fixture reviewed-source authoritative-current equals pull-request head drift fixture reviewed-source authoritative-current drift postflight fixture reviewed-source authoritative-current drift pull-request head equals local fixture reviewed-source authoritative-current drift missing diagnostic fixture reviewed-source authoritative-current drift missing cached-upstream diagnostic fixture reviewed-source authoritative-current drift reordered diagnostics fixture reviewed-source authoritative-current drift forged diagnostic fixture reviewed-source authoritative-current drift forged cached-upstream diagnostic fixture reviewed-source synchronized current with full drift diagnostics fixture reviewed-source authoritative-current drift unrelated seventh diagnostic fixture reviewed-source authoritative-current drift six plus marker plus extra fixture reviewed-source authoritative-current drift nonzero worktree count fixture reviewed-source synchronized nonzero worktree count fixture reviewed-source postflight preflight-continuity marker fixture reviewed-source forged preflight-continuity marker fixture reviewed-source reordered preflight-continuity marker fixture reviewed-source duplicate preflight-continuity marker fixture reviewed-source preflight-continuity marker plus unrelated failure fixture'" \
     "echo 'failed differing-branch false configured-ref presence with SHA fixture failed differing-branch null configured-ref presence with SHA fixture failed Iroha false current-branch presence with SHA fixture failed Iroha matching-branch remote proof mismatch fixture failed Iroha malformed matching-branch remote response fixture'" \
     "echo 'source publication legacy schema fixture source publication missing pull-request head SHA fixture source publication forged pull-request head SHA fixture'" \
+    "echo 'missing source publication preflight report fixture source publication wrong postflight phase fixture source publication wrong preflight phase fixture source publication preflight digest mismatch fixture source publication preflight chronology fixture'" \
     "echo 'forged reviewed-source mismatch plan blocker fixture'" \
     "echo 'exact local plan blocker fixture'" \
     "echo 'external plan action mixed with external metadata fixture'" \
@@ -8851,15 +9150,18 @@ write_root_readiness_scripts() {
 
   write_file "$workspace/scripts/verify-release-unblock-bundle.sh" \
     "#!/usr/bin/env bash" \
+    "echo 'sourcePublicationWorkspaceRequiredFiles .github/CODEOWNERS .github/workflows/readiness.yml .gitignore README.md docs/source-freeze-20260801.md scripts/capture-source-freeze.mjs'" \
     "echo \"externalIrohaOnlyPlanContract = Object.freeze({ recommendedAction: 'Do not edit or publish from the unsafe external ../iroha checkout', requiresExternalAction: true, unblockCategory: 'upstream-dependency', externalPrerequisite: 'Owner-coordinated resolution of the unsafe external ../iroha source state' })\"" \
     "echo 'function isExternalIrohaOnlyPlanReadinessLog('" \
-    "echo \"sourceReportHasUnsafeIrohaState hasCanonicalReviewedSourceIdentity report.schemaVersion === 2 hyperledger-iroha/iroha codex/kagemusha-selector-hardening optimizations 5612 iroha.prState === 'merged' canonicalSha(iroha.headSha) iroha.upstreamSha === iroha.headSha canonicalSha(iroha.prHeadSha) iroha.prHeadSha !== iroha.headSha iroha.remoteBranchPresent === false iroha.remoteHeadSha === null iroha.currentBranchRemotePresent === true canonicalSha(iroha.currentBranchRemoteSha) authoritativeCurrentBranchFailure local HEAD \${iroha.headSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} cachedUpstreamAuthoritativeCurrentBranchFailure cached upstream \${iroha.upstream} at \${iroha.upstreamSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} hasCanonicalSynchronizedFailureCountAndContinuity iroha.failures.length === 4 || iroha.failures.length === 5 && iroha.failures[4] === preflightContinuityFailure hasCanonicalSynchronizedReviewedSourceMismatch iroha.currentBranchRemoteSha === iroha.headSha hasCanonicalSynchronizedFailureCountAndContinuity && hasCanonicalDriftFailureCountAndContinuity iroha.failures.length === 6 || iroha.failures.length === 7 && iroha.failures[6] === preflightContinuityFailure hasCanonicalDriftReviewedSourceMismatch iroha.currentBranchRemoteSha !== iroha.headSha hasCanonicalDriftFailureCountAndContinuity && iroha.failures[1] === branchMismatchFailure iroha.failures[2] === authoritativeCurrentBranchFailure iroha.failures[3] === pullRequestHeadFailure iroha.failures[4] === upstreamMismatchFailure iroha.failures[5] === cachedUpstreamAuthoritativeCurrentBranchFailure hasReviewedSourceMismatch counts.every((key) => iroha[key] === 0) hasCanonicalSynchronizedReviewedSourceMismatch || hasCanonicalDriftReviewedSourceMismatch hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch\"" \
+    "echo \"sourceReportHasUnsafeIrohaState hasCanonicalReviewedSourceIdentity report.schemaVersion === 3 report.phase === 'postflight' preflightReportSha256 hyperledger-iroha/iroha codex/kagemusha-selector-hardening optimizations 5612 iroha.prState === 'merged' canonicalSha(iroha.headSha) iroha.upstreamSha === iroha.headSha canonicalSha(iroha.prHeadSha) iroha.prHeadSha !== iroha.headSha iroha.remoteBranchPresent === false iroha.remoteHeadSha === null iroha.currentBranchRemotePresent === true canonicalSha(iroha.currentBranchRemoteSha) authoritativeCurrentBranchFailure local HEAD \${iroha.headSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} cachedUpstreamAuthoritativeCurrentBranchFailure cached upstream \${iroha.upstream} at \${iroha.upstreamSha} does not match authoritative current branch \${iroha.branch} at \${iroha.currentBranchRemoteSha} hasCanonicalSynchronizedFailureCountAndContinuity iroha.failures.length === 4 || iroha.failures.length === 5 && iroha.failures[4] === preflightContinuityFailure hasCanonicalSynchronizedReviewedSourceMismatch iroha.currentBranchRemoteSha === iroha.headSha hasCanonicalSynchronizedFailureCountAndContinuity && hasCanonicalDriftFailureCountAndContinuity iroha.failures.length === 6 || iroha.failures.length === 7 && iroha.failures[6] === preflightContinuityFailure hasCanonicalDriftReviewedSourceMismatch iroha.currentBranchRemoteSha !== iroha.headSha hasCanonicalDriftFailureCountAndContinuity && iroha.failures[1] === branchMismatchFailure iroha.failures[2] === authoritativeCurrentBranchFailure iroha.failures[3] === pullRequestHeadFailure iroha.failures[4] === upstreamMismatchFailure iroha.failures[5] === cachedUpstreamAuthoritativeCurrentBranchFailure hasReviewedSourceMismatch counts.every((key) => iroha[key] === 0) hasCanonicalSynchronizedReviewedSourceMismatch || hasCanonicalDriftReviewedSourceMismatch hasOperation || hasUnmergedIndex || hasReviewedSourceMismatch\"" \
     "echo 'isExternalIrohaOnlyPlanReadinessLog(logContent, sourcePublicationReportForClassification) external-iroha-only unblock contract variant must match plan-readiness log classification'" \
     "echo 'Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation'" \
     "echo 'pinned Iroha JS SDK release artifact so package.json exports ./ivm-artifact and the packaged runtime/declaration surface passes the wallet artifact validator'" \
     "echo 'cd ../polkaswap-indexer && bash ../fearless/scripts/run-pinned-yarn.sh generate:deployment-evidence-template --output build/reports/production-deployment-evidence-template.json'" \
     "echo 'SHA256SUMS'" \
     "echo 'max-age-hours'" \
+    "echo 'shellQuote(bundleDir)'" \
+    "echo '--published-path) PUBLISHED_BUNDLE_PATH=\"\$2\" node - \"\$BUNDLE_DIR\" \"\$MAX_AGE_HOURS\" \"\$ROOT_DIR\" \"\$PUBLISHED_BUNDLE_PATH\" publishedBundlePathArg publishedBundleRoot = publishedBundlePathArg || bundleRoot published bundle path must be absolute and normalized renderUnblockMarkdown(manifest, publishedBundleRoot)'" \
     "echo 'RELEASE_UNBLOCK_VERIFY_NOW'" \
     "echo 'must be an ISO-8601 UTC seconds timestamp'" \
     "echo 'summary/actions generatedAt mismatch'" \
@@ -8882,15 +9184,18 @@ write_root_readiness_scripts() {
     "echo 'handoffs/release-pr-readiness-report.json'" \
     "echo 'function assertSourcePublicationReport('" \
     "echo 'function assertSourcePublicationHandoff('" \
+    "echo 'function assertSourcePublicationPair sha256(preflightBytes) preflightReportSha256 must match the exact preflight report bytes preflight report must not postdate the postflight report preflight report is stale for the postflight report sources must contain exactly nine ordered preflight/postflight rows identityFields source publication preflight did not pass before release checks must match across preflight and postflight failures must contain the exact failed-preflight continuity diagnostic'" \
+    "echo 'const sourcePublicationArtifactPaths = new Set sourcePublicationReportArtifactPath sourcePublicationPreflightReportArtifactPath sourcePublicationConfigArtifactPath sourcePublicationRootOwnerConfigArtifactPath const sourcePublicationArtifactSnapshots = new Map() sourcePublicationArtifactSnapshots.set(relativePath, content) sourceReportBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationReportArtifactPath) preflightReportBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationPreflightReportArtifactPath) rootOwnerConfigBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationRootOwnerConfigArtifactPath) assertSourcePublicationPair(preflightReport, sourceReport, preflightReportBytes entry.sha256 !== manifestArtifact.sha256 admittedSnapshot = sourcePublicationArtifactSnapshots.get(entry.path) admittedSnapshot ? sha256(admittedSnapshot) : sha256(fs.readFileSync(absolute)) checksumByPath.get(relativePath)'" \
     "echo 'function assertSourcePublicationSource prHeadSha remoteBranchPresent currentBranchRemoteSha currentBranchRemotePresent for (const field of [prHeadSha]'" \
     "echo 'prHeadSha headSha upstreamSha remoteHeadSha currentBranchRemoteSha lowercase 40-character SHA-1'" \
     "echo 'function assertPassedSourcePublicationSemantics for (const field of [prHeadSha] is required for a passed source source.prHeadSha !== source.headSha prHeadSha must match headSha for a passed source currentBranchRemotePresent must match remoteBranchPresent for a passed source currentBranchRemoteSha must match remoteHeadSha for a passed source merged current branch is absent'" \
     "echo 'source.remoteBranchPresent !== true && source.remoteHeadSha !== null remoteHeadSha must be null when remoteBranchPresent is false or null source.currentBranchRemotePresent !== true && source.currentBranchRemoteSha !== null currentBranchRemoteSha must be null when currentBranchRemotePresent is false or null source.branch === source.head currentBranchRemotePresent must match remoteBranchPresent when branch matches head currentBranchRemoteSha must match remoteHeadSha when branch matches head'" \
-    "echo 'report.schemaVersion !== 2'" \
+    "echo 'report.schemaVersion !== 3 report.phase !== expectedPhase preflightReportSha256 must be lowercase SHA-256 for postflight preflightReportSha256 must be null'" \
     "echo \"repositoryKeys 'branch', 'prHeadSha', 'headSha', 'remoteHeadSha', 'remoteBranchPresent', 'currentBranchRemoteSha', 'currentBranchRemotePresent' row[key] !== report.repositories[index][key]\"" \
-    "echo 'manifest.schemaVersion !== 2 || summary.schemaVersion !== 1 || actions.schemaVersion !== 1 manifest must use schemaVersion 2; summary and actions must use schemaVersion 1'" \
+    "echo 'manifest.schemaVersion !== 3 || summary.schemaVersion !== 1 || actions.schemaVersion !== 1 manifest must use schemaVersion 3; summary and actions must use schemaVersion 1'" \
     "echo 'sourcePublicationHandoff required for full-live bundle'" \
     "echo 'handoffs/source-publication-readiness-report.json'" \
+    "echo 'handoffs/source-publication-preflight-report.json preflightReportPath preflightReportArtifact preflightReportSha256'" \
     "echo 'handoffs/source-publication-readiness.tsv'" \
     "echo 'scripts/quarantine-source-publication-outputs.mjs scripts/run-source-publication-quarantine.sh scripts/test-source-publication-quarantine.sh'" \
     "echo 'handoffs/source-publication-root-owner.json'" \
@@ -9199,12 +9504,17 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/test-release-unblock-bundle-verify.sh" \
     "#!/usr/bin/env bash" \
     "echo 'valid bundle fixture'" \
+    "echo 'bundle path with spaces was not shell-quoted in Quick Verification'" \
+    "echo 'private staging path with canonical publication rendering fixture unexpectedly failed'" \
+    "echo 'source-publication-single-snapshot.cjs SOURCE_PUBLICATION_SNAPSHOT_PATHS source publication artifact read more than once source-publication-readiness-report.json source-publication-preflight-report.json source-publication-readiness.tsv source-publication-root-owner.json SOURCE_PUBLICATION_SNAPSHOT_PROCESS_ARG valid bundle fixture'" \
     "echo 'external plan metadata with mixed bundled log fixture'" \
     "echo 'external reviewed-source-mismatch plan classification bundle fixture'" \
+    "echo 'source publication preflight passed-source identity mismatch fixture external reviewed-source missing exact failed-preflight continuity marker fixture'" \
     "echo 'external reviewed-source missing pull-request head SHA fixture external reviewed-source forged pull-request head SHA fixture external reviewed-source missing pull-request head diagnostic fixture external reviewed-source invalid configured-ref relation fixture'" \
     "echo 'external reviewed-source malformed ignored-output diagnostic fixture external reviewed-source obsolete extra current-branch diagnostic fixture external reviewed-source forged local HEAD fixture external reviewed-source forged cached upstream SHA fixture external reviewed-source forged authoritative current-branch proof fixture external reviewed-source missing authoritative current-branch proof fixture external reviewed-source obsolete authoritative current-branch drift diagnostics fixture external reviewed-source authoritative-current drift live-shape fixture external reviewed-source authoritative-current equals pull-request head drift fixture external reviewed-source authoritative-current drift postflight fixture external reviewed-source authoritative-current drift pull-request head equals local fixture external reviewed-source authoritative-current drift missing diagnostic fixture external reviewed-source authoritative-current drift missing cached-upstream diagnostic fixture external reviewed-source authoritative-current drift reordered diagnostics fixture external reviewed-source authoritative-current drift forged diagnostic fixture external reviewed-source authoritative-current drift forged cached-upstream diagnostic fixture external reviewed-source synchronized current with full drift diagnostics fixture external reviewed-source authoritative-current drift unrelated seventh diagnostic fixture external reviewed-source authoritative-current drift six plus marker plus extra fixture external reviewed-source authoritative-current drift nonzero worktree count fixture external reviewed-source synchronized nonzero worktree count fixture external reviewed-source postflight preflight-continuity marker fixture external reviewed-source forged preflight-continuity marker fixture external reviewed-source reordered preflight-continuity marker fixture external reviewed-source duplicate preflight-continuity marker fixture external reviewed-source preflight-continuity marker plus unrelated failure fixture'" \
     "echo 'failed differing-branch false configured-ref presence with SHA fixture failed differing-branch null configured-ref presence with SHA fixture failed Iroha false current-branch presence with SHA fixture failed Iroha matching-branch remote proof mismatch fixture failed Iroha malformed matching-branch remote response fixture'" \
     "echo 'legacy manifest schema fixture source publication legacy schema fixture'" \
+    "echo 'missing source publication preflight artifact fixture source publication preflight artifact source path drift fixture source publication wrong postflight phase fixture source publication wrong preflight phase fixture source publication preflight digest mismatch fixture source publication preflight handoff checksum drift fixture source publication preflight chronology fixture'" \
     "echo 'source publication pull-request head SHA handoff drift fixture source publication missing pull-request head SHA handoff fixture source publication configured-ref presence handoff drift fixture source publication missing configured-ref presence handoff fixture source publication missing pull-request head SHA fixture source publication forged pull-request head SHA fixture'" \
     "echo 'external plan metadata with forged reviewed-source mismatch fixture'" \
     "echo 'external plan metadata with duplicate failure marker fixture'" \
@@ -9840,8 +10150,8 @@ perl -0pi -e 's/browser_transaction_codec_unpublished_source_only/browser_transa
 expect_failure "web Iroha missing production codec blocker" "fearless-wallet-web unpublished-source-only browser transaction codec blocker missing"
 
 reset_fixture
-perl -0pi -e 's/run_platform "ios"/run_platform "ios-disabled"/' "$workspace/scripts/audit-iroha-production-send-readiness.sh"
-expect_failure "root Iroha production-send iOS aggregation removed" "root Iroha production-send iOS aggregate gate missing"
+perl -0pi -e 's/IROHA_SEND_AUDIT_ROOT="\$repo" bash/IROHA_SEND_AUDIT_ROOT="\$ROOT_DIR" bash/' "$workspace/scripts/audit-iroha-production-send-readiness.sh"
+expect_failure "root Iroha production-send platform root handoff removed" "root Iroha production-send exact per-platform root handoff missing"
 
 reset_fixture
 perl -0pi -e 's/test-iroha-production-send-readiness-audit\.sh/test-iroha-production-send-readiness-omitted.sh/' "$workspace/scripts/audit-iroha-wallet-coverage.sh"
@@ -11296,7 +11606,7 @@ perl -0pi -e 's/carried delta metadata length mismatch/metadata length self-test
 expect_failure "missing iOS shared-features metadata-length self-test" "fearless-iOS shared-features delta metadata length self-test missing"
 
 reset_fixture
-perl -0pi -e 's/ and removalReadiness\.status//' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's/removalReadiness\.status/removalReadinessStatusRemoved/' "$workspace/fearless-iOS/docs/release-checklist.md"
 expect_failure "missing iOS shared-features removal-readiness checklist review" "fearless-iOS release checklist shared-features removal-readiness review missing"
 
 reset_fixture
@@ -17872,12 +18182,12 @@ perl -0pi -e 's/shared-features-delta-report\.json/shared-features-delta-report-
 expect_failure "missing aggregate iOS shared-features delta report artifact" "root aggregate audit iOS shared-features delta report artifact missing"
 
 reset_fixture
-perl -0pi -e 's/Restore the iOS shared-features delta self-test\/report gate/Restore iOS dependency drift/' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's/Upstream or vendor every carried iOS shared-features\/native-crypto delta/Restore iOS dependency drift/' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "missing aggregate iOS shared-features delta blocker action" "root aggregate audit iOS shared-features delta blocker action missing"
 
 reset_fixture
-perl -0pi -e 's/ios-delta-fail/ios-delta-drift/' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "missing aggregate iOS shared-features delta failure fixture" "root aggregate audit iOS shared-features delta failure fixture missing"
+perl -0pi -e 's/ios-delta-blocked/ios-delta-drift/' "$workspace/scripts/test-release-readiness-audit.sh"
+expect_failure "missing aggregate iOS blocked removal-readiness fixture" "root aggregate audit iOS blocked removal-readiness fixture missing"
 
 reset_fixture
 perl -0pi -e 's/services\/passkey-backup-challenge-service/services\/passkey-backup-drift/g' "$workspace/scripts/audit-release-readiness.sh"
@@ -18432,8 +18742,8 @@ perl -0pi -e 's/placeholder operator evidence/placeholder operator accepted/' "$
 expect_failure "missing passkey service placeholder operator negative test" "root passkey challenge service placeholder operator negative test missing"
 
 reset_fixture
-perl -0pi -e 's/forged payload digest/forged attestation digest accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/test-deployment-evidence-audit.sh"
-expect_failure "missing passkey service forged attestation payload negative test" "root passkey challenge service forged attestation payload digest negative test missing"
+perl -0pi -e 's/blocked evidence makes zero GitHub calls/blocked evidence may contact GitHub/' "$workspace/services/passkey-backup-challenge-service/scripts/test-deployment-evidence-audit.sh"
+expect_failure "missing passkey service blocked no-GitHub-call coverage" "root passkey challenge service blocked no-GitHub-call test missing"
 
 reset_fixture
 perl -0pi -e 's/future deployment timestamp evidence/future deployment timestamp accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/test-deployment-evidence-audit.sh"
@@ -18448,16 +18758,16 @@ perl -0pi -e 's/requiredCommands must include lint, tests, Docker build/required
 expect_failure "missing passkey service complete deployment command gate" "root passkey challenge service complete deployment command gate missing"
 
 reset_fixture
-perl -0pi -e 's/imageDigest must not be a placeholder image digest/imageDigest placeholder accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
-expect_failure "missing passkey service placeholder image digest gate" "root passkey challenge service placeholder image digest gate missing"
+perl -0pi -e 's/function authenticatePublicationRecord/function omittedPublicationAuthenticator/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
+expect_failure "missing passkey service authenticated GitHub publication-run gate" "root passkey challenge service authenticated GitHub publication-run gate missing"
 
 reset_fixture
-perl -0pi -e 's/deployedCommit must not be a placeholder git commit/deployedCommit placeholder accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
-expect_failure "missing passkey service placeholder commit gate" "root passkey challenge service placeholder commit gate missing"
+perl -0pi -e "s/'--bundle'/'--unbound-bundle'/" "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
+expect_failure "missing passkey service exact attestation bundle verification" "root passkey challenge service exact attestation bundle verification gate missing"
 
 reset_fixture
-perl -0pi -e 's/PASSKEY_DEPLOYMENT_EXPECTED_COMMIT/PASSKEY_DEPLOYMENT_COMMIT_UNCHECKED/g' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
-expect_failure "missing passkey service expected deployment commit override gate" "root passkey challenge service expected deployment commit override gate missing"
+perl -0pi -e 's/PASSKEY_DEPLOYMENT_GH_BIN="\$RELEASE_GH_BIN"/PASSKEY_DEPLOYMENT_GH_BIN="\/tmp\/ambient-gh"/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "missing aggregate passkey authenticated gh authority handoff" "root aggregate audit authenticated passkey deployment gh handoff missing"
 
 reset_fixture
 perl -0pi -e 's/git -C service rev-parse HEAD/git head lookup omitted/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
@@ -18468,8 +18778,8 @@ perl -0pi -e 's/deployedCommit must match expected deployment commit/deployedCom
 expect_failure "missing passkey service expected deployment commit match gate" "root passkey challenge service expected deployment commit match gate missing"
 
 reset_fixture
-perl -0pi -e 's/deploymentId must not be a placeholder deployment id/deploymentId placeholder accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
-expect_failure "missing passkey service placeholder deployment id gate" "root passkey challenge service placeholder deployment id gate missing"
+perl -0pi -e 's/printf '\''%s'\'' "\$resolved"/printf '\''%s'\'' "\$candidate"/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "aggregate canonical tool symlink handoff restored" "root aggregate audit canonical tool realpath handoff missing"
 
 reset_fixture
 perl -0pi -e 's/operator must not be a placeholder operator/operator placeholder accepted/' "$workspace/services/passkey-backup-challenge-service/scripts/audit-deployment-evidence.sh"
@@ -18988,8 +19298,8 @@ perl -0pi -e 's/reviewConversationResolutionRequired=true/reviewConversationReso
 expect_failure "missing release PR conversation-resolution reporting" "root release PR readiness conversation-resolution reporting missing"
 
 reset_fixture
-perl -0pi -e 's/outdatedReviewThreadsStillBlockMerge=true/outdatedReviewThreadsStillBlockMerge=false/' "$workspace/scripts/audit-release-pr-readiness.sh"
-expect_failure "missing release PR outdated-thread merge blocker reporting" "root release PR readiness outdated-thread merge blocker reporting missing"
+perl -0pi -e 's/--verify-open-candidate/--unbound-open-candidate/g' "$workspace/scripts/audit-release-pr-readiness.sh"
+expect_failure "missing release PR candidate-bound protected-merge verifier" "root release PR readiness candidate-bound protected-merge verifier missing"
 
 reset_fixture
 perl -0pi -e 's/unresolvedReviewThreadRefs/unresolvedThreadRefsRemoved/' "$workspace/scripts/audit-release-pr-readiness.sh"
@@ -19017,6 +19327,9 @@ expect_failure "missing release PR invalid base branch config gate" "root releas
 
 reset_fixture
 perl -0pi -e 's/invalidRequiredCheckProvenance/uncheckedRequiredCheckProvenance/g' "$workspace/scripts/audit-release-pr-readiness.sh"
+perl -0pi -e 's/load_required_check_provenance_pins/load_unpinned_check_evidence/g' "$workspace/scripts/audit-release-pr-readiness.sh"
+perl -0pi -e 's/validateRequiredProvenance/skipRequiredProvenance/g' "$workspace/scripts/audit-release-pr-readiness.sh"
+perl -0pi -e 's/required_check_provenance_pin/legacy_required_check_pin/g' "$workspace/config/release-readiness-prs.tsv"
 expect_failure "missing release PR strict check provenance gate" "root release PR readiness strict check provenance gate missing"
 
 reset_fixture
@@ -19240,8 +19553,8 @@ perl -0pi -e 's/missingRequiredChecks/missingChecksAccepted/' "$workspace/script
 expect_failure "missing release PR merge helper missing-check gate" "root release PR merge helper missing required-check gate missing"
 
 reset_fixture
-perl -0pi -e 's/incompleteRequiredChecks/incompleteChecksAccepted/' "$workspace/scripts/merge-release-prs.sh"
-expect_failure "missing release PR merge helper incomplete-check gate" "root release PR merge helper incomplete required-check gate missing"
+perl -0pi -e 's/verify_authoritative_open_candidate/skip_authoritative_open_candidate/g' "$workspace/scripts/merge-release-prs.sh"
+expect_failure "missing release PR merge helper central authority verifier" "root release PR merge helper exact dry-run/apply authority-verifier inventory expected exactly 3 occurrences"
 
 reset_fixture
 perl -0pi -e 's/head branch moved after PR query/branch drift accepted/' "$workspace/scripts/merge-release-prs.sh"
@@ -19268,8 +19581,8 @@ perl -0pi -e 's/apply confirmation gate/apply confirmation accepted/' "$workspac
 expect_failure "missing release PR merge helper confirmation negative test" "root release PR merge helper confirmation negative test missing"
 
 reset_fixture
-perl -0pi -e 's/missing-check:/missing-check accepted/' "$workspace/scripts/test-release-pr-merge.sh"
-expect_failure "missing release PR merge helper missing-check negative test" "root release PR merge helper missing-check negative test missing"
+perl -0pi -e 's/singleton wrong GitHub app authority fixture/singleton unreviewed app accepted fixture/' "$workspace/scripts/test-release-pr-merge.sh"
+expect_failure "missing release PR merge helper singleton wrong-app negative test" "root release PR merge helper singleton wrong-app negative test missing"
 
 reset_fixture
 perl -0pi -e 's/review-required-current-approval:/review-required current approval accepted/' "$workspace/scripts/test-release-pr-merge.sh"
@@ -19425,6 +19738,8 @@ expect_failure "missing release PR skipped required-check negative test" "root r
 
 reset_fixture
 perl -0pi -e 's/duplicate required-check fixture/duplicate check accepted/' "$workspace/scripts/test-release-pr-readiness-audit.sh"
+perl -0pi -e 's/singleton wrong GitHub app provenance fixture/singleton app spoof accepted/' "$workspace/scripts/test-release-pr-readiness-audit.sh"
+perl -0pi -e 's/wrong singleton status creator provenance fixture/status creator spoof accepted/' "$workspace/scripts/test-release-pr-readiness-audit.sh"
 expect_failure "missing release PR duplicate-check negative test" "root release PR readiness duplicate required-check negative test missing"
 
 reset_fixture
@@ -20161,7 +20476,7 @@ expect_failure "PI deployment audit npm drift" "root aggregate audit PI deployme
 
 reset_fixture
 perl -0pi -e 's/"\$YARN_BIN" smoke:production/"\$NPM_BIN" run smoke:production/' "$workspace/scripts/audit-release-readiness.sh"
-expect_failure "PI production smoke npm drift" "root aggregate audit PI production smoke Yarn runner missing"
+expect_failure "PI production smoke npm drift" "root aggregate audit canonical PI smoke resource and freshness limits missing"
 
 reset_fixture
 perl -0pi -e 's#from \.\./polkaswap-indexer, rerun bash \.\./fearless/scripts/run-pinned-yarn\.sh audit:deployment-evidence --require-ready#from ../polkaswap-indexer, rerun yarn audit:deployment-evidence --require-ready#' "$workspace/scripts/audit-release-readiness.sh"
@@ -20512,8 +20827,8 @@ perl -0pi -e 's/unknown-owner revoke-all cannot interfere with another subject c
 expect_failure "missing passkey cross-subject coordination test" "root passkey challenge service cross-subject registration coordination test missing"
 
 reset_fixture
-perl -0pi -e 's/post-rename fsync and close failures keep durable and in-memory state aligned/post-rename failures ignored/' "$workspace/services/passkey-backup-challenge-service/test/service.test.js"
-expect_failure "missing passkey post-rename durability test" "root passkey challenge service post-rename persistence alignment test missing"
+perl -0pi -e 's/post-rename failures keep durable state aligned and lifecycle guards active/post-rename failures ignored/' "$workspace/services/passkey-backup-challenge-service/test/service.test.js"
+expect_failure "missing passkey post-rename durability test" "root passkey challenge service post-rename lifecycle regression test missing"
 
 reset_fixture
 perl -0pi -e 's/authorization platform is cryptographically bound to its WebAuthn origin family/authorization platform ignores WebAuthn origin family/' "$workspace/services/passkey-backup-challenge-service/test/security-regression.test.js"
@@ -20755,8 +21070,8 @@ perl -0pi -e 's/buildConfigField "boolean", "ENABLE_PRODUCTION_XCM_TRANSFERS", "
 expect_failure "Android XCM release flag enabled" "fearless-Android release XCM hard-disabled flag missing"
 
 reset_fixture
-perl -0pi -e 's/if \(!BuildConfig\.ENABLE_PRODUCTION_XCM_TRANSFERS\)/if (BuildConfig.ENABLE_PRODUCTION_XCM_TRANSFERS)/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/di/WalletFeatureModule.kt"
-expect_failure "missing Android XCM early disabled registry guard" "fearless-Android wallet DI early route-discovery disable guard missing"
+perl -0pi -e 's/selectApprovedXcmRouteRegistry\(enabled = true\)/selectApprovedXcmRouteRegistry(enabled = BuildConfig.ENABLE_PRODUCTION_XCM_TRANSFERS)/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/di/WalletFeatureModule.kt"
+expect_failure "Android XCM submission flag disables read-only route discovery" "fearless-Android wallet DI read-only route discovery independent of submission missing"
 
 reset_fixture
 perl -0pi -e 's/executableRoute\.originIdentity\.matches\(originChain\)/true/' "$workspace/fearless-Android/public-shared-features-xcm/src/main/java/jp/co/soramitsu/xcm/XcmService.kt"
@@ -21302,8 +21617,8 @@ perl -0pi -e 's#cd services/passkey-backup-challenge-service && PASSKEY_BACKUP_B
 expect_failure "missing root canonical passkey verification command" "root aggregate audit passkey production smoke canonical verification command missing"
 
 reset_fixture
-perl -0pi -e 's/passkey production smoke must use the canonical grant helper path/passkey production smoke helper is optional/' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "missing root passkey grant-helper enforcement test" "root aggregate audit passkey production smoke canonical grant-helper enforcement test missing"
+perl -0pi -e 's#passkey production smoke must use the canonical helper, timeout, response-size, and isolated Node TLS/proxy/CA environment#passkey production smoke accepts ambient limits#' "$workspace/scripts/test-release-readiness-audit.sh"
+expect_failure "missing root passkey smoke limit enforcement test" "root aggregate audit canonical passkey smoke limit fixture missing"
 
 reset_fixture
 perl -0pi -e 's#Provision PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper as a readable executable#Run the smoke without provisioning its grant helper#' "$workspace/scripts/audit-release-readiness.sh"
@@ -21779,8 +22094,8 @@ fi
 # Follow-up Nexus verifier transport, identity, liveness, and confidentiality mutations.
 if [[ "${PLAN_READINESS_ANDROID_IROHA_ONLY:-false}" != "true" ]]; then
 reset_fixture
-perl -0pi -e 's/curl --disable -sS/curl -sS/' "$workspace/scripts/audit-iroha-release-readiness.sh"
-expect_failure "missing Nexus ambient curl isolation" "root Iroha readiness ambient curl configuration isolation missing"
+perl -0pi -e 's/-u CURL_CA_BUNDLE/-u CURL_CA_BUNDLE_REMOVED/' "$workspace/scripts/audit-iroha-release-readiness.sh"
+expect_failure "missing Nexus ambient curl isolation" "root Iroha readiness ambient curl configuration and transport isolation missing"
 
 reset_fixture
 perl -0pi -e "s/--proto-redir '=https'/--proto-redir '=http,https'/" "$workspace/scripts/audit-iroha-release-readiness.sh"
@@ -21859,12 +22174,12 @@ perl -0pi -e 's/matcher must contain account or instruction/selector-less route 
 expect_failure "missing Nexus route-selector gate" "root Iroha readiness route-selector validation missing"
 
 reset_fixture
-perl -0pi -e 's/curl argv disables ambient curlrc before every option/curlrc isolation positive path untested/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
-expect_failure "missing Nexus curlrc isolation positive test" "root Iroha readiness ambient curlrc isolation positive test missing"
+perl -0pi -e 's/curl transport boundary neutralizes ambient curlrc proxy and CA authority/curl transport accepts ambient authority/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
+expect_failure "missing Nexus curl transport isolation positive test" "root Iroha readiness ambient curl transport isolation positive test missing"
 
 reset_fixture
-perl -0pi -e 's/ambient curlrc cannot alter the Nexus request/ambient curlrc accepted/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
-expect_failure "missing Nexus curlrc isolation mutation test" "root Iroha readiness ambient curlrc isolation mutation test missing"
+perl -0pi -e 's/ambient CURL_CA_BUNDLE cannot alter the Nexus request/ambient CURL_CA_BUNDLE accepted/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
+expect_failure "missing Nexus curl CA isolation mutation test" "root Iroha readiness ambient curlrc and CA-bundle isolation mutation tests missing"
 
 reset_fixture
 perl -0pi -e 's/Nexus curl contract rejects redirect following/Nexus curl follows redirects/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
@@ -22451,7 +22766,7 @@ expect_failure "bundle verifier bare PI smoke command test removed" "root releas
 
 # Authoritative current plan truth for PI live state and verification totals.
 reset_fixture
-perl -0pi -e 's/Last updated: 2026-07-31/Last updated: 2026-07-30/' "$workspace/FEARLESS_PROJECT_PLAN.md"
+perl -0pi -e 's/Last updated: 2026-08-24/Last updated: 2026-08-23/' "$workspace/FEARLESS_PROJECT_PLAN.md"
 expect_failure "stale project plan update date" "project plan current update date missing"
 
 reset_fixture
@@ -22559,7 +22874,7 @@ chmod -x "$workspace/fearless-Android/scripts/materialize-iroha-core-jvm.sh"
 expect_failure "non-executable Android Iroha core materializer" "checksum-pinned Iroha core materializer is not executable"
 
 reset_fixture
-perl -0pi -e 's/24bb47552977cc2610512f59b8bccfd0b047b179302ed972600a66ddc1a01de6/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-Android/scripts/materialize-iroha-core-jvm.sh"
+perl -0pi -e 's/50e37369e3b08e4435f15ae31d1baca28dd55eae82686000df8f39b85feee7e6/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-Android/scripts/materialize-iroha-core-jvm.sh"
 expect_failure "Android Iroha archive digest pin drift" "Iroha materializer archive digest pin missing"
 
 reset_fixture
@@ -22681,7 +22996,7 @@ expect_failure "Android Iroha staged production blocker removed" "Android staged
 
 reset_fixture
 perl -0pi -e 's/6TEAJqbb8oEPmLncoNiMRbLEK6tw/unknown-live-id/' "$workspace/fearless-Android/config/iroha-production-send-readiness.json"
-expect_failure "Android Iroha live Taira asset evidence drift" "observed live Taira XOR ID missing"
+expect_failure "Android Iroha live Taira asset evidence drift" "canonical Taira XOR ID missing"
 
 reset_fixture
 perl -0pi -e 's/"sdkDeployedNodeCompatibility": "not-proven"/"sdkDeployedNodeCompatibility": "proven"/' "$workspace/fearless-Android/config/iroha-production-send-readiness.json"
@@ -22696,20 +23011,20 @@ perl -0pi -e 's/"liveTairaReceiptParity": "not-recorded"/"liveTairaReceiptParity
 expect_failure "Android Iroha live receipt parity falsely promoted" "manifest live receipt blocker missing"
 
 reset_fixture
-perl -0pi -e 's/751f648c7fb838029b83ab1f34b223ea50ddb9cb67aecd5addd578cb7cdffba8/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-Android/scripts/audit-iroha-production-send-readiness.sh"
+perl -0pi -e 's/921e5a7bb864a69ad518be23a210f2209eabbdd156e96884ebbd8aba54062fde/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-Android/scripts/audit-iroha-production-send-readiness.sh"
 expect_failure "Android Iroha readiness manifest digest pin drift" "staged readiness manifest digest pin missing"
 
 reset_fixture
-perl -0pi -e "s/^expect_failure 'capability claim regressed'\n//m" "$workspace/fearless-Android/scripts/test-iroha-production-send-readiness-audit.sh"
-expect_failure "Android Iroha readiness destructive fixture floor reduced" "readiness adversarial fixture floor expected at least 23"
+perl -0pi -e 's/^expect_failure "capability claim regressed".*\n//m' "$workspace/fearless-Android/scripts/test-iroha-production-send-readiness-audit.sh"
+expect_failure "Android Iroha readiness destructive fixture floor reduced" "readiness adversarial fixture floor expected at least 39"
 
 reset_fixture
 perl -0pi -e 's/live registry evidence redacted/live registry drift accepted/' "$workspace/fearless-Android/scripts/test-iroha-production-send-readiness-audit.sh"
 expect_failure "Android Iroha live-registry fixture removed" "live registry evidence fixture missing"
 
 reset_fixture
-perl -0pi -e 's/hard-coded production ID claim/hard-coded production ID accepted/' "$workspace/fearless-Android/scripts/test-iroha-production-send-readiness-audit.sh"
-expect_failure "Android Iroha hard-coded asset fixture removed" "hard-coded production asset fixture missing"
+perl -0pi -e 's/legacy alias accepted claim/legacy alias may ship/' "$workspace/fearless-Android/scripts/test-iroha-production-send-readiness-audit.sh"
+expect_failure "Android Iroha retired alias fixture removed" "retired alias rejection fixture missing"
 
 reset_fixture
 perl -0pi -e 's/verify-staged-iroha-core-bridge\.sh --download/staged-bridge-smoke.sh/' "$workspace/fearless-Android/.github/workflows/android-ci.yml"
@@ -22729,7 +23044,7 @@ expect_failure "project plan false-ready Android Iroha production claim" "projec
 
 reset_fixture
 perl -0pi -e 's/6TEAJqbb8oEPmLncoNiMRbLEK6tw/fixture-live-id-conflated/' "$workspace/FEARLESS_PROJECT_PLAN.md"
-expect_failure "project plan Android Iroha live asset drift" "project plan Android Iroha live/fixture revision drift missing"
+expect_failure "project plan Android Iroha live asset drift" "project plan canonical Taira first-release identity missing"
 
 reset_fixture
 perl -0pi -e 's#/run/secrets/passkey-smoke-grant-helper#/tmp/ambient-helper#' "$workspace/FEARLESS_PROJECT_PLAN.md"
@@ -22748,15 +23063,15 @@ perl -0pi -e 's/Android archive\/hash review and a core-only Java bridge test st
 expect_failure "project plan Android staged open-risk truth removed" "project plan open Android Iroha staged-risk truth missing"
 
 reset_fixture
-perl -0pi -e 's/Neither identifier may be hard-coded/Either identifier may be hard-coded/' "$workspace/fearless-Android/docs/iroha-production-send-readiness.md"
-expect_failure "Android Iroha hard-coded production asset claim" "no hard-coded production asset mapping statement missing"
+perl -0pi -e 's/accept no `name#domain`/accept `name#domain`/' "$workspace/fearless-Android/docs/iroha-production-send-readiness.md"
+expect_failure "Android Iroha retired asset alias accepted" "retired asset alias rejection documentation missing"
 
 reset_fixture
 perl -0pi -e 's/Production DI still uses `UnavailableIrohaTransferSigner`/Production DI uses ReviewedSigner/' "$workspace/fearless-Android/docs/iroha-production-send-readiness.md"
 expect_failure "Android Iroha unavailable production signer documentation removed" "unavailable production signer documentation missing"
 
 reset_fixture
-perl -0pi -e 's/Wire, hash, registry, and fee compatibility across that revision gap has not been proven/Revision compatibility is proven/' "$workspace/fearless-Android/docs/iroha-production-send-readiness.md"
+perl -0pi -e 's/A fixed upstream SDK must be published and reviewed/The current SDK is production ready/' "$workspace/fearless-Android/docs/iroha-production-send-readiness.md"
 expect_failure "Android Iroha SDK-node compatibility blocker documentation removed" "deployed-node compatibility blocker documentation missing"
 else
   TEST_CASE_INDEX=3250
@@ -22778,7 +23093,7 @@ perl -0pi -e 's/"schemaVersion": 2/"schemaVersion": 1/' "$workspace/fearless-iOS
 expect_failure "iOS Iroha schema-v2 downgraded" "fearless-iOS Iroha production-send readiness schema"
 
 reset_fixture
-perl -0pi -e 's/"assessedAt": "2026-07-11"/"assessedAt": "2026-07-10"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+perl -0pi -e 's/"assessedAt": "2026-08-23"/"assessedAt": "2026-08-22"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
 expect_failure "iOS Iroha assessment date drift" "fearless-iOS Iroha assessment date"
 
 reset_fixture
@@ -22794,36 +23109,36 @@ perl -0pi -e 's/"bytes": 392660196/"bytes": 392660195/' "$workspace/fearless-iOS
 expect_failure "iOS Apple archive size drift" "fearless-iOS Apple archive byte size"
 
 reset_fixture
-perl -0pi -e 's/"reviewThresholdBytes": 350000000/"reviewThresholdBytes": 400000000/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple review threshold drift" "fearless-iOS Apple archive review threshold"
+perl -0pi -e 's/fc56984b-2be7-431d-840e-21514d1883f0/00000000-0000-0000-0000-000000000000/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS canonical Taira chain ID drift" "fearless-iOS canonical Taira chain ID"
 
 reset_fixture
-perl -0pi -e 's/"entryCount": 20/"entryCount": 19/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple archive entry count drift" "fearless-iOS Apple archive entry count"
+perl -0pi -e 's/6TEAJqbb8oEPmLncoNiMRbLEK6tw/61CtjvNd9T3THAR65GsMVHr82Bjc/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS canonical Taira XOR drift" "fearless-iOS canonical Taira XOR definition"
 
 reset_fixture
-perl -0pi -e 's/"expandedBytes": 1396110349/"expandedBytes": 1396110348/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple expanded size drift" "fearless-iOS Apple archive expanded size"
+perl -0pi -e 's/"canonicalTairaNativeXorScale": 9/"canonicalTairaNativeXorScale": 18/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS canonical Taira XOR scale drift" "fearless-iOS canonical Taira XOR scale"
 
 reset_fixture
-perl -0pi -e 's/"maxEntryBytes": 704780504/"maxEntryBytes": 704780503/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple max-entry drift" "fearless-iOS Apple archive maximum entry"
+perl -0pi -e 's/"liveTairaObservedNativeXorScale": null/"liveTairaObservedNativeXorScale": 9/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS pre-rollout live XOR scale falsely promoted" "fearless-iOS pre-rollout live XOR scale observation"
 
 reset_fixture
-perl -0pi -e 's/"compressionRatio": "3\.556"/"compressionRatio": "3.555"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple archive compression ratio drift" "fearless-iOS Apple archive compression ratio"
+perl -0pi -e 's/require-six-complete-fanout-headers-reject-partial-or-malformed/accept-partial-fanout/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS strict fanout policy weakened" "fearless-iOS strict six-header fanout policy"
 
 reset_fixture
-perl -0pi -e 's/passed-path-type-encryption-crc-and-bomb-bounds/unchecked/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS Apple archive safety result removed" "fearless-iOS Apple archive safety result"
+perl -0pi -e 's/fail-closed-typed-error-authoritative-policy-unavailable/hardcoded-zero/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS fee estimation restored to zero" "fearless-iOS typed fee-unavailable behavior"
 
 reset_fixture
-perl -0pi -e 's/508b36e1ddc08d3c7488dfbb932d0e37f883908747296b6edab8465efbc3b77c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS published device slice drift" "fearless-iOS published device slice digest"
+perl -0pi -e 's/7efcc118eb50e3369d004d092f9b9d0b4d31ac52/0000000000000000000000000000000000000000/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS observed Taira build commit drift" "fearless-iOS observed Taira build commit"
 
 reset_fixture
-perl -0pi -e 's/b4ec44590205d173259f97a424702ace5d1fa70b469df578fc54a68fd2263b56/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS published simulator slice drift" "fearless-iOS published simulator slice digest"
+perl -0pi -e 's/"appliedTerminalRequired": true/"appliedTerminalRequired": false/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS Applied finality requirement removed" "fearless-iOS Applied finality requirement"
 
 reset_fixture
 perl -0pi -e 's/3f13ce287c168b7103b368a67fbf22d1e1d8de0b1b345c8187fae1c206faa60a/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
@@ -22910,7 +23225,7 @@ perl -0pi -e 's/"reproducibleSourceToBinaryIdentity": "not-proven"/"reproducible
 expect_failure "iOS reproducibility falsely promoted" "fearless-iOS reproducibility blocker"
 
 reset_fixture
-perl -0pi -e 's/5aeb26f23f5fbdaf9d435a83681ff01b9249a64e3e929b7258bb466d62b7d767/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+perl -0pi -e 's/9756355bec7ca04a9e95025a0f24296a02118a5bf5989cc9c2cec0612bf76201/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
 expect_failure "iOS compact transaction hash drift" "fearless-iOS compact transaction hash"
 
 reset_fixture
@@ -22934,16 +23249,16 @@ perl -0pi -e 's/"liveReceiptParity": "not-recorded"/"liveReceiptParity": "passed
 expect_failure "iOS live receipt parity falsely promoted" "fearless-iOS live receipt parity blocker"
 
 reset_fixture
-perl -0pi -e 's/"protocolChainIdMapping": "not-authoritatively-confirmed"/"protocolChainIdMapping": "same-as-route"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS protocol chain ID falsely assumed" "fearless-iOS protocol chain-ID blocker"
+perl -0pi -e 's/"protocolChainIdMapping": "canonical-first-release-profile-configured"/"protocolChainIdMapping": "same-as-route"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS protocol chain ID mapping drift" "fearless-iOS canonical protocol chain-ID mapping"
 
 reset_fixture
 perl -0pi -e 's/"secretCopiesReliablyZeroizable": false/"secretCopiesReliablyZeroizable": true/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
 expect_failure "iOS secret zeroization falsely promoted" "fearless-iOS secret zeroization blocker"
 
 reset_fixture
-perl -0pi -e 's/"receiptHashEqualityRequired": true/"receiptHashEqualityRequired": false/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
-expect_failure "iOS receipt equality requirement removed" "fearless-iOS receipt equality requirement"
+perl -0pi -e 's/"allSubmissionHashesEqualityRequired": true/"allSubmissionHashesEqualityRequired": false/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
+expect_failure "iOS all-result hash equality requirement removed" "fearless-iOS all-result hash equality requirement"
 
 reset_fixture
 perl -0pi -e 's/"fundedTairaBroadcast": "missing"/"fundedTairaBroadcast": "passed"/' "$workspace/fearless-iOS/config/iroha-production-send-readiness.json"
@@ -22954,7 +23269,7 @@ perl -0pi -e 's/apple_xcframework_review_and_materialization_required/apple_xcfr
 expect_failure "iOS XCFramework blocker removed" "fearless-iOS Apple XCFramework review/materialization blocker"
 
 reset_fixture
-perl -0pi -e 's/3e35a7667af81feff4d6a3dbb88babb6d56e8697672bd7d244215ae4e5855920/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-iOS/scripts/audit-iroha-production-send-readiness.sh"
+perl -0pi -e 's/3f1d4f8ca65d86abd86c3ac28f7142d24702472b07266477585bc70000bb68a4/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' "$workspace/fearless-iOS/scripts/audit-iroha-production-send-readiness.sh"
 expect_failure "iOS schema-v2 manifest digest pin drift" "fearless-iOS schema-v2 manifest digest pin"
 
 reset_fixture
@@ -22963,14 +23278,14 @@ expect_failure "iOS local-correction semantic gate removed" "fearless-iOS unpubl
 
 reset_fixture
 perl -0pi -e 's/^expect_failure "fixture-(1[4-9]|2[0-9])"/# removed/mg' "$workspace/fearless-iOS/scripts/test-iroha-production-send-readiness-audit.sh"
-expect_failure "iOS readiness destructive fixture floor reduced" "fearless-iOS Iroha readiness destructive fixture floor expected at least 74"
+expect_failure "iOS readiness destructive fixture floor reduced" "fearless-iOS Iroha readiness destructive fixture floor expected at least 100"
 
 reset_fixture
 perl -0pi -e 's/Independent ZIP path, entry-type, encryption, CRC, and size\/ratio checks/Archive unchecked/' "$workspace/fearless-iOS/docs/iroha-production-send-readiness.md"
 expect_failure "iOS completed archive-safety documentation removed" "fearless-iOS completed archive-safety documentation"
 
 reset_fixture
-perl -0pi -e 's/exact local\/Torii receipt-hash equality/local receipt hash/' "$workspace/fearless-iOS/docs/release-checklist.md"
+perl -0pi -e 's/exact local\/top-level\/transaction\/receipt\/final MCP hash equality/local receipt hash/' "$workspace/fearless-iOS/docs/release-checklist.md"
 expect_failure "iOS receipt-integrity checklist gate removed" "fearless-iOS release checklist Iroha gate"
 
 reset_fixture
@@ -23412,7 +23727,7 @@ mutate_transaction_manifest_fixture "$parent/iroha/python/iroha_python/tests/fix
 expect_failure "Iroha Python fixture family count drift" "../iroha Python transaction-fixture identity/count validation"
 
 reset_fixture
-rm "$parent/iroha/fixtures/kagemusha/cargo-lock.reviewed.v1"
+rm "$parent/iroha/fixtures/kagemusha/cargo-lock.reviewed.v2"
 expect_failure "Iroha reviewed Cargo lock artifact removed" "../iroha Kagemusha ABI-21/V4 policy/Torii/OpenAPI closure artifact missing"
 
 reset_fixture
@@ -23420,11 +23735,11 @@ chmod -x "$parent/iroha/ci/check_kagemusha_reviewed_cargo_lock.sh"
 expect_failure "Iroha reviewed Cargo lock helper loses executable mode" "../iroha reviewed Kagemusha Cargo lock gate is not executable"
 
 reset_fixture
-truncate -s 315547 "$parent/iroha/fixtures/kagemusha/cargo-lock.reviewed.v1"
-expect_failure "Iroha reviewed Cargo lock artifact size drifts" "../iroha reviewed Kagemusha Cargo lock artifact expected exactly 315548 bytes"
+truncate -s 319283 "$parent/iroha/fixtures/kagemusha/cargo-lock.reviewed.v2"
+expect_failure "Iroha reviewed Cargo lock artifact size drifts" "../iroha reviewed Kagemusha Cargo lock v2 artifact expected exactly 319284 bytes"
 
 reset_fixture
-perl -0pi -e 's/ff773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409/ef773ee12a07de45d0e9df9ed29620142d884f365adb5e83d372e15dbedcd409/' "$parent/iroha/ci/check_kagemusha_reviewed_cargo_lock.sh"
+perl -0pi -e 's/467a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3/567a0003a7a3c2c132fd8a1f1cbc366db4029972f972a955071e30d77fe870f3/' "$parent/iroha/ci/check_kagemusha_reviewed_cargo_lock.sh"
 expect_failure "Iroha reviewed Cargo lock digest pin drifts" "../iroha reviewed Cargo lock exact digest pin"
 
 reset_fixture
@@ -23432,8 +23747,8 @@ perl -0pi -e 's/run: ci\/check_kagemusha_reviewed_cargo_lock\.sh --materialize/r
 expect_failure "Iroha reviewed Cargo lock workflow materialization count reduced" "../iroha exact four reviewed Cargo lock materializations"
 
 reset_fixture
-perl -0pi -e 's/atomic publish collision/atomic publish accepted/' "$parent/iroha/ci/check_kagemusha_reviewed_cargo_lock.sh"
-expect_failure "Iroha reviewed Cargo lock adversarial inventory weakened" "../iroha reviewed Cargo lock complete adversarial inventory"
+perl -0pi -e 's/atomic no-replace publish collision/atomic publish accepted/' "$parent/iroha/ci/check_kagemusha_reviewed_cargo_lock.sh"
+expect_failure "Iroha reviewed Cargo lock adversarial inventory weakened" "../iroha reviewed Cargo lock atomic no-replace adversarial inventory"
 
 reset_fixture
 perl -0pi -e 's/^schema\.version=2$/schema.version=3/m' "$parent/iroha/fixtures/norito_rpc/iroha_compact_hash_vector.properties"
@@ -24160,15 +24475,15 @@ perl -0pi -e 's/check_kagemusha_recursive_spend_payload_bench\.sh" --self-test/c
 expect_failure "Iroha policy payload self-test delegation removed" "../iroha Kagemusha policy exact positive/self-test prerequisite delegation"
 
 reset_fixture
-perl -0pi -e 's/("request": \([\s\S]*?)612,/$1 613,/' "$parent/iroha/ci/check_kagemusha_recursive_spend_payload_bench.sh"
+perl -0pi -e 's/("request": \([\s\S]*?)614,/$1 615,/' "$parent/iroha/ci/check_kagemusha_recursive_spend_payload_bench.sh"
 expect_failure "Iroha reviewed request archive size drifted" "../iroha reviewed payload gate archive request size/digest"
 
 reset_fixture
-perl -0pi -e 's/c1a063495f07e66161f27dd5f484bb2914d11da9c967b49aa34a32eba56890b5/d1a063495f07e66161f27dd5f484bb2914d11da9c967b49aa34a32eba56890b5/' "$parent/iroha/ci/check_kagemusha_recursive_spend_payload_bench.sh"
+perl -0pi -e 's/71816aa146287f28a4f2e9a29381aab94d6612f589a3bce9009f5651b4c62e53/81816aa146287f28a4f2e9a29381aab94d6612f589a3bce9009f5651b4c62e53/' "$parent/iroha/ci/check_kagemusha_recursive_spend_payload_bench.sh"
 expect_failure "Iroha reviewed depth-64 archive digest drifted" "../iroha reviewed payload gate archive payment-depth-64-hop-8 size/digest"
 
 reset_fixture
-perl -0pi -e 's/"archive_bytes":17435/"archive_bytes":17436/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
+perl -0pi -e 's/"archive_bytes":18378/"archive_bytes":18379/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
 expect_failure "Iroha canonical depth-64 fixture size drifted" "../iroha canonical payload fixture archive payment-depth-64-hop-8 size/digest"
 
 reset_fixture
@@ -24368,7 +24683,7 @@ perl -0pi -e 's/every public export has a safe runtime target and an explicit de
 expect_failure "Iroha all-export declaration target regression removed" "../iroha all-export runtime/declaration target regression"
 
 reset_fixture
-perl -0pi -e 's/2faefadfb5f25dfb838e300bb0cb64c36ff7ce845dd5428d4a602d5991cb3eb1/3faefadfb5f25dfb838e300bb0cb64c36ff7ce845dd5428d4a602d5991cb3eb1/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
+perl -0pi -e 's/03c308b70ca7d7eb0016249f404ecb5aca5effdf92b66e00bb97aac688d8fcc9/13c308b70ca7d7eb0016249f404ecb5aca5effdf92b66e00bb97aac688d8fcc9/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
 expect_failure "Iroha canonical request fixture digest drifted" "../iroha canonical payload fixture archive request size/digest"
 
 reset_fixture
@@ -24522,7 +24837,7 @@ perl -0pi -e 's#Swatinem/rust-cache\x40e18b497796c12c097a38f9edb9d0641fb99eee32#
 expect_failure "Iroha payload workflow Rust cache action pin drifted" "../iroha exact pinned Kagemusha workflow Rust cache actions"
 
 reset_fixture
-perl -0pi -e 's/b4db2ba01e6fbe477e833750accc06a557b8bbe281fc64de995a9168611caed2/a4db2ba01e6fbe477e833750accc06a557b8bbe281fc64de995a9168611caed2/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
+perl -0pi -e 's/3e1153d1b5a7341e7a53d376046c8b064716cb12738251c48405b09e2a2f080c/4e1153d1b5a7341e7a53d376046c8b064716cb12738251c48405b09e2a2f080c/' "$parent/iroha/fixtures/kagemusha/peer_transport_measurements_v1.json"
 expect_failure "Iroha canonical payload generator digest drifted" "../iroha canonical ABI-21/V4 payload generator/factory digest"
 
 reset_fixture
@@ -24982,15 +25297,15 @@ perl -0pi -e 's#PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew
 expect_failure "aggregate canonical production PATH removed" "root aggregate audit canonical production PATH missing"
 
 reset_fixture
-perl -0pi -e 's/^  '\''FIXTURE_OVERRIDE_114\|value-114'\''\n//m' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "aggregate production override inventory reduced" "root aggregate audit expected exactly 118 production override probes"
+perl -0pi -e 's/^  '\''FIXTURE_OVERRIDE_145\|value-145'\''\n//m' "$workspace/scripts/test-release-readiness-audit.sh"
+expect_failure "aggregate production override inventory reduced" "root aggregate audit expected exactly 146 production override probes"
 
 reset_fixture
 perl -0pi -e 's/all tests passed \(\$SCENARIO_COUNT aggregate scenarios/all checks passed ($SCENARIO_COUNT aggregate scenarios/' "$workspace/scripts/test-release-readiness-audit.sh"
 expect_failure "aggregate exact completion inventory weakened" "root aggregate audit exact completion inventory missing"
 
 reset_fixture
-perl -0pi -e 's/118 production override probes/117 production override probes/g' "$workspace/FEARLESS_PROJECT_PLAN.md"
+perl -0pi -e 's/129 production override probes/128 production override probes/g' "$workspace/FEARLESS_PROJECT_PLAN.md"
 expect_failure "project plan aggregate production override total changed" "project plan aggregate, passkey, and Bitcoin hardening evidence truth"
 else
   TEST_CASE_INDEX=3775
@@ -26031,32 +26346,32 @@ else
   TEST_CASE_INDEX=4020
 fi
 
-# Append-only 2026-07-13 source-report v2, three-SHA Iroha publication proof,
-# and release-bundle manifest-v2 enforcement.
+# Append-only 2026-07-13 source-report v3, three-SHA Iroha publication proof,
+# and release-bundle manifest-v3 enforcement.
 if ((TEST_CASE_START <= 4048)); then
 reset_fixture
-perl -0pi -e 's/const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 2;/const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 1;/' "$workspace/scripts/audit-source-publication-readiness.mjs"
-expect_failure "source-publication report schema v2 downgraded" "root source publication report wire schema v2 missing"
+perl -0pi -e 's/const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 3;/const SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION = 2;/' "$workspace/scripts/audit-source-publication-readiness.mjs"
+expect_failure "source-publication report schema v3 downgraded" "root source publication report wire schema v3 missing"
 
 reset_fixture
-perl -0pi -e 's/legacy-v1-preflight-report/legacy-preflight-accepted/g' "$workspace/scripts/test-source-publication-readiness-audit.sh"
-expect_failure "source-publication legacy preflight fixture removed" "root source publication legacy-v1 preflight adversarial fixture missing"
+perl -0pi -e 's/legacy-v2-preflight-report/legacy-preflight-accepted/g' "$workspace/scripts/test-source-publication-readiness-audit.sh"
+expect_failure "source-publication legacy preflight fixture removed" "root source publication legacy-v2 preflight adversarial fixture missing"
 
 reset_fixture
 perl -0pi -e 's/duplicate authoritative ref query/duplicate ref query accepted/g' "$workspace/scripts/test-source-publication-readiness-audit.sh"
 expect_failure "source-publication duplicate ref-query guard removed" "root source publication one-query authoritative ref regression guard missing"
 
 reset_fixture
-perl -0pi -e 's/report\.schemaVersion !== 2/report.schemaVersion !== 1/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter source report v2 downgraded" "root release unblock bundle source publication report schema v2 missing"
+perl -0pi -e 's/report\.schemaVersion !== 3/report.schemaVersion !== 2/' "$workspace/scripts/export-release-unblock-bundle.sh"
+expect_failure "release unblock exporter source report v3 downgraded" "root release unblock bundle source publication report schema v3 phase contract missing"
 
 reset_fixture
-perl -0pi -e 's/report\.schemaVersion !== 2/report.schemaVersion !== 1/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier source report v2 downgraded" "root release unblock bundle verifier source publication report schema v2 missing"
+perl -0pi -e 's/report\.schemaVersion !== 3/report.schemaVersion !== 2/' "$workspace/scripts/verify-release-unblock-bundle.sh"
+expect_failure "release unblock verifier source report v3 downgraded" "root release unblock bundle verifier source publication report schema v3 phase contract missing"
 
 reset_fixture
-perl -0pi -e 's/manifest\.schemaVersion !== 2/manifest.schemaVersion !== 1/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock manifest v2 split downgraded" "root release unblock bundle verifier manifest-v2 summary-actions-v1 split missing"
+perl -0pi -e 's/manifest\.schemaVersion !== 3/manifest.schemaVersion !== 2/' "$workspace/scripts/verify-release-unblock-bundle.sh"
+expect_failure "release unblock manifest v3 split downgraded" "root release unblock bundle verifier manifest-v3 summary-actions-v1 split missing"
 
 reset_fixture
 perl -0pi -e 's/source\.currentBranchRemotePresent !== true/source.currentBranchRemotePresent === true/' "$workspace/scripts/export-release-unblock-bundle.sh"
@@ -26075,8 +26390,8 @@ perl -0pi -e 's/source\.branch === source\.head/source.branch !== source.head/' 
 expect_failure "release unblock verifier matching-branch mirror invariant inverted" "root release unblock bundle verifier universal failed-row configured/current branch invariants missing"
 
 reset_fixture
-perl -0pi -e 's/report\.schemaVersion !== 2/report.schemaVersion !== 1/' "$workspace/scripts/audit-release-readiness.sh"
-expect_failure "aggregate Iroha classifier source schema v2 removed" "root aggregate audit source-report v2 classifier boundary missing"
+perl -0pi -e 's/report\.schemaVersion !== 3/report.schemaVersion !== 2/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "aggregate Iroha classifier source schema v3 removed" "root aggregate audit schema-v3 source-report phase and preflight-byte classifier boundary missing"
 
 reset_fixture
 perl -0pi -e 's/hasSynchronizedAuthoritativeCurrentBranchProof/hasUnfencedSynchronizedAuthoritativeCurrentBranchProof/' "$workspace/scripts/audit-release-readiness.sh"
@@ -26084,15 +26399,15 @@ expect_failure "aggregate synchronized actual-branch proof disconnected" "root a
 
 reset_fixture
 perl -0pi -e 's/missing actual-branch Iroha publication proof stays local/missing actual branch accepted/g' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "aggregate missing actual-branch proof scenario removed" "root aggregate audit fifteen canonical-v2 synchronized-current proof rejection scenarios missing"
+expect_failure "aggregate missing actual-branch proof scenario removed" "root aggregate audit seventeen schema-v3 synchronized-current proof rejection scenarios missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.currentBranchRemoteSha === iroha\.headSha/iroha.currentBranchRemoteSha !== iroha.headSha/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter synchronized actual-branch classifier inverted" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter synchronized actual-branch classifier inverted" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.currentBranchRemoteSha === iroha\.headSha/iroha.currentBranchRemoteSha !== iroha.headSha/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier synchronized actual-branch classifier inverted" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier synchronized actual-branch classifier inverted" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/failed Iroha false current-branch presence with SHA fixture/failed row remote proof accepted/g' "$workspace/scripts/test-release-unblock-bundle-export.sh"
@@ -26120,7 +26435,7 @@ expect_failure "aggregate PR-head diagnostic proof bypassed" "root aggregate aud
 
 reset_fixture
 perl -0pi -e 's/missing Iroha PR-head SHA proof stays local/missing PR head accepted/g' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "aggregate missing PR-head proof scenario removed" "root aggregate audit fifteen canonical-v2 synchronized-current proof rejection scenarios missing"
+expect_failure "aggregate missing PR-head proof scenario removed" "root aggregate audit seventeen schema-v3 synchronized-current proof rejection scenarios missing"
 
 reset_fixture
 perl -0pi -e "s/'prState', 'prHeadSha', 'repositoryPath'/'prState', 'repositoryPath'/" "$workspace/scripts/export-release-unblock-bundle.sh"
@@ -26182,7 +26497,7 @@ expect_failure "release unblock verifier configured-ref handoff drift fixture re
 
 reset_fixture
 perl -0pi -e 's/stale Iroha local\/current diagnostic stays local/stale Iroha local current diagnostic accepted/' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "aggregate stale current-diagnostic rejection scenario removed" "root aggregate audit fifteen canonical-v2 synchronized-current proof rejection scenarios missing"
+expect_failure "aggregate stale current-diagnostic rejection scenario removed" "root aggregate audit seventeen schema-v3 synchronized-current proof rejection scenarios missing"
 
 reset_fixture
 mv "$workspace/fearless-iOS/config/testflight-publication-readiness.json" "$workspace/fearless-iOS/config/testflight-publication-readiness.json.real"
@@ -26221,15 +26536,15 @@ expect_failure "aggregate postflight-continuity positive scenario removed" "root
 
 reset_fixture
 perl -0pi -e 's/Iroha postflight-continuity marker plus unrelated failure stays local/Iroha marker plus unrelated failure accepted/' "$workspace/scripts/test-release-readiness-audit.sh"
-expect_failure "aggregate postflight-continuity sixth-failure rejection removed" "root aggregate audit fifteen canonical-v2 synchronized-current proof rejection scenarios missing"
+expect_failure "aggregate postflight-continuity sixth-failure rejection removed" "root aggregate audit seventeen schema-v3 synchronized-current proof rejection scenarios missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.failures\.length === 5 && iroha\.failures\[4\] === preflightContinuityFailure/iroha.failures.length >= 5 \&\& iroha.failures[4] === preflightContinuityFailure/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter postflight-continuity cardinality weakened" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter postflight-continuity cardinality weakened" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/hasCanonicalSynchronizedFailureCountAndContinuity &&/true \&\&/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter postflight-continuity cardinality result disconnected" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter postflight-continuity cardinality result disconnected" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/reviewed-source postflight preflight-continuity marker fixture/reviewed source postflight marker accepted without a test/' "$workspace/scripts/test-release-unblock-bundle-export.sh"
@@ -26241,11 +26556,11 @@ expect_failure "release unblock exporter postflight-continuity sixth-failure fix
 
 reset_fixture
 perl -0pi -e 's/iroha\.failures\.length === 5 && iroha\.failures\[4\] === preflightContinuityFailure/iroha.failures.length >= 5 \&\& iroha.failures[4] === preflightContinuityFailure/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier postflight-continuity cardinality weakened" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier postflight-continuity cardinality weakened" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/hasCanonicalSynchronizedFailureCountAndContinuity &&/true \&\&/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier postflight-continuity cardinality result disconnected" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier postflight-continuity cardinality result disconnected" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/external reviewed-source postflight preflight-continuity marker fixture/external reviewed source postflight marker accepted without a test/' "$workspace/scripts/test-release-unblock-bundle-verify.sh"
@@ -26268,7 +26583,7 @@ perl -0pi -e 's/relation-inconsistent, reordered, duplicated,/relation-inconsist
 expect_failure "project plan postflight-continuity rejection semantics weakened" "project plan authoritative actual-branch remote drift truth missing"
 
 reset_fixture
-perl -0pi -e 's/now catalogs 4,189 destructive mutation cases/now catalogs 4,188 destructive mutation cases/' "$workspace/FEARLESS_PROJECT_PLAN.md"
+perl -0pi -e 's/now catalogs 4,211 destructive mutation cases/now catalogs 4,210 destructive mutation cases/' "$workspace/FEARLESS_PROJECT_PLAN.md"
 expect_failure "project plan postflight-continuity catalog weakened" "project plan authoritative current-branch mutation catalog missing"
 
 reset_fixture
@@ -26276,8 +26591,8 @@ perl -0pi -e 's/^EXPECTED_CASES=70$/EXPECTED_CASES=71/m' "$workspace/fearless-iO
 expect_failure "iOS current TestFlight adversarial runtime case sentinel drift" "fearless-iOS current TestFlight exact runtime case sentinel missing"
 
 reset_fixture
-perl -0pi -e 's/EXPECTED_TEST_CASE_CATALOG=4191/EXPECTED_TEST_CASE_CATALOG=4190/' "$workspace/scripts/test-plan-readiness-audit.sh"
-expect_failure "plan-readiness runtime mutation catalog assertion weakened" "root plan-readiness exact runtime mutation catalog assertion missing"
+perl -0pi -e 's/EXPECTED_TEST_CASE_CATALOG=4211/EXPECTED_TEST_CASE_CATALOG=4210/' "$workspace/scripts/test-plan-readiness-audit.sh"
+expect_failure "plan-readiness runtime mutation catalog sentinel weakened" "root plan-readiness exact runtime mutation catalog sentinel"
 else
   TEST_CASE_INDEX=4078
 fi
@@ -26311,15 +26626,15 @@ expect_failure "aggregate authoritative-current cached-upstream negative scenari
 
 reset_fixture
 perl -0pi -e 's/iroha\.failures\.length === 7 && iroha\.failures\[6\] === preflightContinuityFailure/iroha.failures.length >= 7 \&\& iroha.failures[6] === preflightContinuityFailure/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter authoritative-current drift cardinality weakened" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter authoritative-current drift cardinality weakened" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.currentBranchRemoteSha !== iroha\.headSha/iroha.currentBranchRemoteSha === iroha.headSha/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter authoritative-current drift relation inverted" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter authoritative-current drift relation inverted" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/counts\.every\(\(key\) => iroha\[key\] === 0\)/true/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter authoritative-current drift zero-count gate removed" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter authoritative-current drift zero-count gate removed" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/reviewed-source authoritative-current equals pull-request head drift fixture/reviewed-source authoritative-current rejects pull-request head drift fixture/' "$workspace/scripts/test-release-unblock-bundle-export.sh"
@@ -26331,19 +26646,19 @@ expect_failure "release unblock exporter forged cached-upstream adversarial fixt
 
 reset_fixture
 perl -0pi -e 's/hasCanonicalSynchronizedReviewedSourceMismatch \|\|\s*hasCanonicalDriftReviewedSourceMismatch/hasCanonicalSynchronizedReviewedSourceMismatch || false/' "$workspace/scripts/export-release-unblock-bundle.sh"
-expect_failure "release unblock exporter authoritative-current drift result disconnected" "root release unblock bundle canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock exporter authoritative-current drift result disconnected" "root release unblock bundle canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.failures\.length === 7 && iroha\.failures\[6\] === preflightContinuityFailure/iroha.failures.length >= 7 \&\& iroha.failures[6] === preflightContinuityFailure/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier authoritative-current drift cardinality weakened" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier authoritative-current drift cardinality weakened" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/iroha\.currentBranchRemoteSha !== iroha\.headSha/iroha.currentBranchRemoteSha === iroha.headSha/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier authoritative-current drift relation inverted" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier authoritative-current drift relation inverted" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/counts\.every\(\(key\) => iroha\[key\] === 0\)/true/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier authoritative-current drift zero-count gate removed" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier authoritative-current drift zero-count gate removed" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/external reviewed-source authoritative-current equals pull-request head drift fixture/external reviewed-source authoritative-current rejects pull-request head drift fixture/' "$workspace/scripts/test-release-unblock-bundle-verify.sh"
@@ -26355,7 +26670,7 @@ expect_failure "release unblock verifier forged cached-upstream adversarial fixt
 
 reset_fixture
 perl -0pi -e 's/hasCanonicalSynchronizedReviewedSourceMismatch \|\|\s*hasCanonicalDriftReviewedSourceMismatch/hasCanonicalSynchronizedReviewedSourceMismatch || false/' "$workspace/scripts/verify-release-unblock-bundle.sh"
-expect_failure "release unblock verifier authoritative-current drift result disconnected" "root release unblock bundle verifier canonical-v2 synchronized-or-drifted current reviewed-PR classifier missing"
+expect_failure "release unblock verifier authoritative-current drift result disconnected" "root release unblock bundle verifier canonical-v3 synchronized-or-drifted current reviewed-PR classifier missing"
 
 reset_fixture
 perl -0pi -e 's/JSON\.stringify\(iroha\.failures\) !== JSON\.stringify\(expectedFailures\)/iroha.failures.length !== expectedFailures.length/' "$workspace/scripts/test-source-publication-readiness-audit.sh"
@@ -26765,6 +27080,116 @@ perl -0pi -e 's#https://play\.google\.com/apps/test/RQpPGZ3cf-M/#https://play.go
 expect_failure "current Android Google IAS tester URL attestation mutated" "root current Android Google IAS publication attestation expected SHA-256"
 else
   TEST_CASE_INDEX=4191
+fi
+
+# Append-only strict Nexus live/evidence chain-identity binding contract.
+if ((TEST_CASE_START <= 4194)); then
+reset_fixture
+perl -0pi -e 's/NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID="sora:nexus:global"/NEXUS_PRODUCTION_EVIDENCE_CHAIN_ID="fixture:nexus:chain"/' "$workspace/scripts/audit-iroha-release-readiness.sh"
+expect_failure "drifted canonical Nexus evidence chain identity authority" "root Iroha readiness canonical Nexus evidence chain identity authority missing"
+
+reset_fixture
+perl -0pi -e 's/Strict SORA Nexus production evidence requires committed NEXUS_EXPECTED_CHAIN_ID to equal/Strict Nexus chain authorities may diverge/' "$workspace/scripts/audit-iroha-release-readiness.sh"
+expect_failure "missing Iroha Nexus live/evidence chain identity binding" "root Iroha readiness Nexus live/evidence chain identity binding missing"
+
+reset_fixture
+perl -0pi -e 's/strict Nexus production evidence rejects a divergent live-health chain identity/Nexus chain identity divergence accepted/' "$workspace/scripts/test-iroha-release-readiness-audit.sh"
+expect_failure "missing Iroha Nexus live/evidence chain mismatch fixture" "root Iroha readiness Nexus live/evidence chain mismatch fixture missing"
+else
+  TEST_CASE_INDEX=4194
+fi
+
+# Append-only aggregate production-smoke resource/freshness authority contract.
+if ((TEST_CASE_START <= 4197)); then
+reset_fixture
+perl -0pi -e 's/^  TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC\n//m' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "TI smoke freshness override rejection removed" "root aggregate audit TI smoke health-lag override rejection missing"
+
+reset_fixture
+perl -0pi -e 's/TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC=300/TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC=3600/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "TI smoke canonical freshness pin weakened" "root aggregate audit canonical TI smoke resource and freshness limits missing"
+
+reset_fixture
+perl -0pi -e 's/TI production smoke must use the canonical timeout, response-size, and health-lag limits/TI production smoke accepts ambient resource limits/' "$workspace/scripts/test-release-readiness-audit.sh"
+expect_failure "TI smoke ambient-bypass fixture removed" "root aggregate audit canonical TI smoke limit fixture missing"
+else
+  TEST_CASE_INDEX=4197
+fi
+
+# Append-only passkey production-smoke resource authority contract.
+if ((TEST_CASE_START <= 4200)); then
+reset_fixture
+perl -0pi -e 's/^  PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES\n//m' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "passkey smoke response-size override rejection removed" "root aggregate audit passkey smoke response-size override rejection missing"
+
+reset_fixture
+perl -0pi -e 's/PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=1048576/PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=5242880/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "passkey smoke canonical response-size pin weakened" "root aggregate audit canonical passkey smoke resource limits missing"
+
+reset_fixture
+perl -0pi -e 's#passkey production smoke must use the canonical helper, timeout, response-size, and isolated Node TLS/proxy/CA environment#passkey production smoke accepts ambient resource limits#' "$workspace/scripts/test-release-readiness-audit.sh"
+expect_failure "passkey smoke ambient-bypass fixture removed" "root aggregate audit canonical passkey smoke limit fixture missing"
+else
+  TEST_CASE_INDEX=4200
+fi
+
+# Append-only exact root source-publication required-file authority contract.
+if ((TEST_CASE_START <= 4202)); then
+reset_fixture
+perl -0pi -e 's#\.github/CODEOWNERS#.github/CODEOWNERS.removed#' "$workspace/scripts/export-release-unblock-bundle.sh"
+expect_failure "release unblock exporter root source-file authority weakened" "root release unblock bundle exporter canonical 25-file workspace source authority missing"
+
+reset_fixture
+perl -0pi -e 's#\.github/CODEOWNERS#.github/CODEOWNERS.removed#' "$workspace/scripts/verify-release-unblock-bundle.sh"
+expect_failure "release unblock verifier root source-file authority weakened" "root release unblock bundle verifier canonical 25-file workspace source authority missing"
+else
+  TEST_CASE_INDEX=4202
+fi
+
+# Append-only source-publication phase, exact-preflight, and single-snapshot contract.
+if ((TEST_CASE_START <= 4210)); then
+reset_fixture
+perl -0pi -e 's/schemaVersion: SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION,\n  phase,\n  preflightReportSha256/schemaVersion: SOURCE_PUBLICATION_REPORT_SCHEMA_VERSION,\n  omittedPhase: phase,\n  preflightReportSha256/' "$workspace/scripts/audit-source-publication-readiness.mjs"
+expect_failure "source publication report phase field removed" "root source publication phase-aware report schema missing"
+
+reset_fixture
+perl -0pi -e 's/preflightReportSha256: preflightSnapshot\?\.sha256 \?\? null/preflightReportSha256: null/' "$workspace/scripts/audit-source-publication-readiness.mjs"
+expect_failure "source publication postflight preflight digest unconditionally cleared" "root source publication phase-aware report schema missing"
+
+reset_fixture
+perl -0pi -e "s/if \(report\.phase !== 'preflight'\)/if (false)/" "$workspace/scripts/audit-source-publication-readiness.mjs"
+expect_failure "source publication preflight phase parser weakened" "root source publication exact raw preflight byte binding missing"
+
+reset_fixture
+perl -0pi -e 's/if \(report\.preflightReportSha256 !== null\) \{/if (false) {/' "$workspace/scripts/audit-source-publication-readiness.mjs"
+expect_failure "source publication self-bound preflight accepted" "root source publication exact raw preflight byte binding missing"
+
+reset_fixture
+perl -0pi -e 's/const identityFields = \[/const omittedIdentityFields = [/' "$workspace/scripts/audit-release-readiness.sh"
+expect_failure "aggregate source publication row continuity binding removed" "root aggregate audit exact nine-row preflight/postflight continuity classifier missing"
+
+reset_fixture
+perl -0pi -e 's/function readSourcePublicationArtifactSnapshots/function omittedSourcePublicationArtifactSnapshots/' "$workspace/scripts/export-release-unblock-bundle.sh"
+expect_failure "release unblock exporter source publication snapshot authority removed" "root release unblock bundle exporter source publication single-snapshot authority missing"
+
+reset_fixture
+perl -0pi -e 's/const sourcePublicationArtifactSnapshots = new Map\(\)/const omittedSourcePublicationArtifactSnapshots = new Map()/' "$workspace/scripts/verify-release-unblock-bundle.sh"
+expect_failure "release unblock verifier source publication snapshot authority removed" "root release unblock bundle verifier source publication single-snapshot authority missing"
+
+reset_fixture
+perl -0pi -e 's/source publication artifact read more than once/source publication artifact reread accepted/' "$workspace/scripts/test-release-unblock-bundle-export.sh"
+expect_failure "release unblock exporter source publication single-snapshot regression fixture removed" "root release unblock bundle exporter source publication single-snapshot regression fixture missing"
+else
+  TEST_CASE_INDEX=4210
+fi
+
+# Append-only iOS shared-features source-derived ready-state inventory contract.
+if ((TEST_CASE_START <= 4211)); then
+reset_fixture
+perl -0pi -e 's/REMOVAL_MUTATION_CALL_SITES=\(.*?\n\)/REMOVAL_MUTATION_CALL_SITES=()/s' "$workspace/fearless-iOS/scripts/deps/audit-shared-features-delta-report.sh"
+expect_failure "iOS shared-features mutation-call inventory truncated" "fearless-iOS shared-features exact 10-entry mutation-call inventory"
+else
+  TEST_CASE_INDEX=4211
 fi
 
 if ((TEST_CASE_INDEX != EXPECTED_TEST_CASE_CATALOG)); then

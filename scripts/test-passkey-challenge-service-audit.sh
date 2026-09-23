@@ -161,6 +161,9 @@ setup_fixture() {
 	    'scripts/production-deployment-evidence.json' \
 	    'npm run generate:deployment-evidence-template -- --output build/reports/production-deployment-evidence-template.json' \
 	    'npm run audit:deployment-evidence -- --require-ready'
+	  printf '%s\n' \
+	    'PASSKEY_DEPLOYMENT_GH_BIN exact recorded GitHub Actions run gh attestation verify --bundle' \
+	    'blocked diagnostic mode does not contact GitHub' >> "$service_dir/docs/production-deployment.md"
 	  printf '%s\n' 'ready evidence must be no more than 24 hours old liveHealthAttestation platformProvisioningAttestation' >> "$service_dir/docs/production-deployment.md"
 	  write_file "$service_dir/docs/release-checklist.md" \
 	    'gh workflow run passkey-image-publish.yml --repo soramitsu/fearless-release-readiness --ref main -f source_commit=<protected-main-commit>' \
@@ -186,6 +189,9 @@ setup_fixture() {
 	    'npm run audit:deployment-evidence -- --require-ready' \
 	    'Android and iOS passkey backup release flags remain disabled' \
 	    'ready smoke must be no more than 24 hours old'
+	  printf '%s\n' \
+	    'PASSKEY_DEPLOYMENT_GH_BIN exact recorded Actions run and exact attestation ID gh attestation verify --bundle' \
+	    'blocked diagnostic mode must make no GitHub call' >> "$service_dir/docs/release-checklist.md"
 	  write_file "$service_dir/scripts/production-deployment-evidence.json" \
 	    '{' \
 	    '  "baseUrl": "https://backup.fearlesswallet.io",' \
@@ -218,6 +224,18 @@ setup_fixture() {
 	    'echo "record.platformProvisioningAttestation"' \
 	    'echo "payloadSha256 must match the canonical attested payload"' \
 	    'echo "production route smoke command"' \
+	    'echo "PASSKEY_DEPLOYMENT_GH_BIN"' \
+	    'echo "function authenticatePublicationRecord(record, index, ghBinary)"' \
+	    'echo "actions/runs/${runId}"' \
+	    'echo "attestations/${record.imageDigest}"' \
+	    'echo "run.repository.full_name === EXPECTED_PUBLICATION_REPOSITORY"' \
+	    'echo "run.path === EXPECTED_IMAGE_PUBLICATION_WORKFLOW"' \
+	    'echo "run.event === EXPECTED_PUBLICATION_EVENT"' \
+	    'echo "run.head_sha === record.deployedCommit"' \
+	    'echo "imageProvenanceAttestationUrl download must contain exactly one Sigstore bundle"' \
+	    "echo \"'--bundle' '--signer-workflow' '--source-digest' '--source-ref' '--deny-self-hosted-runners'\"" \
+	    "echo \"GH_HOST: 'github.com'\"" \
+	    'echo "readyEvidenceRequired && !process.exitCode"' \
 	    'echo "assertNoSecretLikeValues(data)"' \
 	    'echo "must not be included in public deployment evidence"'
 	  write_file "$service_dir/scripts/test-deployment-evidence-audit.sh" \
@@ -232,6 +250,11 @@ setup_fixture() {
 	    'echo "fresh record cannot mask stale second deployment"' \
 	    'echo "cross-deployment live health attestation substitution"' \
 	    'echo "forged payload digest"' \
+	    'echo "blocked evidence makes zero GitHub calls"' \
+	    'echo "ready evidence authenticates exact GitHub Actions run and attestation bundle"' \
+	    'echo "authenticated Actions run drift is rejected"' \
+	    'echo "missing malformed or incomplete exact attestation bundle is rejected"' \
+	    'echo "attestation verification failure is fail closed"' \
 	    'echo "smoke before deployment evidence"' \
 	    'echo "secret-like deployment evidence key"' \
 	    'echo "secret-like deployment evidence value"' \
@@ -291,7 +314,9 @@ setup_fixture() {
     'const credential_type_mismatch = true;'
   write_file "$service_dir/src/store.js" \
     'class FileBackedPasskeyChallengeStore {}' \
-    'const CREDENTIAL_STORE_SCHEMA_VERSION = 3;' \
+    'const CREDENTIAL_STORE_SCHEMA_VERSION = 4;' \
+    'const MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION = 3;' \
+    'validateCredentialOwnerIndex' \
     'const schemaVersion = CREDENTIAL_STORE_SCHEMA_VERSION;' \
     'const credentialsByStorageKey = new Map();' \
     "const entryFields = ['storageKey', 'ownerSubjectHash', 'credentials'];" \
@@ -891,8 +916,16 @@ perl -0pi -e 's/ownerSubjectHash/subjectBindingGone/' "$service_dir/src/service.
 expect_failure "missing stable owner authorization binding" "stable owner authorization binding"
 
 setup_fixture
-perl -0pi -e 's/CREDENTIAL_STORE_SCHEMA_VERSION = 3/CREDENTIAL_STORE_SCHEMA_VERSION = 2/' "$service_dir/src/store.js"
-expect_failure "legacy credential store schema" "credential store schema-v3"
+perl -0pi -e 's/const CREDENTIAL_STORE_SCHEMA_VERSION = 4/const CREDENTIAL_STORE_SCHEMA_VERSION = 3/' "$service_dir/src/store.js"
+expect_failure "legacy credential store schema" "credential store schema-v4"
+
+setup_fixture
+perl -0pi -e 's/const MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION = 3/const MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION = 2/' "$service_dir/src/store.js"
+expect_failure "credential migration skips existing records" "preserved schema-v3 migration"
+
+setup_fixture
+perl -0pi -e 's/validateCredentialOwnerIndex/trustCredentialOwnerIndex/' "$service_dir/src/store.js"
+expect_failure "credential owner index is not validated" "credential owner index integrity"
 
 setup_fixture
 perl -0pi -e 's/ownerSubjectHash/subjectBindingGone/' "$service_dir/src/store.js"
@@ -981,6 +1014,26 @@ expect_failure "missing smoke canonical challenge gate" "smoke canonical 32-byte
 setup_fixture
 perl -0pi -e 's/bearerAuth/noAuthentication/' "$workspace/config/passkey-backup-challenge-service.openapi.json"
 expect_failure "missing OpenAPI Bearer security" "OpenAPI Bearer security scheme"
+
+setup_fixture
+perl -0pi -e 's/function authenticatePublicationRecord/function omittedPublicationAuthenticator/' "$service_dir/scripts/audit-deployment-evidence.sh"
+expect_failure "missing authenticated GitHub publication-run gate" "authenticated GitHub publication-run gate"
+
+setup_fixture
+perl -0pi -e "s/'--bundle'/'--unbound-bundle'/" "$service_dir/scripts/audit-deployment-evidence.sh"
+expect_failure "missing exact attestation bundle verification gate" "exact attestation bundle verification gate"
+
+setup_fixture
+perl -0pi -e 's/PASSKEY_DEPLOYMENT_GH_BIN/PASSKEY_UNAUTHENTICATED_GH_BIN/g' "$service_dir/scripts/audit-deployment-evidence.sh"
+expect_failure "missing explicit deployment gh authority gate" "explicit gh authority gate"
+
+setup_fixture
+perl -0pi -e 's/blocked evidence makes zero GitHub calls/blocked evidence may contact GitHub/' "$service_dir/scripts/test-deployment-evidence-audit.sh"
+expect_failure "missing blocked no-GitHub-call test" "blocked no-GitHub-call test"
+
+setup_fixture
+perl -0pi -e 's/gh attestation verify --bundle/gh attestation verify without exact bundle/' "$service_dir/docs/production-deployment.md"
+expect_failure "missing exact attestation-bundle verification docs" "exact attestation-bundle verification docs"
 
 setup_fixture
 perl -0pi -e 's/AuthorizationForbidden/AuthorizationIgnored/' "$workspace/config/passkey-backup-challenge-service.openapi.json"

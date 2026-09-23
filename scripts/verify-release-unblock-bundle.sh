@@ -4,10 +4,11 @@ set -euo pipefail
 ROOT_DIR="${RELEASE_UNBLOCK_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 BUNDLE_DIR="${RELEASE_UNBLOCK_BUNDLE_DIR:-$ROOT_DIR/build/reports/release-readiness/unblock-bundle}"
 MAX_AGE_HOURS=""
+PUBLISHED_BUNDLE_PATH=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/verify-release-unblock-bundle.sh [--bundle DIR] [--max-age-hours HOURS]
+Usage: scripts/verify-release-unblock-bundle.sh [--bundle DIR] [--published-path DIR] [--max-age-hours HOURS]
 
 Verifies a release-unblock handoff bundle without requiring access to the
 original release-readiness report directory. The verifier checks bundle schema,
@@ -32,6 +33,10 @@ while (($#)); do
       MAX_AGE_HOURS="$2"
       shift 2
       ;;
+    --published-path)
+      PUBLISHED_BUNDLE_PATH="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -44,18 +49,26 @@ while (($#)); do
   esac
 done
 
-node - "$BUNDLE_DIR" "$MAX_AGE_HOURS" "$ROOT_DIR" <<'NODE'
+node - "$BUNDLE_DIR" "$MAX_AGE_HOURS" "$ROOT_DIR" "$PUBLISHED_BUNDLE_PATH" <<'NODE'
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 
-const [, , bundleDirArg, maxAgeHoursArg, workspaceRootArg] = process.argv
+const [, , bundleDirArg, maxAgeHoursArg, workspaceRootArg, publishedBundlePathArg] = process.argv
 const bundleRoot = path.resolve(bundleDirArg)
 const configuredWorkspaceRoot = path.resolve(workspaceRootArg)
 
 function fail(message) {
   console.error(`[release-unblock-bundle-verify][error] ${message}`)
   process.exit(1)
+}
+
+const publishedBundleRoot = publishedBundlePathArg || bundleRoot
+requireSingleLine(bundleRoot, 'bundle directory')
+requireSingleLine(configuredWorkspaceRoot, 'workspace root')
+requireSingleLine(publishedBundleRoot, 'published bundle path')
+if (!path.isAbsolute(publishedBundleRoot) || path.normalize(publishedBundleRoot) !== publishedBundleRoot) {
+  fail(`published bundle path must be absolute and normalized: ${publishedBundleRoot}`)
 }
 
 function assertRegularBundleDirectory(dir) {
@@ -133,12 +146,16 @@ function readBundleFile(relativePath, label, encoding) {
   return encoding === undefined ? fs.readFileSync(file) : fs.readFileSync(file, encoding)
 }
 
-function readJson(relativePath, label) {
+function parseJson(content, label) {
   try {
-    return JSON.parse(readBundleFile(relativePath, label, 'utf8'))
+    return JSON.parse(Buffer.isBuffer(content) ? content.toString('utf8') : content)
   } catch (error) {
     fail(`${label} is not valid JSON: ${error.message}`)
   }
+}
+
+function readJson(relativePath, label) {
+  return parseJson(readBundleFile(relativePath, label), label)
 }
 
 function assertObject(value, label) {
@@ -392,6 +409,9 @@ function expectedSourcePathForArtifact(relativePath, sourceReportDir) {
   if (relativePath === 'handoffs/source-publication-readiness-report.json') {
     return path.join(sourceReportDir, 'source-publication-readiness-report.json')
   }
+  if (relativePath === 'handoffs/source-publication-preflight-report.json') {
+    return path.join(sourceReportDir, 'source-publication-preflight-report.json')
+  }
   if (relativePath === 'handoffs/android-xcm-registry-gap-report.json') {
     return path.join(sourceReportDir, 'android-xcm-registry-gap-report.json')
   }
@@ -445,6 +465,7 @@ function expectedWorkspaceSourcePathForArtifact(relativePath, workspaceRoot) {
 const releasePrStatusReportArtifactPath = 'handoffs/release-pr-readiness-report.json'
 const releasePrConfigPath = 'config/release-readiness-prs.tsv'
 const sourcePublicationReportArtifactPath = 'handoffs/source-publication-readiness-report.json'
+const sourcePublicationPreflightReportArtifactPath = 'handoffs/source-publication-preflight-report.json'
 const sourcePublicationConfigArtifactPath = 'handoffs/source-publication-readiness.tsv'
 const sourcePublicationConfigPath = 'config/source-publication-readiness.tsv'
 const sourcePublicationRootOwnerConfigArtifactPath = 'handoffs/source-publication-root-owner.json'
@@ -460,12 +481,18 @@ const sourcePublicationRepositories = [
   ['../iroha', 'hyperledger-iroha/iroha', 'codex/kagemusha-selector-hardening', 'optimizations', 5612],
 ]
 const sourcePublicationWorkspaceRequiredFiles = [
+  '.github/CODEOWNERS',
+  '.github/workflows/readiness.yml',
+  '.gitignore',
   'FEARLESS_PROJECT_PLAN.md',
+  'README.md',
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'docs/source-freeze-20260801.md',
   'scripts/audit-release-readiness.sh',
   'scripts/audit-source-publication-readiness.mjs',
+  'scripts/capture-source-freeze.mjs',
   'scripts/export-release-unblock-bundle.sh',
   'scripts/quarantine-source-publication-outputs.mjs',
   'scripts/run-pinned-yarn.sh',
@@ -593,9 +620,17 @@ function assertPassedSourcePublicationSemantics(source, label, expectedRepositor
   }
 }
 
-function assertSourcePublicationReport(report, label, workspaceRoot, summaryGeneratedAt = null, verificationNow = null) {
-  assertAllowedKeys(report, ['schemaVersion', 'generatedAt', 'status', 'checkRemote', 'workspaceRoot', 'workspaceParent', 'configFile', 'rootOwnerConfigFile', 'releasePrConfigFile', 'totals', 'workspaceSource', 'repositories'], label)
-  if (report.schemaVersion !== 2) fail(`${label}.schemaVersion must be 2`)
+function assertSourcePublicationReport(report, label, expectedPhase, workspaceRoot, summaryGeneratedAt = null, verificationNow = null) {
+  assertAllowedKeys(report, ['schemaVersion', 'phase', 'preflightReportSha256', 'generatedAt', 'status', 'checkRemote', 'workspaceRoot', 'workspaceParent', 'configFile', 'rootOwnerConfigFile', 'releasePrConfigFile', 'totals', 'workspaceSource', 'repositories'], label)
+  if (report.schemaVersion !== 3) fail(`${label}.schemaVersion must be 3`)
+  if (report.phase !== expectedPhase) fail(`${label}.phase must be ${expectedPhase}`)
+  if (expectedPhase === 'postflight') {
+    if (typeof report.preflightReportSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(report.preflightReportSha256)) {
+      fail(`${label}.preflightReportSha256 must be lowercase SHA-256 for postflight`)
+    }
+  } else if (report.preflightReportSha256 !== null) {
+    fail(`${label}.preflightReportSha256 must be null for ${expectedPhase}`)
+  }
   const sourceGeneratedAtMs = parseUtcTimestamp(report.generatedAt, `${label}.generatedAt`)
   if (verificationNow !== null) assertNotFutureTimestamp(sourceGeneratedAtMs, report.generatedAt, `${label}.generatedAt`, verificationNow, 5 * 60 * 1000)
   if (summaryGeneratedAt !== null) {
@@ -637,6 +672,90 @@ function assertSourcePublicationReport(report, label, workspaceRoot, summaryGene
   }, {passed: 0, failed: 0, staged: 0, unstaged: 0, untracked: 0, unmerged: 0})
   for (const field of Object.keys(computed)) if (computed[field] !== report.totals[field]) fail(`${label}.totals.${field} mismatch`)
   if ((report.totals.failed === 0 ? 'passed' : 'failed') !== report.status) fail(`${label}.status does not match source totals`)
+}
+
+function assertSourcePublicationPair(preflightReport, postflightReport, preflightBytes, label) {
+  const expectedSha256 = sha256(preflightBytes)
+  if (postflightReport.preflightReportSha256 !== expectedSha256) {
+    fail(`${label}.postflight preflightReportSha256 must match the exact preflight report bytes`)
+  }
+  const preflightGeneratedAtMs = parseUtcTimestamp(preflightReport.generatedAt, `${label}.preflight.generatedAt`)
+  const postflightGeneratedAtMs = parseUtcTimestamp(postflightReport.generatedAt, `${label}.postflight.generatedAt`)
+  const ageMs = postflightGeneratedAtMs - preflightGeneratedAtMs
+  if (ageMs < 0) fail(`${label}.preflight report must not postdate the postflight report`)
+  if (ageMs > 6 * 60 * 60 * 1000) fail(`${label}.preflight report is stale for the postflight report`)
+  for (const field of ['workspaceRoot', 'workspaceParent', 'configFile', 'rootOwnerConfigFile', 'releasePrConfigFile']) {
+    if (preflightReport[field] !== postflightReport[field]) fail(`${label}.${field} must match across preflight and postflight`)
+  }
+  const preflightSources = [preflightReport.workspaceSource, ...preflightReport.repositories]
+  const postflightSources = [postflightReport.workspaceSource, ...postflightReport.repositories]
+  if (preflightSources.length !== 9 || postflightSources.length !== 9) {
+    fail(`${label}.sources must contain exactly nine ordered preflight/postflight rows`)
+  }
+  const identityFields = [
+    'path',
+    'repository',
+    'head',
+    'base',
+    'prNumber',
+    'prUrl',
+    'prState',
+    'prHeadSha',
+    'repositoryPath',
+    'originUrl',
+    'originRepository',
+    'branch',
+    'headSha',
+    'upstream',
+    'upstreamSha',
+    'currentBranchRemoteSha',
+    'currentBranchRemotePresent',
+    'remoteHeadSha',
+    'remoteBranchPresent',
+  ]
+  const volatilePublicationProofFields = new Set([
+    'upstream',
+    'upstreamSha',
+    'currentBranchRemoteSha',
+    'currentBranchRemotePresent',
+    'remoteHeadSha',
+    'remoteBranchPresent',
+  ])
+  const failedPreflightContinuityDiagnostic = 'source publication preflight did not pass before release checks'
+  for (let index = 0; index < preflightSources.length; index += 1) {
+    const preflightSource = preflightSources[index]
+    const postflightSource = postflightSources[index]
+    if (preflightSource.path !== postflightSource.path) {
+      fail(`${label}.sources[${index}].path must match across preflight and postflight`)
+    }
+    if (preflightSource.status === 'passed') {
+      const mergedBranchWasDeleted =
+        preflightSource.prState === 'merged' &&
+        postflightSource.prState === 'merged' &&
+        preflightSource.branch === preflightSource.head &&
+        postflightSource.branch === postflightSource.head &&
+        preflightSource.upstream === `origin/${preflightSource.head}` &&
+        preflightSource.upstreamSha === preflightSource.headSha &&
+        preflightSource.remoteBranchPresent === true &&
+        preflightSource.remoteHeadSha === preflightSource.headSha &&
+        preflightSource.currentBranchRemotePresent === true &&
+        preflightSource.currentBranchRemoteSha === preflightSource.headSha &&
+        postflightSource.upstream === null &&
+        postflightSource.upstreamSha === null &&
+        postflightSource.remoteBranchPresent === false &&
+        postflightSource.remoteHeadSha === null &&
+        postflightSource.currentBranchRemotePresent === false &&
+        postflightSource.currentBranchRemoteSha === null
+      for (const field of identityFields) {
+        if (mergedBranchWasDeleted && volatilePublicationProofFields.has(field)) continue
+        if (preflightSource[field] !== postflightSource[field]) {
+          fail(`${label}.sources[${index}].${field} must match across preflight and postflight`)
+        }
+      }
+    } else if (!postflightSource.failures.includes(failedPreflightContinuityDiagnostic)) {
+      fail(`${label}.sources[${index}].failures must contain the exact failed-preflight continuity diagnostic`)
+    }
+  }
 }
 
 function assertSourcePublicationConfig(content, label) {
@@ -711,17 +830,22 @@ function assertSourcePublicationRootOwnerBinding(report, config, releasePrRows, 
 }
 
 function assertSourcePublicationHandoff(value, report, rootOwnerConfig, summary, artifactByPath, label) {
-  const keys = ['sourceReportPath', 'reportArtifact', 'reportSha256', 'configPath', 'configArtifact', 'configSha256', 'rootOwnerConfigPath', 'rootOwnerConfigArtifact', 'rootOwnerConfigSha256', 'rootOwnerStatus', 'status', 'checkRemote', 'sourceCount', 'passedCount', 'failedCount', 'workspaceOwned', 'repositories']
+  const keys = ['sourceReportPath', 'reportArtifact', 'reportSha256', 'preflightReportPath', 'preflightReportArtifact', 'preflightReportSha256', 'configPath', 'configArtifact', 'configSha256', 'rootOwnerConfigPath', 'rootOwnerConfigArtifact', 'rootOwnerConfigSha256', 'rootOwnerStatus', 'status', 'checkRemote', 'sourceCount', 'passedCount', 'failedCount', 'workspaceOwned', 'repositories']
   assertAllowedKeys(value, keys, label)
   if (value.sourceReportPath !== 'source-publication-readiness-report.json') fail(`${label}.sourceReportPath mismatch`)
   if (value.reportArtifact !== sourcePublicationReportArtifactPath) fail(`${label}.reportArtifact mismatch`)
+  if (value.preflightReportPath !== 'source-publication-preflight-report.json') fail(`${label}.preflightReportPath mismatch`)
+  if (value.preflightReportArtifact !== sourcePublicationPreflightReportArtifactPath) fail(`${label}.preflightReportArtifact mismatch`)
   if (value.configPath !== sourcePublicationConfigPath || value.configArtifact !== sourcePublicationConfigArtifactPath) fail(`${label}.config identity mismatch`)
   if (value.rootOwnerConfigPath !== sourcePublicationRootOwnerConfigPath || value.rootOwnerConfigArtifact !== sourcePublicationRootOwnerConfigArtifactPath) fail(`${label}.root owner config identity mismatch`)
   const reportArtifact = artifactByPath.get(value.reportArtifact)
+  const preflightReportArtifact = artifactByPath.get(value.preflightReportArtifact)
   const configArtifact = artifactByPath.get(value.configArtifact)
   const rootOwnerConfigArtifact = artifactByPath.get(value.rootOwnerConfigArtifact)
-  if (!reportArtifact || !configArtifact || !rootOwnerConfigArtifact) fail(`${label} artifacts missing`)
+  if (!reportArtifact || !preflightReportArtifact || !configArtifact || !rootOwnerConfigArtifact) fail(`${label} artifacts missing`)
   if (value.reportSha256 !== reportArtifact.sha256 || value.configSha256 !== configArtifact.sha256) fail(`${label} checksum mismatch`)
+  if (value.preflightReportSha256 !== preflightReportArtifact.sha256) fail(`${label} preflight report checksum mismatch`)
+  if (value.preflightReportSha256 !== report.preflightReportSha256) fail(`${label} preflight report binding mismatch`)
   if (value.rootOwnerConfigSha256 !== rootOwnerConfigArtifact.sha256) fail(`${label} root owner config checksum mismatch`)
   if (value.rootOwnerStatus !== rootOwnerConfig.status) fail(`${label}.rootOwnerStatus mismatch`)
   if (value.status !== report.status || value.checkRemote !== report.checkRemote) fail(`${label} report status mismatch`)
@@ -1001,7 +1125,7 @@ function renderUnblockMarkdown(manifest, bundleDir) {
     'Verify bundle integrity and freshness from the workspace root:',
     '',
     '```bash',
-    `bash scripts/verify-release-unblock-bundle.sh --bundle ${bundleDir} --max-age-hours 24`,
+    `bash scripts/verify-release-unblock-bundle.sh --bundle ${shellQuote(bundleDir)} --max-age-hours 24`,
     '```',
     '',
     'Run every blocker verification command from the bundle directory:',
@@ -1026,6 +1150,7 @@ function renderUnblockMarkdown(manifest, bundleDir) {
       `- Root owner policy: \`${manifest.sourcePublicationHandoff.rootOwnerStatus}\``,
       `- Workspace source owned and published: \`${manifest.sourcePublicationHandoff.workspaceOwned}\``,
       `- Sources: ${manifest.sourcePublicationHandoff.passedCount} passed, ${manifest.sourcePublicationHandoff.failedCount} failed, ${manifest.sourcePublicationHandoff.sourceCount} total`,
+      `- Preflight report artifact: \`${manifest.sourcePublicationHandoff.preflightReportArtifact}\``,
       `- Report artifact: \`${manifest.sourcePublicationHandoff.reportArtifact}\``,
       `- Config artifact: \`${manifest.sourcePublicationHandoff.configArtifact}\``,
       `- Root owner config artifact: \`${manifest.sourcePublicationHandoff.rootOwnerConfigArtifact}\``,
@@ -1759,7 +1884,7 @@ const expectedRecommendedActionsBySlug = new Map([
   ['source-publication-readiness', 'Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout\'s owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.'],
   ['private-overlay-readiness', 'Remove private product-source drift and keep only allowed release overlay files, then rerun bash scripts/audit-private-overlay-readiness.sh.'],
   ['android-public-dependency-provenance', 'Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android.'],
-  ['ios-shared-features-delta', 'Restore the iOS shared-features delta self-test/report gate, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json in fearless-iOS.'],
+  ['ios-shared-features-delta', 'Upstream or vendor every carried iOS shared-features/native-crypto delta, remove post-resolution checkout mutation, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready in fearless-iOS.'],
   ['passkey-challenge-service', 'Fix the passkey challenge-service implementation, Docker/deployment evidence, and adversarial tests, then rerun bash scripts/audit-passkey-challenge-service.sh.'],
   ['passkey-deployment-evidence', 'Record the passkey backup image digest, deployment ID, operator, healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1, durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json, WebAuthn origin allowlist, fail-closed request-access policy, trusted-proxy policy, platform provisioning evidence, and successful smoke timestamp. Independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate, set PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate to identify the source, and prove the derived origin matches assetlinks; AAB upload-key evidence is rejected and absence or mismatch keeps passkey flags disabled. Then rerun npm run audit:deployment-evidence -- --require-ready in services/passkey-backup-challenge-service and bash scripts/audit-passkey-android-origin-parity.sh --require-ready from the workspace root.'],
   ['passkey-backup-prerequisites', 'Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS and require live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1. Deploy https://fearlesswallet.io association files so the strict site verifier observes exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects. Keep Android/iOS passkey backup flags disabled until health, site associations, and platform provisioning pass, then rerun PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io.'],
@@ -1783,7 +1908,7 @@ const expectedRequiresExternalActionBySlug = new Map([
   ['source-publication-readiness', true],
   ['private-overlay-readiness', false],
   ['android-public-dependency-provenance', false],
-  ['ios-shared-features-delta', false],
+  ['ios-shared-features-delta', true],
   ['passkey-challenge-service', false],
   ['passkey-deployment-evidence', true],
   ['passkey-backup-prerequisites', true],
@@ -1953,7 +2078,10 @@ function sourceReportHasUnsafeIrohaState(report) {
     report.totals.unmerged >= iroha.unmergedCount && iroha.failures.includes(unmergedFailure)
   const canonicalSha = (value) => typeof value === 'string' && /^[0-9a-f]{40}$/u.test(value)
   const hasCanonicalReviewedSourceIdentity =
-    report.schemaVersion === 2 &&
+    report.schemaVersion === 3 &&
+    report.phase === 'postflight' &&
+    typeof report.preflightReportSha256 === 'string' &&
+    /^[0-9a-f]{64}$/u.test(report.preflightReportSha256) &&
     iroha.repository === 'hyperledger-iroha/iroha' &&
     iroha.originRepository === 'hyperledger-iroha/iroha' &&
     iroha.head === 'codex/kagemusha-selector-hardening' &&
@@ -2061,7 +2189,7 @@ const expectedVerificationCommandsBySlug = new Map([
   ['source-publication-readiness', 'bash scripts/audit-release-readiness.sh'],
   ['private-overlay-readiness', 'bash scripts/audit-private-overlay-readiness.sh'],
   ['android-public-dependency-provenance', 'cd fearless-Android && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance'],
-  ['ios-shared-features-delta', 'cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json'],
+  ['ios-shared-features-delta', 'cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready'],
   ['passkey-challenge-service', 'bash scripts/audit-passkey-challenge-service.sh'],
   ['passkey-deployment-evidence', 'cd services/passkey-backup-challenge-service && npm run audit:deployment-evidence -- --require-ready && cd ../.. && bash scripts/audit-passkey-android-origin-parity.sh --require-ready'],
   ['passkey-backup-prerequisites', 'PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web/scripts/verify-app-associations.mjs --root fearless-site-web --live-base-url https://fearlesswallet.io'],
@@ -4356,8 +4484,7 @@ function assertPasskeyProductionCompose(content, label) {
   requireString(content, label)
   const requiredFragments = [
     'passkey-backup-challenge-service:',
-    'dockerfile: Dockerfile',
-    'image: passkey-backup-challenge-service:release',
+    'image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"',
     'restart: unless-stopped',
     'NODE_ENV: production',
     'HOST: 0.0.0.0',
@@ -4385,6 +4512,7 @@ function assertPasskeyProductionCompose(content, label) {
     if (!content.includes(fragment)) fail(`${label} must include ${fragment}`)
   }
   if (/privileged:\s*true/.test(content)) fail(`${label} must not enable privileged mode`)
+  if (/^\s*build\s*:/m.test(content)) fail(`${label} must not build a mutable local image`)
   if (/\.env/.test(content)) fail(`${label} must not depend on .env files`)
   if (/-\s*["']?(?:0\.0\.0\.0:)?8789:8789["']?/.test(content)) fail(`${label} must not expose the service port publicly`)
   for (const variable of ['PASSKEY_ANDROID_ALLOWED_ORIGIN', 'PASSKEY_AUTHORIZATION_INTROSPECTION_URL', 'PASSKEY_TRUSTED_PROXY_CIDRS']) {
@@ -5215,8 +5343,8 @@ assertAllowedKeys(manifest, ['schemaVersion', 'generatedAt', 'sourceReportDir', 
 assertAllowedKeys(summary, ['schemaVersion', 'generatedAt', 'runLive', 'status', 'totals', 'checks'], 'summary')
 assertAllowedKeys(actions, ['schemaVersion', 'generatedAt', 'runLive', 'status', 'totals', 'blockers'], 'actions manifest')
 
-if (manifest.schemaVersion !== 2 || summary.schemaVersion !== 1 || actions.schemaVersion !== 1) {
-  fail('manifest must use schemaVersion 2; summary and actions must use schemaVersion 1')
+if (manifest.schemaVersion !== 3 || summary.schemaVersion !== 1 || actions.schemaVersion !== 1) {
+  fail('manifest must use schemaVersion 3; summary and actions must use schemaVersion 1')
 }
 const nowMs = process.env.RELEASE_UNBLOCK_VERIFY_NOW
   ? parseUtcSecondsTimestamp(process.env.RELEASE_UNBLOCK_VERIFY_NOW, 'RELEASE_UNBLOCK_VERIFY_NOW')
@@ -5279,6 +5407,13 @@ if (manifest.totals.failed !== manifest.blockerCount || actions.totals.failed !=
 
 const artifactKeys = ['path', 'sourcePath', 'sha256', 'bytes']
 const artifactByPath = new Map()
+const sourcePublicationArtifactPaths = new Set([
+  sourcePublicationReportArtifactPath,
+  sourcePublicationPreflightReportArtifactPath,
+  sourcePublicationConfigArtifactPath,
+  sourcePublicationRootOwnerConfigArtifactPath,
+])
+const sourcePublicationArtifactSnapshots = new Map()
 for (const artifact of manifest.artifacts) {
   assertAllowedKeys(artifact, artifactKeys, 'manifest artifact')
   const relativePath = normalizeRelativePath(artifact.path, 'artifact.path')
@@ -5304,7 +5439,7 @@ for (const artifact of manifest.artifacts) {
   if (!fs.existsSync(absolute)) fail(`manifest artifact missing: ${relativePath}`)
   if (!fs.lstatSync(absolute).isFile()) fail(`manifest artifact must be a regular file: ${relativePath}`)
   const content = fs.readFileSync(absolute)
-  if ([sourcePublicationReportArtifactPath, sourcePublicationConfigArtifactPath, sourcePublicationRootOwnerConfigArtifactPath].includes(relativePath)) {
+  if (sourcePublicationArtifactPaths.has(relativePath)) {
     assertNoSecretLike(relativePath, content.toString('utf8'))
   }
   if (relativePath === sourcePublicationReportArtifactPath) {
@@ -5314,7 +5449,15 @@ for (const artifact of manifest.artifacts) {
     } catch (error) {
       fail(`${relativePath} is not valid JSON: ${error.message}`)
     }
-    assertSourcePublicationReport(report, relativePath, workspaceRoot, summaryGeneratedAtMs, nowMs)
+    assertSourcePublicationReport(report, relativePath, 'postflight', workspaceRoot, summaryGeneratedAtMs, nowMs)
+  } else if (relativePath === sourcePublicationPreflightReportArtifactPath) {
+    let report
+    try {
+      report = JSON.parse(content.toString('utf8'))
+    } catch (error) {
+      fail(`${relativePath} is not valid JSON: ${error.message}`)
+    }
+    assertSourcePublicationReport(report, relativePath, 'preflight', workspaceRoot, null, nowMs)
   } else if (relativePath === sourcePublicationConfigArtifactPath) {
     assertSourcePublicationConfig(content.toString('utf8'), relativePath)
   } else if (relativePath === sourcePublicationRootOwnerConfigArtifactPath) {
@@ -5415,6 +5558,7 @@ for (const artifact of manifest.artifacts) {
   }
   if (content.length !== artifact.bytes) fail(`${relativePath} bytes mismatch`)
   if (sha256(content) !== artifact.sha256) fail(`${relativePath} SHA-256 mismatch`)
+  if (sourcePublicationArtifactPaths.has(relativePath)) sourcePublicationArtifactSnapshots.set(relativePath, content)
   artifactByPath.set(relativePath, { ...artifact, sourcePath })
 }
 
@@ -5433,20 +5577,28 @@ if (manifest.runLive) {
   if (!manifest.sourcePublicationHandoff || typeof manifest.sourcePublicationHandoff !== 'object' || Array.isArray(manifest.sourcePublicationHandoff)) {
     fail('manifest.sourcePublicationHandoff required for full-live bundle')
   }
-  const sourceReport = readJson(sourcePublicationReportArtifactPath, sourcePublicationReportArtifactPath)
+  const sourceReportBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationReportArtifactPath)
+  const preflightReportBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationPreflightReportArtifactPath)
+  const rootOwnerConfigBytes = sourcePublicationArtifactSnapshots.get(sourcePublicationRootOwnerConfigArtifactPath)
+  if (!sourceReportBytes || !preflightReportBytes || !rootOwnerConfigBytes) fail('source publication artifact snapshots missing')
+  const sourceReport = parseJson(sourceReportBytes, sourcePublicationReportArtifactPath)
+  const preflightReport = parseJson(preflightReportBytes, sourcePublicationPreflightReportArtifactPath)
   sourcePublicationReportForClassification = sourceReport
-  const rootOwnerConfig = readJson(sourcePublicationRootOwnerConfigArtifactPath, sourcePublicationRootOwnerConfigArtifactPath)
+  const rootOwnerConfig = parseJson(rootOwnerConfigBytes, sourcePublicationRootOwnerConfigArtifactPath)
   const releasePrConfigSource = path.join(workspaceRoot, releasePrConfigPath)
   assertNoRootSymlinkPathPrefix(releasePrConfigSource, 'source publication release PR config')
   if (!fs.existsSync(releasePrConfigSource) || !fs.lstatSync(releasePrConfigSource).isFile()) fail('source publication release PR config must be a regular file')
   const releasePrConfigContent = fs.readFileSync(releasePrConfigSource, 'utf8')
   assertNoSecretLike('source publication release PR config', releasePrConfigContent)
   const releasePrRows = parseSourcePublicationReleasePrConfig(releasePrConfigContent, 'source publication release PR config')
-  assertSourcePublicationReport(sourceReport, sourcePublicationReportArtifactPath, workspaceRoot, summaryGeneratedAtMs, nowMs)
+  assertSourcePublicationReport(sourceReport, sourcePublicationReportArtifactPath, 'postflight', workspaceRoot, summaryGeneratedAtMs, nowMs)
+  assertSourcePublicationReport(preflightReport, sourcePublicationPreflightReportArtifactPath, 'preflight', workspaceRoot, null, nowMs)
+  assertSourcePublicationPair(preflightReport, sourceReport, preflightReportBytes, 'manifest.sourcePublicationHandoff')
   assertSourcePublicationRootOwnerConfig(rootOwnerConfig, sourcePublicationRootOwnerConfigArtifactPath, nowMs)
   assertSourcePublicationRootOwnerBinding(sourceReport, rootOwnerConfig, releasePrRows, 'manifest.sourcePublicationHandoff')
   assertSourcePublicationHandoff(manifest.sourcePublicationHandoff, sourceReport, rootOwnerConfig, summary, artifactByPath, 'manifest.sourcePublicationHandoff')
   markReferencedArtifact(manifest.sourcePublicationHandoff.reportArtifact, 'manifest.sourcePublicationHandoff.reportArtifact')
+  markReferencedArtifact(manifest.sourcePublicationHandoff.preflightReportArtifact, 'manifest.sourcePublicationHandoff.preflightReportArtifact')
   markReferencedArtifact(manifest.sourcePublicationHandoff.configArtifact, 'manifest.sourcePublicationHandoff.configArtifact')
   markReferencedArtifact(manifest.sourcePublicationHandoff.rootOwnerConfigArtifact, 'manifest.sourcePublicationHandoff.rootOwnerConfigArtifact')
 } else if (manifest.sourcePublicationHandoff !== null) {
@@ -5645,7 +5797,7 @@ if (actualVerifyScript !== expectedVerifyScript) {
   fail('verify-blockers.sh does not match manifest blockers')
 }
 
-const expectedUnblockMarkdown = renderUnblockMarkdown(manifest, bundleRoot)
+const expectedUnblockMarkdown = renderUnblockMarkdown(manifest, publishedBundleRoot)
 const actualUnblockMarkdown = fs.readFileSync(assertRegularBundleFile('unblock.md', 'unblock.md'), 'utf8')
 const commonBlockerMetadata = [
   ['slug', '- Slug: '],
@@ -5686,8 +5838,13 @@ for (const expected of expectedChecksumPaths) {
 }
 for (const entry of checksumEntries) {
   if (!expectedChecksumPaths.has(entry.path)) fail(`SHA256SUMS contains unexpected path: ${entry.path}`)
+  const manifestArtifact = artifactByPath.get(entry.path)
+  if (manifestArtifact && entry.sha256 !== manifestArtifact.sha256) {
+    fail(`${entry.path} SHA256SUMS digest does not match manifest artifact`)
+  }
   const absolute = assertRegularBundleFile(entry.path, `${entry.path} checksum path`)
-  const digest = sha256(fs.readFileSync(absolute))
+  const admittedSnapshot = sourcePublicationArtifactSnapshots.get(entry.path)
+  const digest = admittedSnapshot ? sha256(admittedSnapshot) : sha256(fs.readFileSync(absolute))
   if (digest !== entry.sha256) fail(`${entry.path} checksum mismatch`)
 }
 
@@ -5713,7 +5870,7 @@ for (const directory of actualDirectories) {
 }
 
 const normalizedChecksumLines = [...expectedChecksumPaths]
-  .map((relativePath) => `${sha256(fs.readFileSync(assertRegularBundleFile(relativePath, `${relativePath} checksum rebuild path`)))}  ${relativePath}`)
+  .map((relativePath) => `${checksumByPath.get(relativePath)}  ${relativePath}`)
   .sort()
   .join('\n') + '\n'
 const checksumContent = fs.readFileSync(assertRegularBundleFile('SHA256SUMS', 'SHA256SUMS'), 'utf8')

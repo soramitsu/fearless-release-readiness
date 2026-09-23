@@ -17,7 +17,8 @@ import {
 import { base64UrlDecode, base64UrlEncode } from './base64url.js';
 import { serviceError } from './errors.js';
 
-const CREDENTIAL_STORE_SCHEMA_VERSION = 3;
+const CREDENTIAL_STORE_SCHEMA_VERSION = 4;
+const MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION = 3;
 const MAX_CREDENTIAL_STORE_BYTES = 16 * 1024 * 1024;
 const MAX_STORAGE_KEYS = 100_000;
 const MAX_CREDENTIALS_PER_STORAGE_KEY = 32;
@@ -192,9 +193,41 @@ function cloneCredentials(credentialsByStorageKey) {
   );
 }
 
+function indexCredentialOwners(credentialsByStorageKey, ownersByStorageKey) {
+  const index = new Map();
+  for (const [storageKey, credentials] of credentialsByStorageKey) {
+    const ownerSubjectHash = normalizeOwnerSubjectHash(ownersByStorageKey.get(storageKey));
+    for (const credentialId of credentials.keys()) {
+      if (index.has(credentialId)) {
+        throw credentialStoreInvalid('Credential store contains duplicate credential IDs');
+      }
+      index.set(credentialId, { credentialId, storageKey, ownerSubjectHash });
+    }
+  }
+  return index;
+}
+
+function validateCredentialOwnerIndex(value, expectedIndex) {
+  if (!Array.isArray(value) || value.length !== expectedIndex.size) {
+    throw credentialStoreInvalid('Credential owner index does not match registered credentials');
+  }
+  const seen = new Set();
+  for (const entry of value) {
+    assertExactKeys(entry, ['credentialId', 'storageKey', 'ownerSubjectHash'], [], 'credential owner index entry');
+    const expected = expectedIndex.get(entry.credentialId);
+    if (!expected || seen.has(entry.credentialId) ||
+        entry.storageKey !== expected.storageKey || entry.ownerSubjectHash !== expected.ownerSubjectHash) {
+      throw credentialStoreInvalid('Credential owner index does not match registered credentials');
+    }
+    seen.add(entry.credentialId);
+  }
+}
+
 function serializeCredentials(credentialsByStorageKey, ownersByStorageKey) {
   return {
     schemaVersion: CREDENTIAL_STORE_SCHEMA_VERSION,
+    credentialOwnersById: [...indexCredentialOwners(credentialsByStorageKey, ownersByStorageKey).values()]
+      .sort((left, right) => left.credentialId.localeCompare(right.credentialId)),
     credentialsByStorageKey: [...credentialsByStorageKey.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([storageKey, credentials]) => ({
@@ -214,10 +247,18 @@ function deserializeCredentials(raw) {
     throw credentialStoreInvalid();
   }
 
-  assertExactKeys(parsed, ['schemaVersion', 'credentialsByStorageKey'], [], 'credential store');
-  if (parsed.schemaVersion !== CREDENTIAL_STORE_SCHEMA_VERSION) {
+  assertPlainObject(parsed, 'credential store');
+  const needsMigration = parsed.schemaVersion === MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION;
+  if (!needsMigration && parsed.schemaVersion !== CREDENTIAL_STORE_SCHEMA_VERSION) {
     throw credentialStoreInvalid('Credential store schemaVersion is unsupported');
   }
+  assertExactKeys(
+    parsed,
+    needsMigration ? ['schemaVersion', 'credentialsByStorageKey']
+      : ['schemaVersion', 'credentialsByStorageKey', 'credentialOwnersById'],
+    [],
+    'credential store',
+  );
   if (!Array.isArray(parsed.credentialsByStorageKey) || parsed.credentialsByStorageKey.length > MAX_STORAGE_KEYS) {
     throw credentialStoreInvalid('credentialsByStorageKey must be a bounded array');
   }
@@ -262,7 +303,9 @@ function deserializeCredentials(raw) {
     ownersByStorageKey.set(entry.storageKey, entry.ownerSubjectHash);
   }
 
-  return { credentialsByStorageKey, ownersByStorageKey };
+  const credentialOwnersById = indexCredentialOwners(credentialsByStorageKey, ownersByStorageKey);
+  if (!needsMigration) validateCredentialOwnerIndex(parsed.credentialOwnersById, credentialOwnersById);
+  return { credentialsByStorageKey, ownersByStorageKey, needsMigration };
 }
 
 function expectedUserIdForStorageKey(storageKey) {
@@ -335,6 +378,7 @@ export class InMemoryPasskeyChallengeStore {
     this.inFlightRegistrationsByStorageKey = new Map();
     this.credentialsByStorageKey = new Map();
     this.ownersByStorageKey = new Map();
+    this.credentialOwnersById = new Map();
     // Versions only coordinate in-flight ceremonies within this process. The
     // durable owner tombstone is the cross-restart takeover defense; pending
     // ceremonies are intentionally transient and cannot survive a restart.
@@ -409,10 +453,8 @@ export class InMemoryPasskeyChallengeStore {
         expectedMutationVersion !== this.storageMutationVersion(normalizedStorageKey, ownerSubjectHash)) {
       throw serviceError(409, 'credential_lifecycle_conflict', 'Credential lifecycle changed during registration');
     }
-    for (const credentials of this.credentialsByStorageKey.values()) {
-      if (credentials.has(credential.id)) {
-        throw serviceError(409, 'credential_already_registered', 'Credential is already registered');
-      }
+    if (this.credentialOwnersById.has(credential.id)) {
+      throw serviceError(409, 'credential_already_registered', 'Credential is already registered');
     }
 
     const nextCredentials = cloneCredentials(this.credentialsByStorageKey);
@@ -427,8 +469,9 @@ export class InMemoryPasskeyChallengeStore {
     storageCredentials.set(credential.id, credential);
     nextCredentials.set(normalizedStorageKey, storageCredentials);
     nextOwners.set(normalizedStorageKey, ownerSubjectHash);
-    this.commitState(nextCredentials, nextOwners);
-    this.bumpStorageMutationVersion(normalizedStorageKey, ownerSubjectHash);
+    this.commitStateWithAppliedCallback(nextCredentials, nextOwners, () => {
+      this.bumpStorageMutationVersion(normalizedStorageKey, ownerSubjectHash);
+    });
   }
 
   hasAnyCredential(storageKey) {
@@ -500,9 +543,14 @@ export class InMemoryPasskeyChallengeStore {
     // durable tombstone. Otherwise a different subject that can derive the
     // deterministic storageKey could claim it after the final revocation.
     nextCredentials.get(normalizedStorageKey).delete(credentialId);
-    this.commitState(nextCredentials, new Map(this.ownersByStorageKey));
-    this.bumpStorageMutationVersion(normalizedStorageKey, normalizedOwner);
-    this.invalidateAssertionsForStorageKey(normalizedStorageKey);
+    this.commitStateWithAppliedCallback(
+      nextCredentials,
+      new Map(this.ownersByStorageKey),
+      () => {
+        this.bumpStorageMutationVersion(normalizedStorageKey, normalizedOwner);
+        this.invalidateAssertionsForStorageKey(normalizedStorageKey);
+      },
+    );
     return { remainingCredentials: nextCredentials.get(normalizedStorageKey).size };
   }
 
@@ -531,14 +579,22 @@ export class InMemoryPasskeyChallengeStore {
       throw serviceError(403, 'request_authorization_failed', 'Request authorization failed');
     }
     const currentCredentials = this.credentialsByStorageKey.get(normalizedStorageKey) ?? new Map();
+    const applyLifecycleEffects = () => {
+      this.bumpStorageMutationVersion(normalizedStorageKey, normalizedOwner);
+      this.invalidateAssertionsForStorageKey(normalizedStorageKey);
+      this.invalidateRegistrationsForStorageKey(normalizedStorageKey, normalizedOwner);
+    };
     if (currentCredentials.size > 0) {
       const nextCredentials = cloneCredentials(this.credentialsByStorageKey);
       nextCredentials.set(normalizedStorageKey, new Map());
-      this.commitState(nextCredentials, new Map(this.ownersByStorageKey));
+      this.commitStateWithAppliedCallback(
+        nextCredentials,
+        new Map(this.ownersByStorageKey),
+        applyLifecycleEffects,
+      );
+    } else {
+      applyLifecycleEffects();
     }
-    this.bumpStorageMutationVersion(normalizedStorageKey, normalizedOwner);
-    this.invalidateAssertionsForStorageKey(normalizedStorageKey);
-    this.invalidateRegistrationsForStorageKey(normalizedStorageKey, normalizedOwner);
     return { remainingCredentials: 0 };
   }
 
@@ -578,6 +634,18 @@ export class InMemoryPasskeyChallengeStore {
     };
   }
 
+  // Internal lookup for discoverable authentication. This identifies a candidate
+  // public key only; it does not authenticate the caller or authorize a session.
+  // The caller must verify the assertion and exact stored userHandle, then commit
+  // the counter update (which rechecks revocation) before issuing any authority.
+  findCredentialOwner(credentialId) {
+    const owner = this.credentialOwnersById.get(credentialId);
+    if (!owner) {
+      throw serviceError(403, 'credential_not_registered', 'Credential is not registered');
+    }
+    return { ...owner, credential: this.getCredential(owner.storageKey, credentialId) };
+  }
+
   updateCredentialAfterAuthentication(storageKey, credentialId, {
     newCounter,
     deviceType,
@@ -612,8 +680,24 @@ export class InMemoryPasskeyChallengeStore {
   }
 
   commitState(nextCredentials, nextOwners) {
+    const nextIndex = indexCredentialOwners(nextCredentials, nextOwners);
     this.credentialsByStorageKey = nextCredentials;
     this.ownersByStorageKey = nextOwners;
+    this.credentialOwnersById = nextIndex;
+  }
+
+  commitStateWithAppliedCallback(nextCredentials, nextOwners, onApplied) {
+    try {
+      this.commitState(nextCredentials, nextOwners);
+    } catch (error) {
+      // A durable file replacement can succeed before directory fsync/close
+      // reports failure. File-backed commitState adopts that visible state and
+      // marks the error, so its mutation guards and ceremony invalidations must
+      // also take effect even though the caller still receives a 500 response.
+      if (error?.[STORE_FILE_REPLACED] === true) onApplied();
+      throw error;
+    }
+    onApplied();
   }
 
   createAssertion(ceremony) {
@@ -679,8 +763,13 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
       throw credentialStoreUnavailable('Credential store file operations are invalid');
     }
     const loaded = this.loadCredentials();
-    this.credentialsByStorageKey = loaded.credentialsByStorageKey;
-    this.ownersByStorageKey = loaded.ownersByStorageKey;
+    // Persist the complete v4 replacement before accepting requests. Existing
+    // public keys, handles, counters, metadata and empty owner tombstones are
+    // retained unchanged. A failed migration never opens a partially usable store.
+    if (loaded.needsMigration) {
+      this.persistCredentials(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
+    }
+    super.commitState(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
   }
 
   commitState(nextCredentials, nextOwners) {
@@ -691,13 +780,11 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
       // confirmed. Keep the process view aligned with the file that is now at
       // the canonical path even though the caller must still see the failure.
       if (error?.[STORE_FILE_REPLACED] === true) {
-        this.credentialsByStorageKey = nextCredentials;
-        this.ownersByStorageKey = nextOwners;
+        super.commitState(nextCredentials, nextOwners);
       }
       throw error;
     }
-    this.credentialsByStorageKey = nextCredentials;
-    this.ownersByStorageKey = nextOwners;
+    super.commitState(nextCredentials, nextOwners);
   }
 
   loadCredentials() {

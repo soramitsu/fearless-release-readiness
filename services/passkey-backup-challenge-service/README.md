@@ -100,7 +100,7 @@ production unauthenticated fallback.
 Credential listing returns at most 32 non-secret descriptors and never returns
 the stored public key, user handle, signature counter, or wallet-owner hash.
 Single-credential and storage-owner revoke-all requests are idempotent. After
-the final revocation, schema-v3 storage retains a bounded zero-credential owner
+the final revocation, schema-v4 storage retains a bounded zero-credential owner
 tombstone: this prevents a different subject that derives the deterministic
 storage key from taking it over, while the original stable owner can register a
 replacement passkey. Unknown revocations do not create tombstones. Owner-record
@@ -109,6 +109,13 @@ reviewed identity proof and retention policy. Mobile backup deletion must call
 `credentials/revoke-all` before deleting the encrypted cloud record so a server
 failure leaves recoverable encrypted data instead of an orphaned live passkey.
 This owner tombstone is durable, and clients must revoke all server credentials before deleting cloud data.
+
+Schema-v3 stores migrate atomically to schema-v4, preserving historical credentials,
+user handles, counters and tombstones while adding a validated credential-to-owner
+index. See [migration and recovery requirements](docs/credential-store-migration.md).
+The index is an internal public-key lookup; it does not authenticate a caller or
+issue an owner session. Native clients must keep PRF outputs local. Credential
+requests reject PRF, large-blob and unreviewed extension fields.
 
 ## Local Commands
 

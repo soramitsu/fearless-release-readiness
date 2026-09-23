@@ -1,0 +1,265 @@
+import { AuthorityStore } from './store.js';
+import {
+  AuthorityError, RP_ID, backupFlags, base64, counter, credentialRecord, credentialResponse,
+  deny, exact, hash, opaque, platform, random, requestBinding, walletProof,
+} from './validation.js';
+
+const CEREMONY_MS = 120_000;
+const SESSION_MS = 600_000;
+const GRANT_MS = 60_000;
+const unavailableVerifier = Object.freeze({
+  async bootstrap() { deny('verifier_unavailable'); },
+  async authentication() { deny('verifier_unavailable'); },
+  async enrollment() { deny('verifier_unavailable'); },
+});
+
+function prune(tx) {
+  tx.run('DELETE FROM grants WHERE expires<=?', tx.now);
+  tx.run('DELETE FROM sessions WHERE expires<=?', tx.now);
+  tx.run('DELETE FROM ceremonies WHERE expires<=?', tx.now);
+  tx.run('DELETE FROM limits WHERE bucket<?', Math.floor(tx.now / 60_000) - 1);
+}
+function createLimit(tx, owner) {
+  prune(tx);
+  const bucket = Math.floor(tx.now / 60_000);
+  const used = tx.query('SELECT count FROM limits WHERE bucket=?', bucket)?.count ?? 0;
+  if (used >= 60 || tx.query('SELECT count(*) AS n FROM ceremonies').n >= 256 ||
+      (owner && tx.query('SELECT count(*) AS n FROM ceremonies WHERE subject=?', owner).n >= 8)) deny('rate_limited');
+  tx.run('INSERT INTO limits VALUES(?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1', bucket);
+}
+function activeOwner(tx, subject, generation) {
+  const owner = tx.query('SELECT * FROM owners WHERE subject=?', subject);
+  if (!owner || (generation !== undefined && owner.generation !== generation)) deny();
+  return owner;
+}
+function activeCredential(tx, id, subject) {
+  const credential = tx.query('SELECT * FROM credentials WHERE id=?', id);
+  if (!credential || credential.revoked !== 0 || (subject && credential.owner !== subject)) deny();
+  return credential;
+}
+function session(tx, token) {
+  const digest = hash(opaque(token, 'session.'));
+  const found = tx.query('SELECT * FROM sessions WHERE digest=?', digest);
+  if (!found || found.expires <= tx.now) deny();
+  activeOwner(tx, found.owner, found.generation);
+  activeCredential(tx, found.credential, found.owner);
+  return found;
+}
+function newSession(tx, owner, credentialId, verifiedPlatform) {
+  prune(tx);
+  if (tx.query('SELECT count(*) AS n FROM sessions WHERE owner=?', owner.subject).n >= 32 ||
+      tx.query('SELECT count(*) AS n FROM sessions').n >= 100_000) deny('capacity_exceeded');
+  const token = random('session.');
+  const expires = Math.floor((tx.now + SESSION_MS) / 1000) * 1000;
+  tx.run('INSERT INTO sessions VALUES(?,?,?,?,?,?)', hash(token), owner.subject, credentialId, owner.generation, verifiedPlatform, expires);
+  return { sessionToken: token, subject: owner.subject, namespace: owner.namespace, generation: owner.generation, platform: verifiedPlatform, expiresAt: expires / 1000 };
+}
+function bumpGeneration(tx, owner) {
+  if (!Number.isSafeInteger(owner.generation) || owner.generation >= Number.MAX_SAFE_INTEGER) deny('generation_exhausted');
+  tx.run('UPDATE owners SET generation=generation+1 WHERE subject=?', owner.subject);
+  tx.run('DELETE FROM sessions WHERE owner=?', owner.subject); // Cascades outstanding grants.
+  tx.run('DELETE FROM ceremonies WHERE subject=?', owner.subject);
+  return { ...owner, generation: owner.generation + 1 };
+}
+function insertCredential(tx, owner, record) {
+  // Revoked IDs remain permanent tombstones. No reassignment or resurrection.
+  if (tx.query('SELECT id FROM credentials WHERE id=?', record.id)) deny('credential_already_linked');
+  if (tx.query('SELECT count(*) AS n FROM credentials WHERE owner=?', owner.subject).n >= 32) deny('capacity_exceeded');
+  tx.run('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)', record.id, owner.subject, record.publicKey, record.userHandle, record.counter, record.deviceType, Number(record.backedUp));
+}
+function publicChallenge(row) {
+  return { ceremonyId: row.id, kind: row.kind, challenge: row.challenge, rpId: RP_ID,
+    platform: row.platform, subject: row.subject, namespace: row.namespace,
+    userHandle: row.user_handle, expiresAt: row.expires / 1000 };
+}
+function verifierContext(row) {
+  return Object.freeze(publicChallenge(row));
+}
+
+/**
+ * verifier is a server-only cryptographic adapter, never request-supplied data.
+ * It is deliberately unavailable by default. See README for its exact proof
+ * obligations; returning {verified:true} is not the adapter contract.
+ */
+export function createOwnerAuthority({ path, create = false, audience, verifier = unavailableVerifier, now, monotonic, fault } = {}) {
+  if (typeof audience !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(audience)) deny('invalid_configuration');
+  if (!verifier || ['bootstrap', 'authentication', 'enrollment'].some((key) => typeof verifier[key] !== 'function')) deny('invalid_configuration');
+  const store = new AuthorityStore({ path, create, now, monotonic, fault });
+  const challenge = (kind, requestedPlatform, token) => store.transaction((tx) => {
+    let context;
+    if (kind === 'enrollment') {
+      context = session(tx, token);
+      if (requestedPlatform !== context.platform) deny();
+    }
+    createLimit(tx, context?.owner);
+    const owner = context && activeOwner(tx, context.owner, context.generation);
+    const row = {
+      id: random('ceremony.'), kind, challenge: random(),
+      subject: owner?.subject ?? (kind === 'bootstrap' ? random('owner:') : null),
+      namespace: owner?.namespace ?? (kind === 'bootstrap' ? random('backup:') : null),
+      user_handle: owner?.user_handle ?? (kind === 'bootstrap' ? random() : null),
+      session: context?.digest ?? null, generation: context?.generation ?? null,
+      platform: platform(requestedPlatform), expires: Math.floor((tx.now + CEREMONY_MS) / 1000) * 1000,
+    };
+    tx.run('INSERT INTO ceremonies VALUES(?,?,?,?,?,?,?,?,?,?,0)', row.id, row.kind, row.challenge, row.subject, row.namespace,
+      row.user_handle, row.session, row.generation, row.platform, row.expires);
+    return publicChallenge(row);
+  });
+  const claim = (id, kind, token, credentialId) => store.transaction((tx) => {
+    opaque(id, 'ceremony.');
+    const row = tx.query('SELECT * FROM ceremonies WHERE id=?', id);
+    if (!row || row.kind !== kind || row.claimed || row.expires <= tx.now) deny();
+    let credential;
+    if (kind === 'enrollment') {
+      const current = session(tx, token);
+      if (current.digest !== row.session || current.generation !== row.generation || current.owner !== row.subject) deny();
+    }
+    if (kind === 'authentication') {
+      credential = activeCredential(tx, credentialId);
+      const owner = activeOwner(tx, credential.owner);
+      row.subject = owner.subject;
+      row.namespace = owner.namespace;
+      row.user_handle = owner.user_handle;
+      row.generation = owner.generation;
+    }
+    tx.run('UPDATE ceremonies SET claimed=1 WHERE id=?', id);
+    return { row, credential };
+  });
+  const finish = (row, action) => store.transaction((tx) => {
+    const current = tx.query('SELECT * FROM ceremonies WHERE id=?', row.id);
+    if (!current || current.claimed !== 1 || current.expires <= tx.now) deny();
+    const result = action(tx);
+    tx.run('DELETE FROM ceremonies WHERE id=?', row.id);
+    return result;
+  });
+  const verify = async (kind, context) => {
+    try { return await verifier[kind](context); }
+    catch (error) {
+      if (error instanceof AuthorityError && error.code === 'verifier_unavailable') throw error;
+      deny('verification_failed'); // Never expose verifier errors, public proof, or response data.
+    }
+  };
+
+  return Object.freeze({
+    close: () => store.close(),
+    beginBootstrap(requestedPlatform) { return challenge('bootstrap', platform(requestedPlatform)); },
+    beginAuthentication(requestedPlatform) { return challenge('authentication', platform(requestedPlatform)); },
+    beginEnrollment(token) {
+      const verifiedPlatform = store.transaction((tx) => session(tx, token).platform);
+      return challenge('enrollment', verifiedPlatform, token);
+    },
+    async completeBootstrap(input) {
+      exact(input, ['ceremonyId', 'credential', 'walletProof']);
+      const credential = credentialResponse(input.credential, 'registration');
+      const proof = walletProof(input.walletProof);
+      const { row } = claim(input.ceremonyId, 'bootstrap');
+      const evidence = await verify('bootstrap', { ceremony: verifierContext(row), credential, walletProof: proof });
+      exact(evidence, ['credential', 'walletBindingHash']);
+      base64(evidence.walletBindingHash, 32, 32);
+      const record = credentialRecord(evidence.credential, credential.id, row.user_handle);
+      return finish(row, (tx) => {
+        if (tx.query('SELECT subject FROM owners WHERE wallet_binding=?', evidence.walletBindingHash)) deny('owner_already_exists');
+        if (tx.query('SELECT count(*) AS n FROM owners').n >= 100_000) deny('capacity_exceeded');
+        const owner = { subject: row.subject, namespace: row.namespace, user_handle: row.user_handle, generation: 0 };
+        tx.run('INSERT INTO owners VALUES(?,?,?,?,0,?)', owner.subject, owner.namespace, owner.user_handle, evidence.walletBindingHash, tx.now);
+        insertCredential(tx, owner, record);
+        return newSession(tx, owner, record.id, row.platform);
+      });
+    },
+    async completeAuthentication(input) {
+      exact(input, ['ceremonyId', 'credential']);
+      const credential = credentialResponse(input.credential, 'authentication');
+      const { row, credential: linked } = claim(input.ceremonyId, 'authentication', undefined, credential.id);
+      if (credential.response.userHandle !== linked.user_handle) deny('verification_failed');
+      const evidence = await verify('authentication', {
+        ceremony: verifierContext(row), credential,
+        registeredCredential: Object.freeze({ id: linked.id, publicKey: linked.public_key, userHandle: linked.user_handle, counter: linked.counter, deviceType: linked.device_type, backedUp: !!linked.backed_up }),
+      });
+      exact(evidence, ['credentialId', 'newCounter', 'deviceType', 'backedUp']);
+      backupFlags(evidence);
+      if (evidence.deviceType !== linked.device_type) deny('verification_failed');
+      if (evidence.credentialId !== linked.id) deny('verification_failed');
+      counter(evidence.newCounter);
+      return finish(row, (tx) => {
+        const owner = activeOwner(tx, linked.owner, row.generation);
+        const current = activeCredential(tx, linked.id, linked.owner);
+        if (current.public_key !== linked.public_key || current.user_handle !== linked.user_handle ||
+            current.counter !== linked.counter ||
+            ((current.counter !== 0 || evidence.newCounter !== 0) && evidence.newCounter <= current.counter)) deny('credential_counter_replay');
+        tx.run('UPDATE credentials SET counter=?, backed_up=? WHERE id=?', evidence.newCounter, Number(evidence.backedUp), linked.id);
+        return newSession(tx, owner, linked.id, row.platform);
+      });
+    },
+    async completeEnrollment(input) {
+      exact(input, ['ceremonyId', 'sessionToken', 'credential']);
+      const credential = credentialResponse(input.credential, 'registration');
+      const { row } = claim(input.ceremonyId, 'enrollment', input.sessionToken);
+      const evidence = await verify('enrollment', { ceremony: verifierContext(row), credential });
+      exact(evidence, ['credential']);
+      const record = credentialRecord(evidence.credential, credential.id, row.user_handle);
+      return finish(row, (tx) => {
+        const current = session(tx, input.sessionToken);
+        if (current.digest !== row.session || current.owner !== row.subject || current.generation !== row.generation) deny();
+        const owner = activeOwner(tx, current.owner, current.generation);
+        insertCredential(tx, owner, record);
+        return newSession(tx, bumpGeneration(tx, owner), record.id, row.platform);
+      });
+    },
+    issueGrant(token, request) {
+      const binding = requestBinding(request, audience);
+      return store.transaction((tx) => {
+        prune(tx);
+        const current = session(tx, token);
+        if (tx.query('SELECT count(*) AS n FROM grants WHERE session=?', current.digest).n >= 64 ||
+            tx.query('SELECT count(*) AS n FROM grants').n >= 100_000) deny('capacity_exceeded');
+        const grant = random('grant.');
+        const expires = Math.floor(Math.min(current.expires, tx.now + GRANT_MS) / 1000) * 1000;
+        if (expires <= tx.now) deny();
+        tx.run('INSERT INTO grants VALUES(?,?,?,?,?,?,?,?,?,?)', hash(grant), current.digest, current.owner, current.generation,
+          binding.audience, binding.method, binding.path, binding.bodySha256, binding.scope, expires);
+        return { token: grant, expiresAt: expires / 1000 };
+      });
+    },
+    consumeGrant(token, request) {
+      const binding = requestBinding(request, audience);
+      const digest = hash(opaque(token, 'grant.'));
+      return store.transaction((tx) => {
+        const grant = tx.query('SELECT * FROM grants WHERE digest=?', digest);
+        if (!grant || grant.expires <= tx.now || grant.audience !== binding.audience || grant.method !== binding.method ||
+            grant.path !== binding.path || grant.body_hash !== binding.bodySha256 || grant.scope !== binding.scope) deny();
+        const current = tx.query('SELECT * FROM sessions WHERE digest=?', grant.session);
+        if (!current || current.expires <= tx.now || current.owner !== grant.owner || current.generation !== grant.generation) deny();
+        activeOwner(tx, grant.owner, grant.generation);
+        activeCredential(tx, current.credential, grant.owner);
+        tx.run('DELETE FROM grants WHERE digest=?', digest); // Consumption committed before response; never restored on disconnect.
+        return { schemaVersion: 1, active: true, subject: grant.owner, audience: binding.audience,
+          method: binding.method, path: binding.path, bodySha256: binding.bodySha256, scope: binding.scope,
+          platform: current.platform, expiresAt: grant.expires / 1000 };
+      });
+    },
+    revokeCredential(token, credentialId) {
+      base64(credentialId, 1, 384);
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        activeCredential(tx, credentialId, current.owner);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        tx.run('UPDATE credentials SET revoked=1 WHERE id=?', credentialId);
+        return { generation: bumpGeneration(tx, owner).generation };
+      });
+    },
+    revokeAll(token) {
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        tx.run('UPDATE credentials SET revoked=1 WHERE owner=?', owner.subject);
+        return { generation: bumpGeneration(tx, owner).generation };
+      });
+    },
+    revokeSessions(token) {
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        return { generation: bumpGeneration(tx, activeOwner(tx, current.owner, current.generation)).generation };
+      });
+    },
+  });
+}

@@ -19,7 +19,10 @@ setup_fixture() {
       printf '%s\n' \
         '#!/usr/bin/env bash' \
         'set -euo pipefail' \
-        'repo="$(basename "$(cd "$(dirname "$0")/.." && pwd)")"' \
+        'expected_repo="$(cd "$(dirname "$0")/.." && pwd -P)"' \
+        '[[ "${IROHA_SEND_AUDIT_ROOT:-}" == "$expected_repo" ]] || { echo "aggregate did not bind exact platform root" >&2; exit 2; }' \
+        '[[ "$(pwd -P)" == "$expected_repo" ]] || { echo "aggregate did not enter exact platform working directory" >&2; exit 2; }' \
+        'repo="$(basename "$expected_repo")"' \
         'script="$(basename "$0")"' \
         'printf "%s/%s\n" "$repo" "$script" >> "${IROHA_SEND_TEST_SENTINEL:?}"' \
         '[[ "${IROHA_SEND_TEST_FAIL:-}" != "$repo/$script" ]]' \
@@ -60,7 +63,17 @@ expect_failure() {
 }
 
 setup_fixture
-run_audit >/dev/null
+IROHA_SEND_AUDIT_ROOT="$TMP_DIR/forged-ambient-root" run_audit >/dev/null
+assert_all_six_ran
+
+setup_fixture
+(
+  cd "$TMP_DIR"
+  IROHA_SEND_AGGREGATE_ROOT=fixture \
+    IROHA_SEND_TEST_SENTINEL="$TMP_DIR/sentinel" \
+    IROHA_SEND_TEST_FAIL= \
+    bash "$AUDIT" >/dev/null
+)
 assert_all_six_ran
 
 for target in \

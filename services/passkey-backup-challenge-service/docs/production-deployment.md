@@ -74,7 +74,7 @@ when downstream request validation or WebAuthn verification fails.
 Credential lifecycle responses expose at most 32 descriptors and exclude the
 public key, user handle, signature counter, and owner-subject hash. Single and
 revoke-all operations are idempotent and protected by distinct
-`passkey.credentials.*` scopes. Final revocation persists a schema-v3 empty
+`passkey.credentials.*` scopes. Final revocation persists a schema-v4 empty
 credential array with the owner hash as a bounded takeover-prevention
 tombstone; it must survive restart, deny a different subject, and permit the
 same subject to register a replacement. Unknown revocation must not create an
@@ -82,6 +82,12 @@ owner record. There is no owner-erasure route in this contract. Clients must
 revoke all server credentials before deleting the encrypted Google Drive or
 CloudKit backup record; if revocation fails, the recoverable cloud record must
 remain.
+
+The [credential-store migration](credential-store-migration.md) preserves schema-3
+records while adding a validated schema-4 credential-to-owner index. Migration
+must finish durably before serving requests. A credential lookup alone cannot
+authorize a session. Native clients must omit PRF and large-blob results before
+serialization; the server rejects these and all unreviewed extension fields.
 The owner tombstone and lifecycle ordering are release-gated behavior.
 
 `PASSKEY_TRUST_PROXY_HOPS=1` is required because TLS terminates at the
@@ -215,7 +221,7 @@ It must also require `PASSKEY_AUTHORIZATION_INTROSPECTION_URL`, pin
 `PASSKEY_TRUST_PROXY_HOPS=1` with an operator-supplied
 `PASSKEY_TRUSTED_PROXY_CIDRS` allowlist.
 Rollback must follow [`rollback-checklist.md`](rollback-checklist.md): preserve
-the existing credential volume, schema-v3 counters and owner tombstones, stop
+the existing credential volume, schema-v4 index, counters and owner tombstones, stop
 the current writer before starting the previous digest, and never restore a
 snapshot that could resurrect revoked credentials.
 
@@ -278,6 +284,10 @@ The production smoke must also prove the four ceremony routes and all three
 credential lifecycle routes are routed to the passkey service and return the
 expected public JSON contracts without recording a persistent test credential
 or creating an owner tombstone for an unknown revocation.
+The root full-live runner rejects ambient Node TLS, proxy, CA, and OpenSSL
+overrides and launches this smoke with those variables removed, empty Node
+options, and `/dev/null` npm user/global configuration. Do not bypass that
+boundary with a direct smoke invocation when producing release evidence.
 The origin-parity command requires an actual release artifact; declared strings
 alone are never signer evidence. For `distributed-apk`, set
 `PASSKEY_ANDROID_DISTRIBUTED_APK_FILE` to the absolute canonical path of the APK
@@ -371,6 +381,16 @@ PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io \
   PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production
 npm run audit:deployment-evidence -- --require-ready
 ```
+
+The ready audit independently authenticates the exact recorded GitHub Actions run
+and the exact attestation ID bound to the immutable image digest. It then
+verifies the returned Sigstore bundle with `gh attestation verify --bundle`,
+pinning `soramitsu/fearless-release-readiness`,
+`.github/workflows/passkey-image-publish.yml`, the protected-main source
+commit, `refs/heads/main`, and the hosted-runner policy. A syntactically valid
+run or attestation URL is not release evidence. Set
+`PASSKEY_DEPLOYMENT_GH_BIN` to the reviewed absolute `gh` executable when the
+audit is invoked outside the root release corridor; blocked diagnostic mode does not contact GitHub.
 
 The ready audit requires `deploymentEvidence[].deployedCommit` to match the
 release commit under validation. It uses the service repository `HEAD` when git

@@ -1,90 +1,201 @@
 # Each requirement must have exactly one matching immutable review pin. The
 # audit treats these pins as evidence, not descriptive comments:
 # reviewed_pr_pin	repo	head	base	reviewed_pr_number	reviewed_head_sha
-# Duplicate required-check rows additionally require an exact GitHub Actions provenance pin.
-# The audit evaluates outcomes only for pull_request runs on the requirement's exact head branch:
-# duplicate_check_provenance_pin	repo	head	base	check_name	app_id	app_slug	workflow_id	workflow_path
+# Every required check requires a typed authority pin. GitHub Actions checks
+# additionally bind the exact workflow and exact-head pull_request run:
+# required_check_provenance_pin	repo	head	base	check_name	kind	actor_id	actor_slug	authority_id	authority_value
+# A commit status whose GitHub REST creator is explicitly null uses - for both
+# actor fields and remains pinned to its exact HTTPS target origin.
 # repo	head	base	required_state	required_checks
 # reviewed_pr_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	1257	fe4b4a5907db9ebe50b2a11148ffeadf257862de
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merged	validate,build-and-test
 # reviewed_pr_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	1258	38fb2f3b328e3a041c15e253b0abafe405ef8314
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test
-# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	9f5fd7e909f95d458eed30eef2625ba7ffc90d61
+# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	7398b61e1f0db4df3873128b245b35b8e140e088
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
+# required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	Validate IAS candidate; trusted develop dispatch may hand off	github-actions	15368	github-actions	323721421	.github/workflows/android-internal-app-sharing.yml
 soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	merged	validate,build-and-test,Validate IAS candidate; trusted develop dispatch may hand off
 # reviewed_pr_pin	soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	1300	f66b74f2c57eafd609534448b6b93f926ca10da5
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
 # reviewed_pr_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	1301	eb73120047b5d1dc499e93fde6e7231b042f02eb
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
 # reviewed_pr_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	1303	ddb3b9e00d78f83f33c7bc75adb19deebbf39dea
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
-# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-shared-features-delta-20260731	develop	81	43e999ee10e64b5dd740b4695ed9766866e2168d
-soramitsu/shared-features-spm	codex/ios-shared-features-delta-20260731	develop	merged	continuous-integration/jenkins/pr-merge
+# The September integration candidate contains the prior consolidated source plus
+# migration, TON, transport and final signing guards. Draft is not approval.
+# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	cb8ed64ce5e44a4e56f2309a6a1a37e3cb46d6d0
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	release-contracts	github-actions	15368	github-actions	320731655	.github/workflows/ios-release-safety.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
+# required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
+soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	merged	validate,release-contracts,build,continuous-integration/jenkins/pr-merge
+# PR81 targets another SDK/storage line; PR82 is the exact-wallet-base integration candidate.
+# These identities require independent review, protected-base CI and merge; draft publication is not approval.
+# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-production-dependency-source	feature/neon-fix-fearless	82	9a91c22b9baa60f7237637a032d4c29159b8e16b
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-production-dependency-source	feature/neon-fix-fearless	native-compatibility	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-production-dependency-source	feature/neon-fix-fearless	continuous-integration/jenkins/pr-merge	commit-status	-	-	-	https://jenkins.soramitsu.co.jp
+soramitsu/shared-features-spm	codex/ios-production-dependency-source	feature/neon-fix-fearless	merged	native-compatibility,continuous-integration/jenkins/pr-merge
 # reviewed_pr_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	1061	315f2af5b2fb12fd5816404538827bc2d58b1719
+# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	validate	github-actions	15368	github-actions	302056388	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	verify	github-actions	15368	github-actions	302056389	.github/workflows/ci.yml
 soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	merged	validate,verify
 # reviewed_pr_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062	ff326cc9260b6baffc505c902d414cc1e019f693
+# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	validate	github-actions	15368	github-actions	302056388	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	verify	github-actions	15368	github-actions	302056389	.github/workflows/ci.yml
 soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	merged	validate,verify
 # reviewed_pr_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	45	0856003b75a8d86867e70965a1c364539f5d5924
+# required_check_provenance_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	validate	github-actions	15368	github-actions	302043667	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	build	github-actions	15368	github-actions	302043666	.github/workflows/ci.yml
+# required_check_provenance_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	Vercel	commit-status	35613825	vercel[bot]	-	https://vercel.com
 soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	merged	validate,build,Vercel
 # reviewed_pr_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	49	3b2b04f071e0afc264d2d350941d6fa3afc0f4db
+# required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	validate	github-actions	15368	github-actions	302043667	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	build	github-actions	15368	github-actions	302043666	.github/workflows/ci.yml
+# required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	Vercel	commit-status	35613825	vercel[bot]	-	https://vercel.com
 soramitsu/fearless-site-web	fix/app-association-publication	develop	merged	validate,build,Vercel
 # reviewed_pr_pin	tonswap-org/ton-indexer	hotfix/production-smoke-diagnostics	master	4	8b209203074ef87a30ae1f1bb8e45ce992d6a4d6
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/production-smoke-diagnostics	master	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/production-smoke-diagnostics	master	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	hotfix/production-smoke-diagnostics	master	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	hotfix/production-smoke-diagnostics	master	1	405ebbc4f0c6a0a741fc3b1cf2dfd84437cccf9b
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/production-smoke-diagnostics	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/production-smoke-diagnostics	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	hotfix/production-smoke-diagnostics	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop	develop	5	76eed568a2f3266f10930fcc221246aa236f12bc
+# required_check_provenance_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop	develop	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop	develop	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	chore/sync-master-to-develop	develop	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop	develop	2	af16d6b329a0eed5b29ce4fb728d541e00651012
+# required_check_provenance_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop	develop	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop	develop	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	chore/sync-master-to-develop	develop	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	release/sync-develop-into-master	master	5	e96acf70aaf1d9c0d70f86dfc4e0480fe2ae9ecd
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	release/sync-develop-into-master	master	validate	15368	github-actions	301919249	.github/workflows/branch-flow.yml
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	release/sync-develop-into-master	master	verify	15368	github-actions	301919250	.github/workflows/ci.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/sync-develop-into-master	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/sync-develop-into-master	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	release/sync-develop-into-master	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	codex/ton-health-identity-gate	develop	6	efceffa5ee1f5506fa1760d62b8976df9cbe092e
+# required_check_provenance_pin	tonswap-org/ton-indexer	codex/ton-health-identity-gate	develop	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	codex/ton-health-identity-gate	develop	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	codex/ton-health-identity-gate	develop	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	codex/solswap-health-identity-gate	develop	6	00626a661383779ae8d9c7d24e73c2293bc8fda3
+# required_check_provenance_pin	solswap-io/solswap-indexer	codex/solswap-health-identity-gate	develop	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	codex/solswap-health-identity-gate	develop	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	codex/solswap-health-identity-gate	develop	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	release/ton-health-identity-master	master	7	ee8c98bebc81f3d8bd358375eca7d5e1d0abf786
-# duplicate_check_provenance_pin	tonswap-org/ton-indexer	release/ton-health-identity-master	master	verify	15368	github-actions	250340984	.github/workflows/ci.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	release/ton-health-identity-master	master	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	release/ton-health-identity-master	master	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	release/ton-health-identity-master	master	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	release/solswap-health-identity-master	master	7	10395a0a552d4cbf52ba64713a1b474544cd3127
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	release/solswap-health-identity-master	master	verify	15368	github-actions	301919250	.github/workflows/ci.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/solswap-health-identity-master	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/solswap-health-identity-master	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	release/solswap-health-identity-master	master	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	release/solana-indexer-master-sync-20260628	master	8	a491d96b0edd02ba8268c7b9a957cf8240913f97
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	release/solana-indexer-master-sync-20260628	master	verify	15368	github-actions	301919250	.github/workflows/ci.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/solana-indexer-master-sync-20260628	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	release/solana-indexer-master-sync-20260628	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	release/solana-indexer-master-sync-20260628	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	release/ton-indexer-master-sync-20260701	master	12	8da98205b47ef2b86e88fb063f647df06a8a7075
+# required_check_provenance_pin	tonswap-org/ton-indexer	release/ton-indexer-master-sync-20260701	master	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	release/ton-indexer-master-sync-20260701	master	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	release/ton-indexer-master-sync-20260701	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	hotfix/indexer-service-info-schema-smoke	master	8	0442a62a4d97467141c90576a05510ecedb36890
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/indexer-service-info-schema-smoke	master	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/indexer-service-info-schema-smoke	master	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	hotfix/indexer-service-info-schema-smoke	master	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	10	0f338193dd7c992c0e8b5ae6a9b72df404a9b028
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	validate	15368	github-actions	301919249	.github/workflows/branch-flow.yml
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	verify	15368	github-actions	301919250	.github/workflows/ci.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	hotfix/indexer-service-info-schema-smoke	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	hotfix/deployment-evidence-placeholder-quality	master	9	2b878fac43663e902ead5c4ed4cbdbe7e80a74c5
-# duplicate_check_provenance_pin	tonswap-org/ton-indexer	hotfix/deployment-evidence-placeholder-quality	master	verify	15368	github-actions	250340984	.github/workflows/ci.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/deployment-evidence-placeholder-quality	master	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	hotfix/deployment-evidence-placeholder-quality	master	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	hotfix/deployment-evidence-placeholder-quality	master	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	hotfix/deployment-evidence-placeholder-quality	master	11	6edcc6023b37e9824f17cdb4f7d1df0d53eca7cf
-# duplicate_check_provenance_pin	solswap-io/solswap-indexer	hotfix/deployment-evidence-placeholder-quality	master	verify	15368	github-actions	301919250	.github/workflows/ci.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/deployment-evidence-placeholder-quality	master	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	hotfix/deployment-evidence-placeholder-quality	master	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	hotfix/deployment-evidence-placeholder-quality	master	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop-20260630	develop	10	303538c922783026db6d52a9e3a2375fee9c559b
+# required_check_provenance_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop-20260630	develop	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	chore/sync-master-to-develop-20260630	develop	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	chore/sync-master-to-develop-20260630	develop	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop-20260630	develop	12	f82cdf219cdbffff3bbef051f66ac56566c8edfb
+# required_check_provenance_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop-20260630	develop	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	chore/sync-master-to-develop-20260630	develop	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	chore/sync-master-to-develop-20260630	develop	merged	validate,verify
 # reviewed_pr_pin	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13	2335a094866cf16406bfee3bd9d3998a7e40bc52
+# required_check_provenance_pin	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	validate	github-actions	15368	github-actions	301912714	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	verify	github-actions	15368	github-actions	250340984	.github/workflows/ci.yml
 tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	merged	validate,verify
 # reviewed_pr_pin	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16	dc27c55208af1b465837945a473f8af834f061bf
+# required_check_provenance_pin	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	validate	github-actions	15368	github-actions	301919249	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	verify	github-actions	15368	github-actions	301919250	.github/workflows/ci.yml
 solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	merged	validate,verify
 # reviewed_pr_pin	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1	f1f897bb7b2d57e812daa606a0140875a37959b7
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	validate	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	verify	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
 sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	merged	validate,verify
 # reviewed_pr_pin	sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	3	b0eec9dd27d1026771034376b9b2a50a2c1a3105
-# duplicate_check_provenance_pin	sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	validate	15368	github-actions	305269228	.github/workflows/ci.yml
-# duplicate_check_provenance_pin	sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	verify	15368	github-actions	305269228	.github/workflows/ci.yml
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	validate	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	verify	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
 sora-xor/polkaswap-indexer	hotfix/migration-replay-order	master	merged	validate,verify
 # reviewed_pr_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	5	cbc37ed0922f14fa21e9200326b0d41546edbd36
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	branch-flow	github-actions	15368	github-actions	320741258	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	validate	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
+# required_check_provenance_pin	sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	verify	github-actions	15368	github-actions	305269228	.github/workflows/ci.yml
 sora-xor/polkaswap-indexer	release/polkaswap-production-readiness-20260726	master	merged	branch-flow,validate,verify
 # reviewed_pr_pin	hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	5611	313088b969a8afaceb0b95f5f39bee5979384f49
+# required_check_provenance_pin	hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	DCO	check-run-app	974774	dco-2	-	-
 hyperledger-iroha/iroha	codex/kagemusha-first-release-canonical-selector	optimizations	merged	DCO
 # reviewed_pr_pin	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	5612	e7a9e27691d6f34e2737d946af9b7f0768a31136
+# required_check_provenance_pin	hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	DCO	check-run-app	974774	dco-2	-	-
 hyperledger-iroha/iroha	codex/kagemusha-selector-hardening	optimizations	merged	DCO
 # reviewed_pr_pin	hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	5619	9e146c135f91c0fff5d7b9f5c27af6b5a8e476de
+# required_check_provenance_pin	hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	DCO	check-run-app	974774	dco-2	-	-
 hyperledger-iroha/iroha	codex/fearless-production-consolidated-20260731	optimizations	merged	DCO
+
+# Root source ownership is assigned; this PR is still OPEN/REVIEW_REQUIRED.
+# Pins identify the current published candidate, not approval of the dirty working tree.
+# reviewed_pr_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	1	318f58d7a8c5e688d551e00ebc81fdd80473f8f6
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	validate	github-actions	15368	github-actions	324977531	.github/workflows/readiness.yml
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	verify	github-actions	15368	github-actions	324977531	.github/workflows/readiness.yml
+soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	merged	validate,verify
+
+# Exact Starscream guarded-write candidate; publication is not review approval.
+# reviewed_pr_pin	soramitsu/fearless-starscream	codex/authorized-transport-write	feature/without-origin	5	c26d9665fc44fd55aa1170427b1aef007a944fd7
+# required_check_provenance_pin	soramitsu/fearless-starscream	codex/authorized-transport-write	feature/without-origin	authorized-write	github-actions	15368	github-actions	364107808	.github/workflows/authorized-write.yml
+soramitsu/fearless-starscream	codex/authorized-transport-write	feature/without-origin	merged	authorized-write
+
+# Android writer and runtime-compatible source candidates; independent reviews required.
+# reviewed_pr_pin	soramitsu/fearless-nv-websocket-client	codex/guard-mutation-transport	codex/legacy-2.14-base	1	9714b30b6a16d40a2122765077bb71cf44314798
+# required_check_provenance_pin	soramitsu/fearless-nv-websocket-client	codex/guard-mutation-transport	codex/legacy-2.14-base	test	github-actions	15368	github-actions	364106322	.github/workflows/guarded-writes.yml
+soramitsu/fearless-nv-websocket-client	codex/guard-mutation-transport	codex/legacy-2.14-base	merged	test
+# reviewed_pr_pin	soramitsu/fearless-utils-Android	codex/guarded-mutation-source	codex/legacy-wallet-runtime-base	153	1c80a2bf3fa1f996cf1328873e09f282ee29b69e
+# required_check_provenance_pin	soramitsu/fearless-utils-Android	codex/guarded-mutation-source	codex/legacy-wallet-runtime-base	test	github-actions	15368	github-actions	364111807	.github/workflows/guarded-mutations.yml
+soramitsu/fearless-utils-Android	codex/guarded-mutation-source	codex/legacy-wallet-runtime-base	merged	test
+
+# Guarded iOS RPC candidate is stacked on the exact compatibility candidate above.
+# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	83	6361213410aaa184b56a4030b626b0b62b6352ee
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	native-compatibility	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	authorized-rpc	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	continuous-integration/jenkins/pr-merge	commit-status	-	-	-	https://jenkins.soramitsu.co.jp
+soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	merged	native-compatibility,authorized-rpc,continuous-integration/jenkins/pr-merge
+
+# iOS XCM discovery/quotation must not require wallet signing material.
+# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	84	04c0d25190b748b3cc219c8d33630cb48f679d3e
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	native-compatibility	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	authorized-rpc	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
+# required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	continuous-integration/jenkins/pr-merge	commit-status	-	-	-	https://jenkins.soramitsu.co.jp
+soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	merged	native-compatibility,authorized-rpc,continuous-integration/jenkins/pr-merge

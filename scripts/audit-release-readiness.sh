@@ -26,7 +26,7 @@ resolve_canonical_tool() {
     [[ -e "$candidate" ]] || continue
     resolved="$(/bin/realpath "$candidate" 2>/dev/null || true)"
     [[ -n "$resolved" && -f "$resolved" && -x "$resolved" ]] || continue
-    printf '%s' "$candidate"
+    printf '%s' "$resolved"
     return 0
   done
   return 1
@@ -65,9 +65,12 @@ PRODUCTION_FORBIDDEN_ENV_VARS=(
   PASSKEY_CHALLENGE_SERVICE_AUDIT_SKIP_COMMANDS
   PASSKEY_DEPLOYMENT_EVIDENCE_ROOT
   PASSKEY_DEPLOYMENT_EXPECTED_COMMIT
+  PASSKEY_DEPLOYMENT_GH_BIN
   PASSKEY_ANDROID_ASSOCIATION_FILE
   PASSKEY_DEPLOYMENT_EVIDENCE_FILE
   PASSKEY_BACKUP_PRODUCTION_CONFIG_FILE
+  PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES
+  PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS
   PASSKEY_AUDIT_ROOT
   IROHA_READINESS_ROOT
   IROHA_READINESS_PARENT
@@ -82,6 +85,8 @@ PRODUCTION_FORBIDDEN_ENV_VARS=(
   IROHA_JS_SDK_RELEASE_TAG
   IROHA_JS_SDK_RELEASE_ASSET
   IROHA_JS_SDK_RELEASE_SHA256
+  IROHA_TAIRA_LIVE_HEALTH
+  TAIRA_EXPECTED_BUILD_COMMIT
   NEXUS_PRODUCTION_EVIDENCE_FILE
   NEXUS_PRODUCTION_EVIDENCE_AUDIT
   NEXUS_PRODUCTION_EVIDENCE_TEST
@@ -104,12 +109,37 @@ PRODUCTION_FORBIDDEN_ENV_VARS=(
   BITCOIN_BROADCAST_EVIDENCE_INDEXER_FIXTURE
   DEPLOYMENT_EVIDENCE_ROOT
   DEPLOYMENT_EVIDENCE_EXPECTED_COMMIT
+  TON_INDEXER_SMOKE_TIMEOUT_MS
+  TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES
+  TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC
+  SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS
+  SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES
+  SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC
+  POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS
+  POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES
+  POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC
   NODE_BIN
   NPM_BIN
   YARN_BIN
   GH_BIN
   NODE_OPTIONS
   NODE_PATH
+  NODE_TLS_REJECT_UNAUTHORIZED
+  NODE_EXTRA_CA_CERTS
+  NODE_USE_ENV_PROXY
+  NODE_USE_SYSTEM_CA
+  OPENSSL_CONF
+  CURL_CA_BUNDLE
+  SSL_CERT_FILE
+  SSL_CERT_DIR
+  HTTP_PROXY
+  HTTPS_PROXY
+  ALL_PROXY
+  NO_PROXY
+  http_proxy
+  https_proxy
+  all_proxy
+  no_proxy
   PINNED_YARN_TEST_MODE
   PINNED_YARN_NODE_BIN
   PINNED_YARN_NPM_BIN
@@ -175,6 +205,13 @@ require_isolated_test_path() {
     *) release_setup_fail "$label must remain inside the isolated test parent: $base" ;;
   esac
 
+  require_path_without_symlink_components "$candidate" "$label must not traverse a symlink in test mode"
+}
+
+require_path_without_symlink_components() {
+  local candidate="$1"
+  local failure_message="$2"
+
   local current=""
   local component
   local old_ifs="$IFS"
@@ -185,8 +222,41 @@ require_isolated_test_path() {
   for component in "${path_components[@]}"; do
     [[ -n "$component" ]] || continue
     current="$current/$component"
-    [[ ! -L "$current" ]] || release_setup_fail "$label must not traverse a symlink in test mode: $current"
+    [[ ! -L "$current" ]] || release_setup_fail "$failure_message: $current"
   done
+}
+
+require_strict_test_descendant() {
+  local base="$1"
+  local candidate="$2"
+  local label="$3"
+  case "$candidate" in
+    "$base"/*) ;;
+    *) release_setup_fail "$label must be a strict descendant of $base in test mode" ;;
+  esac
+}
+
+validate_release_cleanup_target() {
+  local allowed_root="$1"
+  local target="$2"
+  local label="$3"
+  [[ "$allowed_root" == /* && "$target" == /* ]] ||
+    release_setup_fail "$label cleanup path must be absolute"
+  case "$target" in
+    *//*|*$'\n'*|*$'\r'*|*$'\t'*)
+      release_setup_fail "$label cleanup path must be lexically normalized"
+      ;;
+  esac
+  case "/$target/" in
+    */../*|*/./*) release_setup_fail "$label cleanup path must be lexically normalized" ;;
+  esac
+  case "$target" in
+    "$allowed_root"/*) ;;
+    *) release_setup_fail "$label cleanup path escaped its release-owned output root: $allowed_root" ;;
+  esac
+  require_path_without_symlink_components \
+    "$target" \
+    "$label cleanup path must not traverse a symlink"
 }
 
 case "$TEST_MODE" in
@@ -231,6 +301,14 @@ case "$TEST_MODE" in
     ;;
 esac
 
+if [[ "$TEST_MODE" == "1" ]]; then
+  ANDROID_CANDIDATE_ROOT="$ROOT_DIR/fearless-Android"
+  IOS_CANDIDATE_ROOT="$ROOT_DIR/fearless-iOS"
+else
+  ANDROID_CANDIDATE_ROOT="$ROOT_DIR/fearless-Android-production-consolidated-20260731"
+  IOS_CANDIDATE_ROOT="$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
+fi
+
 REPORT_DIR="${RELEASE_READINESS_REPORT_DIR:-$ROOT_DIR/build/reports/release-readiness}"
 SUMMARY_FILE="${RELEASE_READINESS_SUMMARY_FILE:-$REPORT_DIR/summary.json}"
 BLOCKERS_FILE="${RELEASE_READINESS_BLOCKERS_FILE:-$REPORT_DIR/blockers.md}"
@@ -250,10 +328,18 @@ if [[ "$TEST_MODE" == "1" ]]; then
     require_isolated_test_path "$PARENT_DIR" "$isolated_child_path" "test dependency path"
   done
   require_isolated_test_path "$PARENT_DIR" "$REPORT_DIR" "RELEASE_READINESS_REPORT_DIR"
+  require_strict_test_descendant \
+    "$ROOT_DIR/build/reports" \
+    "$REPORT_DIR" \
+    "RELEASE_READINESS_REPORT_DIR"
   require_isolated_test_path "$REPORT_DIR" "$SUMMARY_FILE" "RELEASE_READINESS_SUMMARY_FILE"
+  require_strict_test_descendant "$REPORT_DIR" "$SUMMARY_FILE" "RELEASE_READINESS_SUMMARY_FILE"
   require_isolated_test_path "$REPORT_DIR" "$BLOCKERS_FILE" "RELEASE_READINESS_BLOCKERS_FILE"
+  require_strict_test_descendant "$REPORT_DIR" "$BLOCKERS_FILE" "RELEASE_READINESS_BLOCKERS_FILE"
   require_isolated_test_path "$REPORT_DIR" "$ACTIONS_FILE" "RELEASE_READINESS_ACTIONS_FILE"
+  require_strict_test_descendant "$REPORT_DIR" "$ACTIONS_FILE" "RELEASE_READINESS_ACTIONS_FILE"
   require_isolated_test_path "$REPORT_DIR" "$UNBLOCK_BUNDLE_DIR" "RELEASE_READINESS_UNBLOCK_BUNDLE_DIR"
+  require_strict_test_descendant "$REPORT_DIR" "$UNBLOCK_BUNDLE_DIR" "RELEASE_READINESS_UNBLOCK_BUNDLE_DIR"
 fi
 SOURCE_PUBLICATION_PREFLIGHT_REPORT="$REPORT_DIR/source-publication-preflight-report.json"
 SOURCE_PUBLICATION_PREFLIGHT_LOG="$REPORT_DIR/source-publication-preflight.log"
@@ -285,8 +371,8 @@ Checks:
   - Passkey backup production deployment evidence and Android release-origin parity
   - Android/iOS passkey backup prerequisites
   - live passkey backup production route smoke
-  - Iroha mobile/browser SDK and SORA Nexus endpoint release prerequisites
-  - Android/iOS/web Iroha/Nexus wallet transfer coverage
+  - Iroha mobile/browser SDK plus SORA Taira/Nexus release prerequisites
+  - Android/iOS/web Iroha Taira/Nexus wallet transfer coverage
   - Android XCM broad-production evidence
   - Web Bitcoin funded-testnet broadcast evidence
   - TI, SI, and PI deployment evidence readiness
@@ -295,7 +381,7 @@ Checks:
 Options:
   --skip-live  Skip GitHub governance, release PR merge readiness, source
                publication attestation, passkey
-               challenge-service live health and route smoke, Nexus live
+               challenge-service live health and route smoke, Taira/Nexus live
                health, and live TI/SI/PI production smoke checks.
 
 Environment:
@@ -579,23 +665,92 @@ write_summary() {
 
 source_publication_report_has_unsafe_iroha_state() {
   local report_file="${1:-}"
+  local preflight_file="${2:-}"
   [[ -n "$report_file" && -f "$report_file" && ! -L "$report_file" ]] || return 1
+  [[ -n "$preflight_file" && -f "$preflight_file" && ! -L "$preflight_file" ]] || return 1
 
-  "$NODE_BIN" - "$report_file" <<'NODE'
+  "$NODE_BIN" - "$report_file" "$preflight_file" <<'NODE'
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 
 const reportPath = process.argv[2]
+const preflightPath = process.argv[3]
 let report
+let preflight
+let preflightBytes
 try {
   report = JSON.parse(fs.readFileSync(reportPath, 'utf8'))
+  preflightBytes = fs.readFileSync(preflightPath)
+  preflight = JSON.parse(preflightBytes.toString('utf8'))
 } catch {
   process.exit(1)
 }
 
-if (!report || typeof report !== 'object' || Array.isArray(report) || report.schemaVersion !== 2 || report.status !== 'failed' ||
-    report.checkRemote !== true || !Array.isArray(report.repositories)) {
+const preflightSha256 = crypto.createHash('sha256').update(preflightBytes).digest('hex')
+if (!report || typeof report !== 'object' || Array.isArray(report) || report.schemaVersion !== 3 || report.phase !== 'postflight' ||
+    report.preflightReportSha256 !== preflightSha256 || report.status !== 'failed' || report.checkRemote !== true ||
+    !preflight || typeof preflight !== 'object' || Array.isArray(preflight) || preflight.schemaVersion !== 3 ||
+    preflight.phase !== 'preflight' || preflight.preflightReportSha256 !== null || preflight.checkRemote !== true ||
+    !Array.isArray(report.repositories) || !Array.isArray(preflight.repositories)) {
   process.exit(1)
 }
+const preflightGeneratedAtMs = Date.parse(preflight.generatedAt)
+const postflightGeneratedAtMs = Date.parse(report.generatedAt)
+const preflightAgeMs = postflightGeneratedAtMs - preflightGeneratedAtMs
+const sharedReportFields = ['workspaceRoot', 'workspaceParent', 'configFile', 'rootOwnerConfigFile', 'releasePrConfigFile']
+const expectedSourcePaths = ['.', 'fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer', '../iroha']
+if (process.env.RELEASE_READINESS_TEST_MODE !== '1') {
+  expectedSourcePaths[1] = 'fearless-Android-production-consolidated-20260731'
+  expectedSourcePaths[2] = 'fearless-iOS-production-consolidated-20260731'
+}
+const identityFields = [
+  'path',
+  'repository',
+  'head',
+  'base',
+  'prNumber',
+  'prUrl',
+  'prState',
+  'prHeadSha',
+  'repositoryPath',
+  'originUrl',
+  'originRepository',
+  'branch',
+  'headSha',
+  'upstream',
+  'upstreamSha',
+  'currentBranchRemoteSha',
+  'currentBranchRemotePresent',
+  'remoteHeadSha',
+  'remoteBranchPresent',
+]
+const preflightSources = [preflight.workspaceSource, ...preflight.repositories]
+const postflightSources = [report.workspaceSource, ...report.repositories]
+const preflightContinuityDiagnostic = 'source publication preflight did not pass before release checks'
+const hasOwn = (value, field) => Object.prototype.hasOwnProperty.call(value, field)
+const hasExactPreflightPostflightPair =
+  Number.isFinite(preflightGeneratedAtMs) && Number.isFinite(postflightGeneratedAtMs) &&
+  preflightAgeMs >= 0 && preflightAgeMs <= 6 * 60 * 60 * 1000 &&
+  sharedReportFields.every((field) => typeof preflight[field] === 'string' && preflight[field] === report[field]) &&
+  preflightSources.length === 9 && postflightSources.length === 9 &&
+  preflightSources.every((preflightSource, index) => {
+    const postflightSource = postflightSources[index]
+    if (!preflightSource || typeof preflightSource !== 'object' || Array.isArray(preflightSource) ||
+        !postflightSource || typeof postflightSource !== 'object' || Array.isArray(postflightSource) ||
+        preflightSource.path !== expectedSourcePaths[index] || postflightSource.path !== expectedSourcePaths[index] ||
+        !['passed', 'failed'].includes(preflightSource.status) ||
+        !['passed', 'failed'].includes(postflightSource.status)) {
+      return false
+    }
+    if (preflightSource.status === 'passed') {
+      return identityFields.every((field) =>
+        hasOwn(preflightSource, field) && hasOwn(postflightSource, field) &&
+        preflightSource[field] === postflightSource[field])
+    }
+    return Array.isArray(postflightSource.failures) &&
+      postflightSource.failures.includes(preflightContinuityDiagnostic)
+  })
+if (!hasExactPreflightPostflightPair) process.exit(1)
 const irohaRows = report.repositories.filter((row) => row && row.path === '../iroha')
 if (irohaRows.length !== 1 || irohaRows[0].status !== 'failed' || !Array.isArray(irohaRows[0].failures)) {
   process.exit(1)
@@ -727,7 +882,7 @@ plan_readiness_is_external_iroha_only() {
     }
   ' "$log_file" || return 1
 
-  source_publication_report_has_unsafe_iroha_state "$source_report"
+  source_publication_report_has_unsafe_iroha_state "$source_report" "$SOURCE_PUBLICATION_PREFLIGHT_REPORT"
 }
 
 recommended_action_for_slug() {
@@ -745,6 +900,12 @@ recommended_action_for_slug() {
     source-publication-readiness)
       printf '%s' "Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout's owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight."
       ;;
+    release-unblock-bundle)
+      printf '%s' "Fix the release-unblock bundle exporter or verifier failure recorded in the terminal bundle log, then rerun the full release-readiness audit."
+      ;;
+    release-output-contract)
+      printf '%s' "Fix the release-readiness summary, action manifest, or blocker-report contract failure recorded in the terminal validation log, then rerun the full release-readiness audit."
+      ;;
     private-overlay-readiness)
       printf '%s' "Remove private product-source drift and keep only allowed release overlay files, then rerun bash scripts/audit-private-overlay-readiness.sh."
       ;;
@@ -752,7 +913,7 @@ recommended_action_for_slug() {
       printf '%s' "Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android."
       ;;
     ios-shared-features-delta)
-      printf '%s' "Restore the iOS shared-features delta self-test/report gate, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json in fearless-iOS."
+      printf '%s' "Upstream or vendor every carried iOS shared-features/native-crypto delta, remove post-resolution checkout mutation, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready in fearless-iOS."
       ;;
     passkey-challenge-service)
       printf '%s' "Fix the passkey challenge-service implementation, Docker/deployment evidence, and adversarial tests, then rerun bash scripts/audit-passkey-challenge-service.sh."
@@ -770,7 +931,7 @@ recommended_action_for_slug() {
       printf '%s' "Do not edit or publish from an unfinished external Iroha Git operation. Have its owner produce a stable reviewed source commit and restore the pinned Iroha JS SDK release artifact so package.json exports ./ivm-artifact and the packaged runtime/declaration surface passes the wallet artifact validator. Pin NEXUS_EXPECTED_BUILD_COMMIT in config/iroha-release-readiness.env to the exact deployed Iroha build. Restore https://minamoto.sora.org/status as a bounded, non-redirecting HTTP 200 application/json Torii/Nexus status response with fresh observed_at_ms and last_block_committed_at_ms, coherent block and queue counters, a matching non-placeholder build.git_commit_sha, the exact ordered SORA routing policy (default 0/0, governance 1/1, smartcontract::deploy 2/2), and an unsealed dataspace_catalog containing ready canonical 0/0, 1/1, and 2/2 targets; record Nexus route publication, canary, and wallet live transfer smoke evidence, keep Nexus release-gated until strict production evidence passes, then rerun bash scripts/audit-iroha-release-readiness.sh."
       ;;
     iroha-wallet-coverage)
-      printf '%s' "Restore Android/iOS/web Iroha/Nexus wallet coverage, fail-closed transfer tests, and each platform's explicit blocked production-send readiness contract; do not enable production send until reviewed codecs and key providers exist, then rerun bash scripts/audit-iroha-wallet-coverage.sh."
+      printf '%s' "Restore Android/iOS/web Iroha Taira/Nexus wallet coverage, fail-closed transfer tests, and each platform's explicit blocked production-send readiness contract; do not enable production send until reviewed codecs and key providers exist, then rerun bash scripts/audit-iroha-wallet-coverage.sh."
       ;;
     android-xcm-production-evidence)
       printf '%s' "Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change."
@@ -817,6 +978,12 @@ verification_command_for_slug() {
     source-publication-readiness)
       printf '%s' "bash scripts/audit-release-readiness.sh"
       ;;
+    release-unblock-bundle)
+      printf '%s' "bash scripts/test-release-unblock-bundle-export.sh && bash scripts/test-release-unblock-bundle-verify.sh && bash scripts/audit-release-readiness.sh"
+      ;;
+    release-output-contract)
+      printf '%s' "bash scripts/test-release-readiness-audit.sh && bash scripts/audit-release-readiness.sh"
+      ;;
     private-overlay-readiness)
       printf '%s' "bash scripts/audit-private-overlay-readiness.sh"
       ;;
@@ -824,7 +991,7 @@ verification_command_for_slug() {
       printf '%s' "cd fearless-Android && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance"
       ;;
     ios-shared-features-delta)
-      printf '%s' "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json"
+      printf '%s' "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
       ;;
     passkey-challenge-service)
       printf '%s' "bash scripts/audit-passkey-challenge-service.sh"
@@ -877,7 +1044,7 @@ verification_command_for_slug() {
 requires_external_action_for_slug() {
   local slug="$1"
   case "$slug" in
-    github-governance|release-pr-readiness|source-publication-readiness|passkey-deployment-evidence|passkey-backup-prerequisites|passkey-production-smoke|iroha-release-readiness|android-xcm-production-evidence|web-bitcoin-broadcast-evidence|ti-deployment-evidence|si-deployment-evidence|pi-deployment-evidence|ti-production-smoke|si-production-smoke|pi-production-smoke)
+    github-governance|release-pr-readiness|source-publication-readiness|ios-shared-features-delta|passkey-deployment-evidence|passkey-backup-prerequisites|passkey-production-smoke|iroha-release-readiness|android-xcm-production-evidence|web-bitcoin-broadcast-evidence|ti-deployment-evidence|si-deployment-evidence|pi-deployment-evidence|ti-production-smoke|si-production-smoke|pi-production-smoke)
       printf 'true'
       ;;
     *)
@@ -1861,22 +2028,28 @@ NODE
 export_unblock_bundle() {
   local export_script="$ROOT_DIR/scripts/export-release-unblock-bundle.sh"
   local verify_script="$ROOT_DIR/scripts/verify-release-unblock-bundle.sh"
+  local log_file="$REPORT_DIR/release-unblock-bundle.log"
+
+  mkdir -p "$REPORT_DIR"
+  : > "$log_file"
 
   if [[ ! -x "$export_script" ]]; then
     echo "[release-readiness][error] Release unblock bundle exporter missing or not executable: $export_script" >&2
+    printf '%s\n' "Release unblock bundle exporter missing or not executable: $export_script" >> "$log_file"
     return 1
   fi
   if [[ ! -x "$verify_script" ]]; then
     echo "[release-readiness][error] Release unblock bundle verifier missing or not executable: $verify_script" >&2
+    printf '%s\n' "Release unblock bundle verifier missing or not executable: $verify_script" >> "$log_file"
     return 1
   fi
 
-  if ! RELEASE_UNBLOCK_ROOT="$ROOT_DIR" "$export_script" --report-dir "$REPORT_DIR" --output "$UNBLOCK_BUNDLE_DIR"; then
-    echo "[release-readiness][error] Release unblock bundle export failed" >&2
-    return 1
-  fi
-  if ! RELEASE_UNBLOCK_ROOT="$ROOT_DIR" "$verify_script" --bundle "$UNBLOCK_BUNDLE_DIR"; then
-    echo "[release-readiness][error] Release unblock bundle verification failed" >&2
+  if ! RELEASE_UNBLOCK_ROOT="$ROOT_DIR" "$export_script" \
+    --report-dir "$REPORT_DIR" \
+    --output "$UNBLOCK_BUNDLE_DIR" \
+    --verify-with "$verify_script" > "$log_file" 2>&1; then
+    echo "[release-readiness][error] Release unblock bundle export/verification failed" >&2
+    preview_log "$log_file"
     return 1
   fi
   log "Wrote and verified release unblock bundle at $UNBLOCK_BUNDLE_DIR"
@@ -1970,6 +2143,9 @@ skip_check() {
 run_plan_readiness() {
   PLAN_AUDIT_ROOT="$ROOT_DIR" \
     PLAN_AUDIT_PARENT="$PARENT_DIR" \
+    PLAN_AUDIT_ANDROID_ROOT="$ANDROID_CANDIDATE_ROOT" \
+    PLAN_AUDIT_IOS_ROOT="$IOS_CANDIDATE_ROOT" \
+    PLAN_AUDIT_IOS_TESTFLIGHT_ROOT="$IOS_CANDIDATE_ROOT" \
     PLAN_AUDIT_FAIL_FAST=false \
     "$ROOT_DIR/scripts/audit-plan-readiness.sh"
 }
@@ -2020,13 +2196,61 @@ run_source_publication_preflight() {
 }
 
 clear_release_owned_preflight_outputs() {
+  # Validate every target before deleting any of them. In particular, a
+  # checkout-local build/ symlink must never redirect release cleanup into an
+  # external tree before source-publication preflight has a chance to run.
+  validate_release_cleanup_target \
+    "$ROOT_DIR/build/reports" \
+    "$REPORT_DIR" \
+    "release-readiness report directory"
+  validate_release_cleanup_target \
+    "$ANDROID_CANDIDATE_ROOT/build/reports" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/public-dependency-upstream-delta" \
+    "Android public-dependency report"
+  validate_release_cleanup_target \
+    "$ANDROID_CANDIDATE_ROOT/build/reports" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-production-evidence-template.json" \
+    "Android XCM evidence template"
+  validate_release_cleanup_target \
+    "$ANDROID_CANDIDATE_ROOT/build/reports" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-registry-gap-report.json" \
+    "Android XCM registry-gap report"
+  validate_release_cleanup_target \
+    "$ANDROID_CANDIDATE_ROOT/build/reports" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-effective-registry-report.json" \
+    "Android XCM effective-registry report"
+  validate_release_cleanup_target \
+    "$IOS_CANDIDATE_ROOT/build/reports" \
+    "$IOS_CANDIDATE_ROOT/build/reports/shared-features-delta-report.json" \
+    "iOS shared-features report"
+  validate_release_cleanup_target \
+    "$ROOT_DIR/services/passkey-backup-challenge-service/build/reports" \
+    "$ROOT_DIR/services/passkey-backup-challenge-service/build/reports/production-deployment-evidence-template.json" \
+    "passkey deployment-evidence template"
+  validate_release_cleanup_target \
+    "$ROOT_DIR/fearless-wallet-web/build/reports" \
+    "$ROOT_DIR/fearless-wallet-web/build/reports/bitcoin-broadcast-evidence-template.json" \
+    "web Bitcoin broadcast-evidence template"
+  validate_release_cleanup_target \
+    "$PARENT_DIR/ton-indexer/build/reports" \
+    "$PARENT_DIR/ton-indexer/build/reports/production-deployment-evidence-template.json" \
+    "TON deployment-evidence template"
+  validate_release_cleanup_target \
+    "$PARENT_DIR/solswap-indexer/build/reports" \
+    "$PARENT_DIR/solswap-indexer/build/reports/production-deployment-evidence-template.json" \
+    "Solswap deployment-evidence template"
+  validate_release_cleanup_target \
+    "$PARENT_DIR/polkaswap-indexer/build/reports" \
+    "$PARENT_DIR/polkaswap-indexer/build/reports/production-deployment-evidence-template.json" \
+    "Polkaswap deployment-evidence template"
+
   rm -rf "$REPORT_DIR"
-  rm -rf "$ROOT_DIR/fearless-Android/build/reports/public-dependency-upstream-delta"
+  rm -rf "$ANDROID_CANDIDATE_ROOT/build/reports/public-dependency-upstream-delta"
   rm -f \
-    "$ROOT_DIR/fearless-Android/build/reports/xcm-production-evidence-template.json" \
-    "$ROOT_DIR/fearless-Android/build/reports/xcm-registry-gap-report.json" \
-    "$ROOT_DIR/fearless-Android/build/reports/xcm-effective-registry-report.json" \
-    "$ROOT_DIR/fearless-iOS/build/reports/shared-features-delta-report.json" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-production-evidence-template.json" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-registry-gap-report.json" \
+    "$ANDROID_CANDIDATE_ROOT/build/reports/xcm-effective-registry-report.json" \
+    "$IOS_CANDIDATE_ROOT/build/reports/shared-features-delta-report.json" \
     "$ROOT_DIR/services/passkey-backup-challenge-service/build/reports/production-deployment-evidence-template.json" \
     "$ROOT_DIR/fearless-wallet-web/build/reports/bitcoin-broadcast-evidence-template.json" \
     "$PARENT_DIR/ton-indexer/build/reports/production-deployment-evidence-template.json" \
@@ -2042,7 +2266,7 @@ run_private_overlays() {
 }
 
 run_android_public_dependency_provenance() {
-  cd "$ROOT_DIR/fearless-Android"
+  cd "$ANDROID_CANDIDATE_ROOT"
   bash ./scripts/test-fearless-utils-derived-tree.sh
   FEARLESS_UTILS_PATH="$ROOT_DIR/fearless-utils-Android" \
     FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 \
@@ -2056,9 +2280,16 @@ run_android_public_dependency_provenance() {
 }
 
 run_ios_shared_features_delta() {
-  cd "$ROOT_DIR/fearless-iOS"
+  cd "$IOS_CANDIDATE_ROOT"
   bash scripts/deps/test-shared-features-delta-report.sh
-  bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json
+  if [[ "$RUN_LIVE" == true ]]; then
+    bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" \
+      --write-report build/reports/shared-features-delta-report.json \
+      --require-ready
+  else
+    bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" \
+      --write-report build/reports/shared-features-delta-report.json
+  fi
 }
 
 run_passkey_challenge_service() {
@@ -2090,6 +2321,7 @@ run_passkey_deployment_evidence() {
   cp "$template_report" "$release_template_report"
   if [[ "$RUN_LIVE" == true ]]; then
     PASSKEY_DEPLOYMENT_EVIDENCE_ROOT="$ROOT_DIR/services/passkey-backup-challenge-service" \
+      PASSKEY_DEPLOYMENT_GH_BIN="$RELEASE_GH_BIN" \
       "$NPM_BIN" run audit:deployment-evidence -- --require-ready
     PASSKEY_ANDROID_ASSOCIATION_FILE="$ROOT_DIR/fearless-site-web/src/public/.well-known/assetlinks.json" \
       PASSKEY_DEPLOYMENT_EVIDENCE_FILE="$ROOT_DIR/services/passkey-backup-challenge-service/scripts/production-deployment-evidence.json" \
@@ -2127,9 +2359,35 @@ run_passkey_prerequisites() {
 
 run_passkey_production_smoke() {
   cd "$ROOT_DIR/services/passkey-backup-challenge-service"
-  PASSKEY_BACKUP_BASE_URL="https://backup.fearlesswallet.io" \
+  /usr/bin/env \
+    -u NODE_TLS_REJECT_UNAUTHORIZED \
+    -u NODE_EXTRA_CA_CERTS \
+    -u NODE_USE_ENV_PROXY \
+    -u NODE_USE_SYSTEM_CA \
+    -u OPENSSL_CONF \
+    -u SSL_CERT_FILE \
+    -u SSL_CERT_DIR \
+    -u HTTP_PROXY \
+    -u HTTPS_PROXY \
+    -u ALL_PROXY \
+    -u NO_PROXY \
+    -u http_proxy \
+    -u https_proxy \
+    -u all_proxy \
+    -u no_proxy \
+    -u NODE_PATH \
+    HOME=/var/empty \
+    XDG_CONFIG_HOME=/var/empty \
+    NPM_CONFIG_USERCONFIG=/dev/null \
+    npm_config_userconfig=/dev/null \
+    NPM_CONFIG_GLOBALCONFIG=/dev/null \
+    npm_config_globalconfig=/dev/null \
+    NODE_OPTIONS= \
+    PASSKEY_BACKUP_BASE_URL="https://backup.fearlesswallet.io" \
     PASSKEY_BACKUP_SMOKE_GRANT_HELPER="/run/secrets/passkey-smoke-grant-helper" \
     PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 \
+    PASSKEY_BACKUP_SMOKE_MAX_RESPONSE_BYTES=1048576 \
+    PASSKEY_BACKUP_SMOKE_GRANT_HELPER_TIMEOUT_MS=2000 \
     "$NPM_BIN" run smoke:production
 }
 
@@ -2159,6 +2417,7 @@ run_iroha_prerequisites() {
       NEXUS_PRODUCTION_EVIDENCE_AUDIT="$ROOT_DIR/scripts/audit-nexus-production-evidence.sh" \
       NEXUS_PRODUCTION_EVIDENCE_TEST="$ROOT_DIR/scripts/test-nexus-production-evidence-audit.sh" \
       NEXUS_EVIDENCE_ROOT="$ROOT_DIR" \
+      IROHA_TAIRA_LIVE_HEALTH=1 \
       IROHA_NEXUS_REQUIRE_PRODUCTION_EVIDENCE=1 \
       IROHA_NEXUS_LIVE_HEALTH=1 \
       "$ROOT_DIR/scripts/audit-iroha-release-readiness.sh"
@@ -2170,6 +2429,7 @@ run_iroha_prerequisites() {
       NEXUS_PRODUCTION_EVIDENCE_AUDIT="$ROOT_DIR/scripts/audit-nexus-production-evidence.sh" \
       NEXUS_PRODUCTION_EVIDENCE_TEST="$ROOT_DIR/scripts/test-nexus-production-evidence-audit.sh" \
       NEXUS_EVIDENCE_ROOT="$ROOT_DIR" \
+      IROHA_TAIRA_LIVE_HEALTH=0 \
       IROHA_NEXUS_REQUIRE_PRODUCTION_EVIDENCE=0 \
       IROHA_NEXUS_LIVE_HEALTH=0 \
       "$ROOT_DIR/scripts/audit-iroha-release-readiness.sh"
@@ -2183,7 +2443,7 @@ run_iroha_wallet_coverage() {
 }
 
 run_android_xcm_production_evidence() {
-  cd "$ROOT_DIR/fearless-Android"
+  cd "$ANDROID_CANDIDATE_ROOT"
   local status=0
   local template_status=0
   local registry_status=0
@@ -2223,7 +2483,7 @@ run_android_xcm_production_evidence() {
     registry_args+=(--require-all-routes-executable)
   fi
 
-  XCM_PRODUCTION_EVIDENCE_ROOT="$ROOT_DIR/fearless-Android" \
+  XCM_PRODUCTION_EVIDENCE_ROOT="$ANDROID_CANDIDATE_ROOT" \
     bash scripts/generate-xcm-production-evidence-template.sh --output "$template_report" >/dev/null || template_status=$?
   if [[ -f "$template_report" ]]; then
     mkdir -p "$REPORT_DIR"
@@ -2235,7 +2495,7 @@ run_android_xcm_production_evidence() {
     fi
   fi
 
-  XCM_REGISTRY_ROOT="$ROOT_DIR/fearless-Android" \
+  XCM_REGISTRY_ROOT="$ANDROID_CANDIDATE_ROOT" \
     bash scripts/audit-xcm-registry-metadata.sh "${registry_args[@]}" || registry_status=$?
   if [[ -f "$registry_gap_report" ]]; then
     mkdir -p "$REPORT_DIR"
@@ -2255,7 +2515,7 @@ run_android_xcm_production_evidence() {
       --require-all-approved
     )
   fi
-  XCM_EFFECTIVE_REGISTRY_ROOT="$ROOT_DIR/fearless-Android" \
+  XCM_EFFECTIVE_REGISTRY_ROOT="$ANDROID_CANDIDATE_ROOT" \
     bash scripts/audit-xcm-effective-registry.sh "${effective_registry_args[@]}" || effective_registry_status=$?
   if [[ -f "$effective_registry_report" ]]; then
     mkdir -p "$REPORT_DIR"
@@ -2268,10 +2528,10 @@ run_android_xcm_production_evidence() {
   fi
 
   if [[ "$RUN_LIVE" == true ]]; then
-    XCM_PRODUCTION_EVIDENCE_ROOT="$ROOT_DIR/fearless-Android" \
+    XCM_PRODUCTION_EVIDENCE_ROOT="$ANDROID_CANDIDATE_ROOT" \
       bash scripts/audit-xcm-production-evidence.sh --effective-registry-report "$effective_registry_report" --require-ready || evidence_status=$?
   else
-    XCM_PRODUCTION_EVIDENCE_ROOT="$ROOT_DIR/fearless-Android" \
+    XCM_PRODUCTION_EVIDENCE_ROOT="$ANDROID_CANDIDATE_ROOT" \
       bash scripts/audit-xcm-production-evidence.sh --effective-registry-report "$effective_registry_report" || evidence_status=$?
   fi
 
@@ -2421,17 +2681,29 @@ run_polkaswap_deployment_evidence() {
 
 run_ton_production_smoke() {
   cd "$PARENT_DIR/ton-indexer"
-  TON_INDEXER_BASE_URL="https://ti.soramitsu.io" "$NPM_BIN" run smoke:production
+  TON_INDEXER_BASE_URL="https://ti.soramitsu.io" \
+    TON_INDEXER_SMOKE_TIMEOUT_MS=10000 \
+    TON_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 \
+    TON_INDEXER_SMOKE_MAX_HEALTH_LAG_SEC=300 \
+    "$NPM_BIN" run smoke:production
 }
 
 run_solswap_production_smoke() {
   cd "$PARENT_DIR/solswap-indexer"
-  SOLSWAP_INDEXER_BASE_URL="https://si.soramitsu.io" "$NPM_BIN" run smoke:production
+  SOLSWAP_INDEXER_BASE_URL="https://si.soramitsu.io" \
+    SOLSWAP_INDEXER_SMOKE_TIMEOUT_MS=10000 \
+    SOLSWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 \
+    SOLSWAP_INDEXER_SMOKE_MAX_HEALTH_AGE_SEC=120 \
+    "$NPM_BIN" run smoke:production
 }
 
 run_polkaswap_production_smoke() {
   cd "$PARENT_DIR/polkaswap-indexer"
-  POLKASWAP_INDEXER_BASE_URL="https://pi.soramitsu.io/graphql" "$YARN_BIN" smoke:production
+  POLKASWAP_INDEXER_BASE_URL="https://pi.soramitsu.io/graphql" \
+    POLKASWAP_INDEXER_SMOKE_TIMEOUT_MS=10000 \
+    POLKASWAP_INDEXER_SMOKE_MAX_RESPONSE_BYTES=1048576 \
+    POLKASWAP_INDEXER_SMOKE_MAX_INDEXER_AGE_SEC=300 \
+    "$YARN_BIN" smoke:production
 }
 
 if [[ "$RUN_LIVE" == true ]]; then
@@ -2469,8 +2741,8 @@ if [[ "$RUN_LIVE" == true ]]; then
 else
   skip_check "Passkey production smoke" "passkey-production-smoke"
 fi
-run_check "Iroha/Nexus release prerequisites" "iroha-release-readiness" run_iroha_prerequisites
-run_check "Iroha/Nexus wallet coverage" "iroha-wallet-coverage" run_iroha_wallet_coverage
+run_check "Iroha Taira/Nexus release prerequisites" "iroha-release-readiness" run_iroha_prerequisites
+run_check "Iroha Taira/Nexus wallet coverage" "iroha-wallet-coverage" run_iroha_wallet_coverage
 run_check "Android XCM production evidence" "android-xcm-production-evidence" run_android_xcm_production_evidence
 run_check "Web Bitcoin broadcast evidence" "web-bitcoin-broadcast-evidence" run_web_bitcoin_broadcast_evidence
 run_check "TI deployment evidence" "ti-deployment-evidence" run_ton_deployment_evidence
@@ -2496,15 +2768,47 @@ else
 fi
 
 REPORT_GENERATED_AT="$(report_generated_at)"
+output_contract_log="$REPORT_DIR/release-output-contract.log"
+: > "$output_contract_log"
 write_summary
 write_action_manifest
 write_blocker_report
-if validate_release_output_contracts; then
+if validate_release_output_contracts > "$output_contract_log" 2>&1; then
   if ! export_unblock_bundle; then
     failures+=("Release unblock bundle export/verification failed")
+    record_check_result \
+      "Release unblock bundle export/verification" \
+      "release-unblock-bundle" \
+      "failed" \
+      1 \
+      "$REPORT_DIR/release-unblock-bundle.log"
+    write_summary
+    write_action_manifest
+    write_blocker_report
+    if ! validate_release_output_contracts; then
+      failures+=("Release readiness output contract validation failed after bundle failure")
+    fi
   fi
 else
+  echo "[release-readiness][error] Release readiness output contract validation failed" >&2
+  preview_log "$output_contract_log"
   failures+=("Release readiness output contract validation failed")
+  printf '%s\n' "Release readiness output contract validation failed" >> "$output_contract_log"
+  record_check_result \
+    "Release readiness output contracts" \
+    "release-output-contract" \
+    "failed" \
+    1 \
+    "$output_contract_log"
+  write_summary
+  write_action_manifest
+  write_blocker_report
+  output_contract_revalidation_log="$REPORT_DIR/release-output-contract-revalidation.log"
+  : > "$output_contract_revalidation_log"
+  if ! validate_release_output_contracts > "$output_contract_revalidation_log" 2>&1; then
+    preview_log "$output_contract_revalidation_log"
+    failures+=("Release readiness output contract validation failed after failure recording")
+  fi
 fi
 
 if ((${#skipped[@]} > 0)); then

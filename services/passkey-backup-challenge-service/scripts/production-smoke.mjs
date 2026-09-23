@@ -14,6 +14,7 @@ const MAX_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576;
 const MAX_RESPONSE_BYTES = 5_242_880;
 const DEFAULT_GRANT_HELPER_TIMEOUT_MS = 2_000;
+const MAX_REGISTRATION_CLEANUP_ATTEMPTS = 4;
 const BODY_PREVIEW_LIMIT = 500;
 const DIAGNOSTIC_LIMIT = 300;
 const DIAGNOSTIC_SCAN_LIMIT = 4_096;
@@ -389,11 +390,20 @@ function smokeRegistrationRequest() {
   };
 }
 
-function syntheticCredential() {
+function syntheticCredential(challenge) {
+  const credentialId = Buffer.from('passkey-smoke-invalid-credential').toString('base64url');
   return {
-    id: 'passkey-smoke-credential',
+    id: credentialId,
+    rawId: credentialId,
+    type: 'public-key',
+    clientExtensionResults: {},
     response: {
-      clientDataJSON: 'eyJzbW9rZSI6dHJ1ZX0',
+      clientDataJSON: Buffer.from(JSON.stringify({
+        type: 'passkey-smoke.consume-only',
+        challenge,
+        origin: 'https://fearlesswallet.io',
+      })).toString('base64url'),
+      attestationObject: Buffer.from('passkey-smoke-invalid-attestation').toString('base64url'),
     },
   };
 }
@@ -408,6 +418,7 @@ async function requestJson({
   maxResponseBytes,
   fetchImpl,
   authorizationProvider,
+  includeStatus = false,
 }) {
   const controller = new AbortController();
   let response;
@@ -467,9 +478,11 @@ async function requestJson({
       `${method} ${path} request to ${baseUrl} failed: ${requestFailureReason(error, timeoutMs)}. ${DEPLOYMENT_HINT}`,
     );
   }
+  const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  const expectedStatusDescription = expectedStatuses.join(' or ');
   assert(
-    response.status === expectedStatus,
-    `${method} ${path} expected HTTP ${expectedStatus}, got ${response.status}. Body preview: ${bodyPreview(text)}`,
+    expectedStatuses.includes(response.status),
+    `${method} ${path} expected HTTP ${expectedStatusDescription}, got ${response.status}. Body preview: ${bodyPreview(text)}`,
   );
   const contentType = response.headers?.get?.('content-type') ?? '';
   assert(
@@ -477,7 +490,8 @@ async function requestJson({
     `${method} ${path} did not return JSON. Content-Type: ${contentType ? diagnosticPreview(contentType) : '<missing>'}. Body preview: ${bodyPreview(text)}`,
   );
   try {
-    return JSON.parse(text);
+    const value = JSON.parse(text);
+    return includeStatus ? { status: response.status, value } : value;
   } catch (error) {
     throw new Error(`${method} ${path} must return valid JSON. Body preview: ${bodyPreview(text)}`);
   }
@@ -542,6 +556,77 @@ export async function runProductionSmoke({
   });
   assertRegistrationChallenge(registration, registrationRequest);
 
+  const registrationCompletionRequest = {
+    registrationId: registration.registrationId,
+    rpId: RP_ID,
+    credential: syntheticCredential(registration.challenge),
+  };
+  const completeRegistration = () => requestJson({
+    baseUrl: normalizedBaseUrl,
+    path: PATHS.registrationComplete,
+    method: 'POST',
+    body: registrationCompletionRequest,
+    expectedStatus: [400, 403, 404],
+    timeoutMs: boundedTimeoutMs,
+    maxResponseBytes: boundedMaxResponseBytes,
+    fetchImpl,
+    authorizationProvider: effectiveAuthorizationProvider,
+    includeStatus: true,
+  });
+  const assertRegistrationConsumed = async (context) => {
+    const replay = await completeRegistration();
+    assert(
+      replay.status === 404,
+      `${context} replay expected HTTP 404, got ${replay.status}`,
+    );
+    assertServiceError(replay.value, 'unknown_or_expired_registration', `${context} replay`);
+  };
+  const registrationCompletion = await completeRegistration();
+  if (registrationCompletion.status === 403) {
+    assertServiceError(
+      registrationCompletion.value,
+      'request_authorization_failed',
+      'registration completion with unstable authorization',
+    );
+    let consumed = false;
+    for (let attempt = 0; attempt < MAX_REGISTRATION_CLEANUP_ATTEMPTS; attempt += 1) {
+      const cleanup = await completeRegistration();
+      if (cleanup.status === 400) {
+        assertServiceError(cleanup.value, 'credential_type_mismatch', 'registration cleanup completion');
+        consumed = true;
+        break;
+      }
+      if (cleanup.status === 404) {
+        assertServiceError(cleanup.value, 'unknown_or_expired_registration', 'registration cleanup completion');
+        consumed = true;
+        break;
+      }
+      assertServiceError(
+        cleanup.value,
+        'request_authorization_failed',
+        'registration cleanup with unstable authorization',
+      );
+    }
+    assert(
+      consumed,
+      'authorization subject or platform changed between registration challenge and completion; pending registration cleanup failed',
+    );
+    await assertRegistrationConsumed('registration cleanup completion');
+    throw new Error(
+      'authorization subject or platform changed between registration challenge and completion',
+    );
+  }
+  assertServiceError(
+    registrationCompletion.value,
+    'credential_type_mismatch',
+    'registration completion',
+  );
+  assert(
+    registrationCompletion.status === 400,
+    `registration completion expected HTTP 400, got ${registrationCompletion.status}`,
+  );
+  await assertRegistrationConsumed('registration completion');
+
   const assertionForUnregisteredCredential = await requestJson({
     baseUrl: normalizedBaseUrl,
     path: PATHS.assertionChallenge,
@@ -563,23 +648,6 @@ export async function runProductionSmoke({
     'assertion challenge for unregistered credential',
   );
 
-  const unknownRegistration = await requestJson({
-    baseUrl: normalizedBaseUrl,
-    path: PATHS.registrationComplete,
-    method: 'POST',
-    body: {
-      registrationId: 'reg:passkey-smoke-missing',
-      rpId: RP_ID,
-      credential: syntheticCredential(),
-    },
-    expectedStatus: 404,
-    timeoutMs: boundedTimeoutMs,
-    maxResponseBytes: boundedMaxResponseBytes,
-    fetchImpl,
-    authorizationProvider: effectiveAuthorizationProvider,
-  });
-  assertServiceError(unknownRegistration, 'unknown_or_expired_registration', 'registration completion');
-
   const unknownAssertion = await requestJson({
     baseUrl: normalizedBaseUrl,
     path: PATHS.assertionComplete,
@@ -587,7 +655,7 @@ export async function runProductionSmoke({
     body: {
       assertionId: 'assert:passkey-smoke-missing',
       rpId: RP_ID,
-      credential: syntheticCredential(),
+      credential: syntheticCredential('passkey-smoke-missing-challenge'),
     },
     expectedStatus: 404,
     timeoutMs: boundedTimeoutMs,

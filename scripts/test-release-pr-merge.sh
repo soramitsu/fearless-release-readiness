@@ -18,7 +18,12 @@ sha_b="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 write_config() {
   cat > "$config" <<'TSV'
+# reviewed_pr_pin	repo	head	base	reviewed_pr_number	reviewed_head_sha
+# required_check_provenance_pin	repo	head	base	check_name	kind	actor_id	actor_slug	authority_id	authority_value
 # repo	head	base	required_state	required_checks
+# reviewed_pr_pin	example/repo	codex/release	develop	42	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+# required_check_provenance_pin	example/repo	codex/release	develop	validate	github-actions	15368	github-actions	9001	.github/workflows/branch-flow.yml
+# required_check_provenance_pin	example/repo	codex/release	develop	verify	github-actions	15368	github-actions	9002	.github/workflows/ci.yml
 example/repo	codex/release	develop	merged	validate,verify
 TSV
 }
@@ -62,6 +67,36 @@ expect_failure() {
   if [[ "$output" != *"$expected"* ]]; then
     echo "$output" >&2
     fail "$name did not report expected text: $expected"
+  fi
+}
+
+expect_failure_without_merge() {
+  local name="$1"
+  local scenario="$2"
+  local expected="$3"
+  local merge_log="$tmp_dir/${scenario}-must-not-merge.log"
+  local output
+  : > "$merge_log"
+  set +e
+  output="$(
+    FAKE_GH_SCENARIO="$scenario" \
+      FAKE_GH_MERGE_LOG="$merge_log" \
+      RELEASE_PR_MERGE_CONFIRM=merge-release-prs \
+      run_merger --apply 2>&1
+  )"
+  local status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "$output" >&2
+    fail "$name unexpectedly passed"
+  fi
+  if [[ "$output" != *"$expected"* ]]; then
+    echo "$output" >&2
+    fail "$name did not report expected text: $expected"
+  fi
+  if [[ -s "$merge_log" ]]; then
+    echo "$output" >&2
+    fail "$name reached the irreversible gh pr merge boundary"
   fi
 }
 
@@ -109,6 +144,58 @@ duplicate_checks() {
 JSON
 }
 
+check_runs_payload() {
+  local validate_app_id=15368
+  local validate_app_slug="github-actions"
+  if [[ "$scenario" == "singleton-wrong-app-authority" ]]; then
+    validate_app_id=99153
+    validate_app_slug="unreviewed-check-app"
+  fi
+  cat <<JSON
+{"total_count":2,"check_runs":[{"id":2001,"name":"validate","head_sha":"$sha_a","status":"completed","conclusion":"success","app":{"id":$validate_app_id,"slug":"$validate_app_slug"},"check_suite":{"id":1001},"details_url":"https://github.com/example/repo/actions/runs/5001/job/6001"},{"id":2002,"name":"verify","head_sha":"$sha_a","status":"completed","conclusion":"success","app":{"id":15368,"slug":"github-actions"},"check_suite":{"id":1002},"details_url":"https://github.com/example/repo/actions/runs/5002/job/6002"}]}
+JSON
+}
+
+commit_status_payload() {
+  cat <<JSON
+{"state":"success","sha":"$sha_a","total_count":0,"statuses":[]}
+JSON
+}
+
+check_suite_payload() {
+  local suite_id="$1"
+  cat <<JSON
+{"id":$suite_id,"head_sha":"$sha_a","app":{"id":15368,"slug":"github-actions"}}
+JSON
+}
+
+actions_runs_payload() {
+  local suite_id="$1"
+  local workflow_id workflow_path run_id
+  case "$suite_id" in
+    1001)
+      workflow_id=9001
+      workflow_path=".github/workflows/branch-flow.yml"
+      run_id=5001
+      ;;
+    1002)
+      workflow_id=9002
+      workflow_path=".github/workflows/ci.yml"
+      run_id=5002
+      ;;
+    *)
+      echo "unexpected check suite id: $suite_id" >&2
+      exit 1
+      ;;
+  esac
+  if [[ "$scenario" == "singleton-wrong-workflow-authority" && "$suite_id" == "1001" ]]; then
+    workflow_id=99001
+  fi
+  cat <<JSON
+{"total_count":1,"workflow_runs":[{"id":$run_id,"check_suite_id":$suite_id,"head_sha":"$sha_a","workflow_id":$workflow_id,"path":"$workflow_path","repository":{"full_name":"example/repo"},"head_repository":{"full_name":"example/repo"},"event":"pull_request","head_branch":"codex/release"}]}
+JSON
+}
+
 review_payload() {
   case "$scenario" in
     review-required-current-approval)
@@ -121,7 +208,7 @@ review_payload() {
       printf '{}'
       ;;
     *)
-      printf '[]'
+      printf '[{"state":"APPROVED","submittedAt":"2026-06-28T00:02:00Z","commit":{"oid":"%s"}}]' "$sha_a"
       ;;
   esac
 }
@@ -208,6 +295,14 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
     review-details-malformed) pr_payload OPEN false REVIEW_REQUIRED CLEAN "$sha_a" success ;;
     changes-requested) pr_payload OPEN false CHANGES_REQUESTED CLEAN "$sha_a" success ;;
     blocked) pr_payload OPEN false APPROVED BLOCKED "$sha_a" success ;;
+    reviewed-identity-mismatch)
+      checks="$(successful_checks)"
+      printf '[{"number":43,"url":"https://github.com/example/repo/pull/43","state":"OPEN","mergedAt":null,"headRefOid":"%s","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":%s,"reviews":[]}]\n' "$sha_a" "$checks"
+      ;;
+    malformed-is-draft)
+      checks="$(successful_checks)"
+      printf '[{"number":42,"url":"https://github.com/example/repo/pull/42","state":"OPEN","mergedAt":null,"headRefOid":"%s","reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":%s,"reviews":[]}]\n' "$sha_a" "$checks"
+      ;;
     pending-check) pr_payload OPEN false APPROVED CLEAN "$sha_a" pending ;;
     missing-check) pr_payload OPEN false APPROVED CLEAN "$sha_a" missing ;;
     duplicate-check) pr_payload OPEN false APPROVED CLEAN "$sha_a" duplicate ;;
@@ -232,6 +327,36 @@ if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/git/matching-refs/hea
     branch-drift|merged-branch-drift) printf '[{"ref":"refs/heads/codex/release","object":{"sha":"%s"}}]\n' "$sha_b" ;;
     *) printf '[{"ref":"refs/heads/codex/release","object":{"sha":"%s"}}]\n' "$sha_a" ;;
   esac
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/commits/$sha_a/check-runs?filter=latest&per_page=100" ]]; then
+  check_runs_payload
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/commits/$sha_a/status?per_page=100" ]]; then
+  commit_status_payload
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/check-suites/1001" ]]; then
+  check_suite_payload 1001
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/check-suites/1002" ]]; then
+  check_suite_payload 1002
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/actions/runs?check_suite_id=1001&per_page=100" ]]; then
+  actions_runs_payload 1001
+  exit 0
+fi
+
+if [[ "${1:-}" == "api" && "${2:-}" == "repos/example/repo/actions/runs?check_suite_id=1002&per_page=100" ]]; then
+  actions_runs_payload 1002
   exit 0
 fi
 
@@ -282,6 +407,30 @@ if grep -q -- "--admin" "$tmp_dir/merge.log"; then
   cat "$tmp_dir/merge.log" >&2
   fail "apply success used admin bypass"
 fi
+
+write_config
+expect_failure_without_merge \
+  "singleton wrong GitHub app authority fixture" \
+  singleton-wrong-app-authority \
+  "check-run-app-mismatch"
+
+write_config
+expect_failure_without_merge \
+  "singleton wrong GitHub Actions workflow authority fixture" \
+  singleton-wrong-workflow-authority \
+  "actions-workflow-id-mismatch"
+
+write_config
+expect_failure_without_merge \
+  "reviewed candidate identity mismatch fixture" \
+  reviewed-identity-mismatch \
+  "reviewedPrNumberPinMismatch expected=42 available=43"
+
+write_config
+expect_failure_without_merge \
+  "malformed isDraft central preflight fixture" \
+  malformed-is-draft \
+  "isDraft=UNKNOWN"
 
 write_config
 FAKE_GH_MERGE_LOG="$tmp_dir/merge-fail.log" FAKE_GH_MERGE_SCENARIO=fail RELEASE_PR_MERGE_CONFIRM=merge-release-prs expect_failure "merge failure" "GitHub failed to merge" run_merger --apply
