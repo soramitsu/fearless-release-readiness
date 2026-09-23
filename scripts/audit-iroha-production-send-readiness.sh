@@ -48,8 +48,8 @@ run_platform() {
   run_gate "$platform" "$repo" "audit-iroha-production-send-readiness.sh" "blocked-readiness audit"
 }
 
-run_platform "android" "$ROOT_DIR/fearless-Android"
-run_platform "ios" "$ROOT_DIR/fearless-iOS"
+run_platform "android" "$ROOT_DIR/fearless-Android-production-consolidated-20260731"
+run_platform "ios" "$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
 run_platform "browser-extension" "$ROOT_DIR/fearless-wallet-web"
 
 if ((${#failures[@]} > 0)); then

@@ -13,7 +13,7 @@ fail() {
 
 setup_fixture() {
   rm -rf "$TMP_DIR/fixture"
-  for repo in fearless-Android fearless-iOS fearless-wallet-web; do
+  for repo in fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web; do
     mkdir -p "$TMP_DIR/fixture/$repo/scripts"
     for script in test-iroha-production-send-readiness-audit.sh audit-iroha-production-send-readiness.sh; do
       printf '%s\n' \
@@ -67,6 +67,24 @@ IROHA_SEND_AUDIT_ROOT="$TMP_DIR/forged-ambient-root" run_audit >/dev/null
 assert_all_six_ran
 
 setup_fixture
+for legacy in fearless-Android fearless-iOS; do
+  mkdir -p "$TMP_DIR/fixture/$legacy/scripts"
+  for script in test-iroha-production-send-readiness-audit.sh audit-iroha-production-send-readiness.sh; do
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 91' > "$TMP_DIR/fixture/$legacy/scripts/$script"
+    chmod +x "$TMP_DIR/fixture/$legacy/scripts/$script"
+  done
+done
+run_audit >/dev/null
+assert_all_six_ran
+rm "$TMP_DIR/fixture/fearless-Android-production-consolidated-20260731/scripts/audit-iroha-production-send-readiness.sh"
+set +e
+output="$(run_audit 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 && "$output" == *"android blocked-readiness audit is missing"* ]] ||
+  fail "legacy Android checkout satisfied a missing consolidated audit"
+
+setup_fixture
 (
   cd "$TMP_DIR"
   IROHA_SEND_AGGREGATE_ROOT=fixture \
@@ -77,10 +95,10 @@ setup_fixture
 assert_all_six_ran
 
 for target in \
-  fearless-Android/test-iroha-production-send-readiness-audit.sh \
-  fearless-Android/audit-iroha-production-send-readiness.sh \
-  fearless-iOS/test-iroha-production-send-readiness-audit.sh \
-  fearless-iOS/audit-iroha-production-send-readiness.sh \
+  fearless-Android-production-consolidated-20260731/test-iroha-production-send-readiness-audit.sh \
+  fearless-Android-production-consolidated-20260731/audit-iroha-production-send-readiness.sh \
+  fearless-iOS-production-consolidated-20260731/test-iroha-production-send-readiness-audit.sh \
+  fearless-iOS-production-consolidated-20260731/audit-iroha-production-send-readiness.sh \
   fearless-wallet-web/test-iroha-production-send-readiness-audit.sh \
   fearless-wallet-web/audit-iroha-production-send-readiness.sh
 do
@@ -88,8 +106,8 @@ do
   platform="${target%%/*}"
   script="${target#*/}"
   case "$platform" in
-    fearless-Android) label="android" ;;
-    fearless-iOS) label="ios" ;;
+    fearless-Android-production-consolidated-20260731) label="android" ;;
+    fearless-iOS-production-consolidated-20260731) label="ios" ;;
     fearless-wallet-web) label="browser-extension" ;;
   esac
   if [[ "$script" == test-* ]]; then
@@ -101,7 +119,7 @@ do
 done
 
 setup_fixture
-rm "$TMP_DIR/fixture/fearless-iOS/scripts/audit-iroha-production-send-readiness.sh"
+rm "$TMP_DIR/fixture/fearless-iOS-production-consolidated-20260731/scripts/audit-iroha-production-send-readiness.sh"
 set +e
 output="$(run_audit 2>&1)"
 status=$?

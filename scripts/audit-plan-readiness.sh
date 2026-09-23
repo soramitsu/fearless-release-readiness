@@ -16,10 +16,12 @@ Environment:
   PLAN_AUDIT_PARENT  Parent directory containing sibling indexer repos.
   PLAN_AUDIT_ANDROID_ROOT
                      Current Android release-candidate worktree. Defaults to
-                     fearless-Android under PLAN_AUDIT_ROOT.
+                     fearless-Android-production-consolidated-20260731 under
+                     PLAN_AUDIT_ROOT.
   PLAN_AUDIT_IOS_ROOT
                      Current integrated iOS release-candidate worktree.
-                     Defaults to fearless-iOS under PLAN_AUDIT_ROOT.
+                     Defaults to fearless-iOS-production-consolidated-20260731
+                     under PLAN_AUDIT_ROOT.
   PLAN_AUDIT_IOS_TESTFLIGHT_ROOT
                      Clean iOS release-candidate worktree containing the
                      tracked current TestFlight publication contract.
@@ -10590,8 +10592,8 @@ root_release_readiness_checks() {
   require_pattern "$iroha_wallet_audit" 'audit-iroha-production-send-readiness\.sh' "root Iroha wallet coverage production-send aggregate gate"
   require_pattern "$iroha_wallet_audit" 'test-iroha-production-send-readiness-audit\.sh' "root Iroha wallet coverage production-send aggregate self-test gate"
   require_pattern "$iroha_wallet_test" 'missing aggregate Iroha production-send audit' "root Iroha wallet production-send missing-gate adversarial fixture"
-  require_pattern "$iroha_send_audit" 'run_platform "android"' "root Iroha production-send Android aggregate gate"
-  require_pattern "$iroha_send_audit" 'run_platform "ios"' "root Iroha production-send iOS aggregate gate"
+  require_pattern "$iroha_send_audit" 'run_platform "android" "\$ROOT_DIR/fearless-Android-production-consolidated-20260731"' "root Iroha production-send consolidated Android aggregate gate"
+  require_pattern "$iroha_send_audit" 'run_platform "ios" "\$ROOT_DIR/fearless-iOS-production-consolidated-20260731"' "root Iroha production-send consolidated iOS aggregate gate"
   require_pattern "$iroha_send_audit" 'run_platform "browser-extension"' "root Iroha production-send browser aggregate gate"
   require_pattern "$iroha_send_audit" 'adversarial self-test' "root Iroha production-send per-platform self-test gate"
   require_pattern "$iroha_send_audit" 'blocked-readiness audit' "root Iroha production-send per-platform blocker gate"

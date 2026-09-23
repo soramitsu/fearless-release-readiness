@@ -338,6 +338,14 @@ local fixtures pass, as do shell syntax and the direct gate verifier. The
 exact-head hosted emulator run is still in progress, so this does not yet
 establish Android 11/12/16 migration evidence or a distributed build.
 
+The root Iroha production-send aggregate now reads the consolidated Android
+and iOS candidate checkouts selected by the shipping audit. Its adversarial
+fixtures reject a missing current Android gate even when the old checkout
+contains executable scripts. The real aggregate passed Android, iOS and web
+blocked-state self-tests and audits on the selected sources, including 110 iOS
+and 48 web negative/adversarial fixtures. This closes a checkout-selection
+gap in the gate; it does not qualify new SDK artifacts or funded sends.
+
 ## Owner backup-head authorization — 2026-09-23
 
 The non-deployed owner authority now mints an internal 60-second grant bound
