@@ -6382,7 +6382,7 @@ write_root_readiness_scripts() {
   write_file "$workspace/scripts/quarantine-source-publication-outputs.mjs" \
     '#!/usr/bin/env node' \
     "const FORBIDDEN_REPOSITORY = '../iroha';" \
-    "const MAINTAINED_REPOSITORIES = ['fearless-Android', 'fearless-iOS', 'fearless-wallet-web', 'fearless-site-web-app-associations-20260726', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer'];" \
+    "const MAINTAINED_REPOSITORIES = ['fearless-Android-production-consolidated-20260731', 'fearless-iOS-production-consolidated-20260731', 'fearless-wallet-web', 'fearless-site-web-app-associations-20260726', '../ton-indexer', '../solswap-indexer', '../polkaswap-indexer'];" \
     "const parsed = { mode: 'dry-run' }; arg === '--apply'; arg === '--rollback'; --apply and --rollback are mutually exclusive" \
     'source publication config paths must be exactly; forbidden repository selected; root/config overrides and test environment are forbidden in production mode' \
     'ignored candidate contains tracked content; ignored candidate contains non-ignored untracked content; candidate is no longer an ignored-only root' \

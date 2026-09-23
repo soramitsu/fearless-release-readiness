@@ -27,8 +27,8 @@ write_config() {
   local target="$1"
   {
     printf '# path\trepository\thead\tbase\tpull_request\n'
-    printf 'fearless-Android\texample/android\ttopic\tdevelop\t1\n'
-    printf 'fearless-iOS\texample/ios\ttopic\tdevelop\t2\n'
+    printf 'fearless-Android-production-consolidated-20260731\texample/android\ttopic\tdevelop\t1\n'
+    printf 'fearless-iOS-production-consolidated-20260731\texample/ios\ttopic\tdevelop\t2\n'
     printf 'fearless-wallet-web\texample/wallet\ttopic\tdevelop\t3\n'
     printf 'fearless-site-web-app-associations-20260726\texample/site\ttopic\tdevelop\t4\n'
     printf '../ton-indexer\texample/ton\ttopic\tdevelop\t5\n'
@@ -52,8 +52,8 @@ make_fixture() {
 
   local configured repository
   for configured in \
-    fearless-Android \
-    fearless-iOS \
+    fearless-Android-production-consolidated-20260731 \
+    fearless-iOS-production-consolidated-20260731 \
     fearless-wallet-web \
     fearless-site-web-app-associations-20260726 \
     ../ton-indexer \
@@ -112,7 +112,7 @@ run_helper > "$TMP_ROOT/dry-run.json"
 [[ "$(jq -r '.mode + ":" + .status' "$TMP_ROOT/dry-run.json")" == 'dry-run:planned' ]] || fail 'dry-run report mismatch'
 [[ "$(jq '.entries | length' "$TMP_ROOT/dry-run.json")" == 7 ]] || fail 'dry-run candidate count mismatch'
 [[ ! -e "$ROOT/build/quarantine" ]] || fail 'dry-run created a quarantine directory'
-[[ -d "$ROOT/fearless-Android/ignored" ]] || fail 'dry-run moved an ignored output'
+[[ -d "$ROOT/fearless-Android-production-consolidated-20260731/ignored" ]] || fail 'dry-run moved an ignored output'
 [[ "$(sha256_of "$OUTSIDE/iroha-target/sentinel.txt")" == "$iroha_before" ]] || fail 'dry-run touched Iroha sentinel'
 [[ "$(readlink "$PARENT/iroha")" == "$OUTSIDE/iroha-target" ]] || fail 'dry-run touched Iroha path'
 
@@ -122,31 +122,78 @@ run_helper --apply > "$TMP_ROOT/no-op.json"
 [[ "$(jq -r '.mode + ":" + .status' "$TMP_ROOT/no-op.json")" == 'apply:no-op' ]] || fail 'no-op report mismatch'
 [[ ! -e "$ROOT/build/quarantine" ]] || fail 'no-op apply created a quarantine directory'
 
+# The selected mobile and website candidates are Git worktrees. Their admin
+# metadata must point to the exact local owner checkout in both directions.
+make_worktree_fixture() {
+  local name="$1" selected owner
+  make_fixture "$name" 0
+  for selected in \
+    fearless-Android-production-consolidated-20260731 \
+    fearless-iOS-production-consolidated-20260731 \
+    fearless-site-web-app-associations-20260726; do
+    case "$selected" in
+      fearless-Android-production-consolidated-20260731) owner=fearless-Android ;;
+      fearless-iOS-production-consolidated-20260731) owner=fearless-iOS ;;
+      fearless-site-web-app-associations-20260726) owner=fearless-site-web ;;
+    esac
+    rm -rf "$ROOT/$selected"
+    mkdir -p "$ROOT/$owner"
+    "$GIT_BIN" -C "$ROOT/$owner" init -q
+    "$GIT_BIN" -C "$ROOT/$owner" config user.email test@example.invalid
+    "$GIT_BIN" -C "$ROOT/$owner" config user.name 'Quarantine Test'
+    printf 'ignored\n*.tmp\n' > "$ROOT/$owner/.gitignore"
+    printf 'tracked\n' > "$ROOT/$owner/tracked.txt"
+    "$GIT_BIN" -C "$ROOT/$owner" add .gitignore tracked.txt
+    "$GIT_BIN" -C "$ROOT/$owner" commit -qm fixture
+    "$GIT_BIN" -C "$ROOT/$owner" worktree add -q -b "$selected" "$ROOT/$selected"
+    mkdir -p "$ROOT/$selected/ignored"
+    printf 'cache\n' > "$ROOT/$selected/ignored/cache.bin"
+  done
+}
+
+make_worktree_fixture worktrees
+run_helper > "$TMP_ROOT/worktrees-dry-run.json"
+[[ "$(jq '.entries | length' "$TMP_ROOT/worktrees-dry-run.json")" == 3 ]] || fail 'worktree dry-run candidate count mismatch'
+run_helper --apply > "$TMP_ROOT/worktrees-applied.json"
+worktree_manifest="$(jq -r '.quarantineRoot' "$TMP_ROOT/worktrees-applied.json")/manifest.json"
+[[ "$(jq -r '.status' "$TMP_ROOT/worktrees-applied.json")" == applied ]] || fail 'worktree apply did not complete'
+[[ ! -e "$ROOT/fearless-site-web-app-associations-20260726/ignored" ]] || fail 'worktree ignored output remained after apply'
+run_helper --rollback "$worktree_manifest" > "$TMP_ROOT/worktrees-rolled-back.json"
+[[ -d "$ROOT/fearless-site-web-app-associations-20260726/ignored" ]] || fail 'worktree rollback did not restore ignored output'
+
+make_worktree_fixture worktree_pointer_forgery
+printf 'gitdir: %s\n' "$OUTSIDE/iroha-target" > "$ROOT/fearless-site-web-app-associations-20260726/.git"
+expect_failure forged_worktree_pointer 'worktree Git metadata pointer mismatch' run_helper
+
+make_worktree_fixture worktree_backlink_forgery
+printf '%s\n' "$OUTSIDE/iroha-target" > "$ROOT/fearless-site-web/.git/worktrees/fearless-site-web-app-associations-20260726/gitdir"
+expect_failure forged_worktree_backlink 'worktree Git metadata backlink mismatch' run_helper
+
 # Successful apply is private, same-filesystem, preserves internal links, and is reversible.
 make_fixture success
 printf 'outside-data\n' > "$OUTSIDE/shared.txt"
 chmod 0644 "$OUTSIDE/shared.txt"
 outside_sha="$(sha256_of "$OUTSIDE/shared.txt")"
 outside_mode="$(mode_of "$OUTSIDE/shared.txt")"
-ln "$OUTSIDE/shared.txt" "$ROOT/fearless-Android/ignored/hard-peer"
-ln -s "$OUTSIDE/shared.txt" "$ROOT/fearless-Android/ignored/external-link"
+ln "$OUTSIDE/shared.txt" "$ROOT/fearless-Android-production-consolidated-20260731/ignored/hard-peer"
+ln -s "$OUTSIDE/shared.txt" "$ROOT/fearless-Android-production-consolidated-20260731/ignored/external-link"
 run_helper --apply > "$TMP_ROOT/applied.json"
 quarantine_root="$(jq -r '.quarantineRoot' "$TMP_ROOT/applied.json")"
 manifest="$quarantine_root/manifest.json"
 [[ "$(jq -r '.status' "$TMP_ROOT/applied.json")" == applied ]] || fail 'apply did not complete'
 [[ "$(mode_of "$quarantine_root")" == 700 ]] || fail 'quarantine root is not private'
 [[ "$(mode_of "$manifest")" == 600 ]] || fail 'manifest is not private'
-[[ -L "$quarantine_root/fearless-Android/ignored/external-link" ]] || fail 'internal symlink was followed or lost'
+[[ -L "$quarantine_root/fearless-Android-production-consolidated-20260731/ignored/external-link" ]] || fail 'internal symlink was followed or lost'
 [[ "$(sha256_of "$OUTSIDE/shared.txt")" == "$outside_sha" ]] || fail 'external symlink target content changed'
 [[ "$(mode_of "$OUTSIDE/shared.txt")" == "$outside_mode" ]] || fail 'external/hardlink peer permissions changed'
-for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
+for repository in fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
   [[ "$("$GIT_BIN" -C "$ROOT/$repository" ls-files --others --ignored --exclude-standard --directory -z | tr -cd '\0' | wc -c | tr -d ' ')" == 0 ]] || fail "$repository retained ignored outputs"
 done
 [[ "$(sha256_of "$OUTSIDE/iroha-target/sentinel.txt")" == "$iroha_before" ]] || fail 'apply touched Iroha sentinel'
 run_helper --rollback "$manifest" > "$TMP_ROOT/rolled-back.json"
 [[ "$(jq -r '.status' "$TMP_ROOT/rolled-back.json")" == rolled-back ]] || fail 'explicit rollback did not complete'
-[[ -d "$ROOT/fearless-Android/ignored" ]] || fail 'rollback did not restore ignored output'
-[[ -L "$ROOT/fearless-Android/ignored/external-link" ]] || fail 'rollback did not restore symlink as a link'
+[[ -d "$ROOT/fearless-Android-production-consolidated-20260731/ignored" ]] || fail 'rollback did not restore ignored output'
+[[ -L "$ROOT/fearless-Android-production-consolidated-20260731/ignored/external-link" ]] || fail 'rollback did not restore symlink as a link'
 
 # A later failure rolls back every completed atomic rename without overwriting sources.
 make_fixture rollback
@@ -156,7 +203,7 @@ expect_failure automatic_rollback 'completed moves were rolled back' \
 rollback_manifest="$(find "$ROOT/build/quarantine" -name manifest.json -print | sort | tail -n 1)"
 [[ "$(jq -r '.status' "$rollback_manifest")" == rolled-back ]] || fail 'automatic rollback manifest is not complete'
 [[ "$(jq '[.entries[] | select(.status == "rolled-back")] | length' "$rollback_manifest")" == 2 ]] || fail 'automatic rollback count mismatch'
-for repository in fearless-Android fearless-iOS fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
+for repository in fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web fearless-site-web-app-associations-20260726 ../ton-indexer ../solswap-indexer ../polkaswap-indexer; do
   [[ -d "$ROOT/$repository/ignored" ]] || fail "automatic rollback lost $repository output"
 done
 
@@ -165,20 +212,20 @@ make_fixture tracked_race
 expect_failure tracked_after_plan 'ignored candidate contains tracked content' \
   env SOURCE_PUBLICATION_QUARANTINE_TEST_MODE=1 SOURCE_PUBLICATION_QUARANTINE_TEST_ADD_TRACKED=1 \
   "$NODE_BIN" "$HELPER" --test-mode --root "$ROOT" --config "$CONFIG" --apply
-[[ -f "$ROOT/fearless-Android/ignored/tracked-after-plan.txt" ]] || fail 'tracked race evidence was unexpectedly moved'
+[[ -f "$ROOT/fearless-Android-production-consolidated-20260731/ignored/tracked-after-plan.txt" ]] || fail 'tracked race evidence was unexpectedly moved'
 
 make_fixture nonignored_race
 expect_failure nonignored_after_plan 'ignored candidate contains non-ignored untracked content' \
   env SOURCE_PUBLICATION_QUARANTINE_TEST_MODE=1 SOURCE_PUBLICATION_QUARANTINE_TEST_ADD_NONIGNORED=1 \
   "$NODE_BIN" "$HELPER" --test-mode --root "$ROOT" --config "$CONFIG" --apply
-[[ -f "$ROOT/fearless-Android/ignored/keep.txt" ]] || fail 'non-ignored race evidence was unexpectedly moved'
+[[ -f "$ROOT/fearless-Android-production-consolidated-20260731/ignored/keep.txt" ]] || fail 'non-ignored race evidence was unexpectedly moved'
 
 # Candidate and destination symlink attacks are rejected without following targets.
 make_fixture source_symlink
-rm -rf "$ROOT/fearless-Android/ignored"
+rm -rf "$ROOT/fearless-Android-production-consolidated-20260731/ignored"
 mkdir -p "$OUTSIDE/source-target"
 printf 'outside-source\n' > "$OUTSIDE/source-target/sentinel.txt"
-ln -s "$OUTSIDE/source-target" "$ROOT/fearless-Android/ignored"
+ln -s "$OUTSIDE/source-target" "$ROOT/fearless-Android-production-consolidated-20260731/ignored"
 source_target_sha="$(sha256_of "$OUTSIDE/source-target/sentinel.txt")"
 expect_failure ignored_source_symlink 'must not use a symlinked path component' run_helper
 [[ "$(sha256_of "$OUTSIDE/source-target/sentinel.txt")" == "$source_target_sha" ]] || fail 'source symlink target changed'
@@ -188,7 +235,7 @@ mkdir -p "$ROOT/build" "$OUTSIDE/quarantine-target"
 ln -s "$OUTSIDE/quarantine-target" "$ROOT/build/quarantine"
 expect_failure quarantine_parent_symlink 'must not use a symlinked path component' run_helper --apply
 [[ -z "$(find "$OUTSIDE/quarantine-target" -mindepth 1 -print -quit)" ]] || fail 'destination symlink target received data'
-[[ -d "$ROOT/fearless-Android/ignored" ]] || fail 'destination symlink case moved source data'
+[[ -d "$ROOT/fearless-Android-production-consolidated-20260731/ignored" ]] || fail 'destination symlink case moved source data'
 
 # A type swap at the last rename checkpoint is detected; the external target is untouched.
 make_fixture type_race
@@ -197,18 +244,18 @@ race_sha="$(sha256_of "$OUTSIDE/race-target.txt")"
 expect_failure pre_rename_type_swap 'automatic rollback was incomplete' \
   env SOURCE_PUBLICATION_QUARANTINE_TEST_MODE=1 SOURCE_PUBLICATION_QUARANTINE_TEST_SWAP_BEFORE_RENAME="$OUTSIDE/race-target.txt" \
   "$NODE_BIN" "$HELPER" --test-mode --root "$ROOT" --config "$CONFIG" --apply
-[[ -L "$ROOT/fearless-Android/ignored" ]] || fail 'type-race symlink was not detected in place'
-[[ -d "$ROOT/fearless-Android/ignored.race-original" ]] || fail 'type-race original evidence was lost'
+[[ -L "$ROOT/fearless-Android-production-consolidated-20260731/ignored" ]] || fail 'type-race symlink was not detected in place'
+[[ -d "$ROOT/fearless-Android-production-consolidated-20260731/ignored.race-original" ]] || fail 'type-race original evidence was lost'
 [[ "$(sha256_of "$OUTSIDE/race-target.txt")" == "$race_sha" ]] || fail 'type-race target was changed'
 
 # Canonical repository roots, safe filenames, exact config, and production env isolation are enforced.
 make_fixture repository_symlink
-mv "$ROOT/fearless-Android" "$OUTSIDE/android-real"
-ln -s "$OUTSIDE/android-real" "$ROOT/fearless-Android"
+mv "$ROOT/fearless-Android-production-consolidated-20260731" "$OUTSIDE/android-real"
+ln -s "$OUTSIDE/android-real" "$ROOT/fearless-Android-production-consolidated-20260731"
 expect_failure repository_root_symlink 'must not use a symlinked path component' run_helper
 
 make_fixture unsafe_filename 0
-printf 'unsafe\n' > "$ROOT/fearless-Android/evil
+printf 'unsafe\n' > "$ROOT/fearless-Android-production-consolidated-20260731/evil
 name.tmp"
 expect_failure control_character_filename 'unsafe ignored path' run_helper
 
@@ -217,7 +264,7 @@ printf '../unexpected\texample/unexpected\ttopic\tdevelop\t9\n' >> "$CONFIG"
 expect_failure config_path_drift 'source publication config paths must be exactly' run_helper
 
 make_fixture git_config_include
-printf '\n[include]\n\tpath = %s\n' "$PARENT/iroha/config" >> "$ROOT/fearless-Android/.git/config"
+printf '\n[include]\n\tpath = %s\n' "$PARENT/iroha/config" >> "$ROOT/fearless-Android-production-consolidated-20260731/.git/config"
 expect_failure external_git_config 'repository config includes external configuration' run_helper
 
 make_fixture rollback_forgery
