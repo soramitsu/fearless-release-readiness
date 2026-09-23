@@ -270,7 +270,10 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       const owner = activeOwner(tx, credential.owner);
       row.subject = owner.subject;
       row.namespace = owner.namespace;
-      row.user_handle = owner.user_handle;
+      // Imported credentials retain their historical WebAuthn user handle.
+      // The random owner handle belongs to new enrollments, not to every
+      // credential that can authenticate the owner.
+      row.user_handle = credential.user_handle;
       row.generation = owner.generation;
     }
     tx.run('UPDATE ceremonies SET claimed=1 WHERE id=?', id);
@@ -395,7 +398,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
             generation: bumpGeneration(tx, owner).generation };
         } else if (target.kind === 'assertion') {
           const credential = activeCredential(tx, target.credentialId, owner.subject);
-          if (target.userHandle !== credential.user_handle || target.userHandle !== owner.user_handle) deny('verification_failed');
+          if (target.userHandle !== credential.user_handle) deny('verification_failed');
           if (credential.counter !== verified.expectedCounter || credential.device_type !== verified.deviceType ||
               ((credential.counter !== 0 || verified.newCounter !== 0) && verified.newCounter <= credential.counter)) {
             deny('credential_counter_replay');

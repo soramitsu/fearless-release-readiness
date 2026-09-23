@@ -666,7 +666,7 @@ still disabled. Exact-head hosted Android [CI run 35880595419](https://github.co
 passed, including the API 30/31/36 migration, instrumentation, AAB and native
 binary checks. This does not replace signed Play upgrade or device acceptance.
 
-iOS draft [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
 now points to pushed source `51884d7f60d0c284b8c483eee503b77384f94e89`.
 The legacy cloud-backup flow rejects absent cloud storage and incomplete seed
 or keystore exports. After upload it downloads and decrypts the candidate,
@@ -731,6 +731,21 @@ simulator artifact did not launch, so signed fresh-install and upgrade startup
 remain unqualified. They require a correctly provisioned device or delivered
 build, not an unsigned simulator result. No existing wallet simulator data was
 reset.
+
+## Historical passkey handle preservation — 2026-09-24
+
+The non-deployed owner authority now uses each selected credential's stored
+WebAuthn user handle for discoverable authentication and its atomic challenge
+counter mutation. Schema v3 already retained historical per-credential handles,
+but these two paths also required equality with the new random owner's handle;
+that would reject a correctly linked historical credential. New enrollment
+still uses the random owner handle. Focused tests seed a differing historical
+handle, verify an owner session and exact counter commit, and reject substitution
+with the owner's handle. All 77 owner-authority tests and syntax checks pass.
+This compatibility fix does not import a JSON credential, establish a verified
+owner mapping, convert the seven HTTP routes or enable recovery. The one-writer
+cutover, wallet proof, app attestation and live replacement-device evidence are
+still required.
 
 ## Completion record
 

@@ -182,6 +182,34 @@ test('verified discoverable authentication preserves owner across platforms with
   const mismatch = core.beginAuthentication('ios');
   await rejects(core.completeAuthentication({ ceremonyId: mismatch.ceremonyId, credential: assertion(b64(99)) }), 'verification_failed');
 });
+test('discoverable authentication uses an imported credential handle rather than the new owner handle', async (t) => {
+  const legacyHandle = b64(71);
+  const { core, path, bootstrap } = setup(t, { verifier: verifier({
+    authentication: async ({ ceremony, registeredCredential }) => {
+      assert.equal(ceremony.userHandle, legacyHandle);
+      assert.equal(registeredCredential.userHandle, legacyHandle);
+      return { credentialId: registeredCredential.id, newCounter: 1,
+        deviceType: registeredCredential.deviceType, backedUp: registeredCredential.backedUp };
+    },
+  }) });
+  const { owner, challenge } = await bootstrap();
+  assert.notEqual(legacyHandle, challenge.userHandle);
+  // Simulate the per-credential historical handle retained by a future
+  // proof-bound import. This fixture is not a migration or ownership proof.
+  const db = new DatabaseSync(path);
+  try { db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(legacyHandle, b64(2)); }
+  finally { db.close(); }
+
+  const pending = core.beginAuthentication('ios');
+  assert.equal(pending.userHandle, null);
+  const renewed = await core.completeAuthentication({ ceremonyId: pending.ceremonyId,
+    credential: assertion(legacyHandle) });
+  assert.equal(renewed.subject, owner.subject);
+  assert.equal(renewed.namespace, owner.namespace);
+  const wrong = core.beginAuthentication('ios');
+  await rejects(core.completeAuthentication({ ceremonyId: wrong.ceremonyId,
+    credential: assertion(challenge.userHandle) }), 'verification_failed');
+});
 test('same valid response is claimed before asynchronous verification, so concurrent replay creates only one session', async (t) => {
   let release; let calls = 0;
   const fixture = setup(t, { verifier: verifier({ authentication: ({ registeredCredential }) => { calls++; return new Promise((resolve) => {

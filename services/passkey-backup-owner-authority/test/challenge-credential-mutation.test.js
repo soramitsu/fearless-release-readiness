@@ -108,6 +108,34 @@ test('verified counter commit rejects stale counter, wrong handle and revoked cr
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 1, revoked: 1 });
 });
 
+test('atomic challenge counter commit accepts a proven legacy credential handle', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const id = b64(2);
+  const legacyHandle = b64(72);
+  assert.notEqual(legacyHandle, challenge.userHandle);
+  // A future verified import retains the historical handle per credential.
+  // This fixture does not admit a live legacy cohort or migrate either store.
+  const db = new DatabaseSync(path);
+  try { db.prepare('UPDATE credentials SET user_handle=? WHERE id=?').run(legacyHandle, id); }
+  finally { db.close(); }
+
+  const body = assertionRequest(id, legacyHandle);
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, { expectedCounter: 0, newCounter: 1,
+      deviceType: 'multiDevice', backedUp: true }),
+  { status: 'authenticated', credentialId: id, counter: 1 });
+  assert.equal(row(path, id).counter, 1);
+
+  const wrong = assertionRequest(id, challenge.userHandle);
+  const wrongGrant = core.issueGrant(owner.sessionToken, wrong.request);
+  denied(() => core.commitChallengeCredentialMutation(wrongGrant.token, wrong.request,
+    wrong.bytes, { expectedCounter: 1, newCounter: 2,
+      deviceType: 'multiDevice', backedUp: true }), 'verification_failed');
+  assert.equal(row(path, id).counter, 1);
+});
+
 test('counter evidence is copied once before validation and SQLite write', async (t) => {
   const { core, path, bootstrap } = setup(t);
   const { owner, challenge } = await bootstrap();
