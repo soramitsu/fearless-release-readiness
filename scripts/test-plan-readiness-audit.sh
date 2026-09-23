@@ -10,7 +10,7 @@ fail() {
 }
 
 TEST_CASE_INDEX=0
-EXPECTED_TEST_CASE_CATALOG=4211
+EXPECTED_TEST_CASE_CATALOG=4213
 TEST_CASE_START="${PLAN_READINESS_TEST_START_CASE:-1}"
 TEST_CASE_END="${PLAN_READINESS_TEST_END_CASE:-}"
 MUTATION_TARGET_SCAN="${PLAN_READINESS_MUTATION_TARGET_SCAN:-false}"
@@ -18,7 +18,7 @@ PERL_MUTATION_COUNT=0
 mutation_target_noops=()
 if [[ "${PLAN_READINESS_CURRENT_RELEASE_STATE_ONLY:-false}" == "true" ]]; then
   TEST_CASE_START=4111
-  TEST_CASE_END=4211
+  TEST_CASE_END=4213
 elif [[ "${PLAN_READINESS_ANDROID_CURRENT_ONLY:-false}" == "true" ]]; then
   TEST_CASE_START=3970
   TEST_CASE_END=3977
@@ -1380,6 +1380,10 @@ write_android_repo() {
     "import jp.co.soramitsu.core.utils.utilityAsset" \
     "class XcmInteractor {" \
     "  fun getOriginFee(originChain: Chain, asset: Asset) = originChain.utilityAsset ?: asset" \
+    "  fun exactXcmOriginFeeInPlanks(originChainId: String, expectedUtilityAssetId: String, utilityAsset: Asset, quotedFee: BigDecimal): BigInteger {" \
+    "    require(utilityAsset.chainId == originChainId && utilityAsset.id == expectedUtilityAssetId)" \
+    "    return quotedFee.scaleByPowerOfTen(utilityAsset.precision).toBigIntegerExact()" \
+    "  }" \
     "}"
   write_file "$repo/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/presentation/cross_chain/confirm/CrossChainConfirmViewModel.kt" \
     "package jp.co.soramitsu.wallet.impl.presentation.cross_chain.confirm" \
@@ -1387,7 +1391,7 @@ write_android_repo() {
     "  val utilityAssetFlow = flowOf<Asset>()" \
     "  fun onNextClick(transferDraft: TransferDraft) {" \
     "    val utilityAsset = utilityAssetFlow.firstOrNull()" \
-    "    utilityAsset.token.configuration.planksFromAmount(transferDraft.originFee)" \
+    "    exactXcmOriginFeeInPlanks(transferDraft.originFee)" \
     "  }" \
     "}"
 
@@ -11150,7 +11154,7 @@ perl -0pi -e 's/originChain\.utilityAsset \?: asset/asset/' "$workspace/fearless
 expect_failure "missing Android XCM wallet utility fee asset selection" "fearless-Android wallet XCM origin utility fee asset selection missing"
 
 reset_fixture
-perl -0pi -e 's/utilityAsset\.token\.configuration\.planksFromAmount\(transferDraft\.originFee\)/token.planksFromAmount(transferDraft.originFee)/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/presentation/cross_chain/confirm/CrossChainConfirmViewModel.kt"
+perl -0pi -e 's/exactXcmOriginFeeInPlanks\(transferDraft\.originFee\)/token.planksFromAmount(transferDraft.originFee)/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/presentation/cross_chain/confirm/CrossChainConfirmViewModel.kt"
 expect_failure "missing Android XCM utility-asset validation fee conversion" "fearless-Android wallet XCM origin fee utility-asset validation missing"
 
 reset_fixture
@@ -26659,7 +26663,7 @@ perl -0pi -e 's/^EXPECTED_CASES=70$/EXPECTED_CASES=71/m' "$workspace/fearless-iO
 expect_failure "iOS current TestFlight adversarial runtime case sentinel drift" "fearless-iOS current TestFlight exact runtime case sentinel missing"
 
 reset_fixture
-perl -0pi -e 's/EXPECTED_TEST_CASE_CATALOG=4211/EXPECTED_TEST_CASE_CATALOG=4210/' "$workspace/scripts/test-plan-readiness-audit.sh"
+perl -0pi -e 's/EXPECTED_TEST_CASE_CATALOG=4213/EXPECTED_TEST_CASE_CATALOG=4212/' "$workspace/scripts/test-plan-readiness-audit.sh"
 expect_failure "plan-readiness runtime mutation catalog sentinel weakened" "root plan-readiness exact runtime mutation catalog sentinel"
 else
   TEST_CASE_INDEX=4078
@@ -27259,6 +27263,14 @@ expect_failure "iOS shared-features mutation-call inventory truncated" "fearless
 else
   TEST_CASE_INDEX=4211
 fi
+
+reset_fixture
+perl -0pi -e 's/utilityAsset\.chainId == originChainId && utilityAsset\.id == expectedUtilityAssetId/utilityAsset.chainId == originChainId/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/domain/XcmInteractor.kt"
+expect_failure "missing Android XCM exact origin utility-asset identity" "fearless-Android wallet XCM origin fee exact utility-asset identity missing"
+
+reset_fixture
+perl -0pi -e 's/quotedFee\.scaleByPowerOfTen\(utilityAsset\.precision\)\.toBigIntegerExact\(\)/quotedFee.scaleByPowerOfTen(utilityAsset.precision).toBigInteger()/' "$workspace/fearless-Android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/domain/XcmInteractor.kt"
+expect_failure "missing Android XCM exact origin utility-asset precision" "fearless-Android wallet XCM origin fee exact utility-asset precision missing"
 
 if ((TEST_CASE_INDEX != EXPECTED_TEST_CASE_CATALOG)); then
   fail "mutation catalog ended at $TEST_CASE_INDEX; expected $EXPECTED_TEST_CASE_CATALOG"
