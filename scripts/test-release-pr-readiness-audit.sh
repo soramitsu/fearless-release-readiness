@@ -188,9 +188,9 @@ cat > "$fake_gh" <<'SH'
 set -euo pipefail
 
 scenario="${FAKE_GH_SCENARIO:-merged}"
-merged_oid="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+merged_oid="${FAKE_GH_HEAD_OID:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
 drift_oid="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-pr_number=42
+pr_number="${FAKE_GH_PR_NUMBER:-42}"
 
 emit_check_runs() {
   local raw_payload
@@ -460,6 +460,11 @@ JSON
 {"total_count":2,"check_runs":[{"id":101,"name":"validate","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1001}},{"id":102,"name":"verify","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1002}}]}
 JSON
             ;;
+          soramitsu/fearless-release-readiness)
+            cat <<JSON
+{"total_count":3,"check_runs":[{"id":101,"name":"validate","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1001}},{"id":102,"name":"verify","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1002}},{"id":107,"name":"verify-owner","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1007}}]}
+JSON
+            ;;
           soramitsu/fearless-site-web)
             cat <<JSON
 {"total_count":2,"check_runs":[{"id":101,"name":"validate","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1001}},{"id":103,"name":"build","status":"completed","conclusion":"success","head_sha":"$merged_oid","check_suite":{"id":1003}}]}
@@ -601,6 +606,10 @@ JSON
         workflow_path=".github/workflows/ci.yml"
         ;;
     esac
+    if [[ "$api_repo" == "soramitsu/fearless-release-readiness" ]]; then
+      workflow_id=9007
+      workflow_path=".github/workflows/readiness.yml"
+    fi
     run_id=$((500000 + suite_id))
     workflow_sha="$merged_oid"
     workflow_repo="$api_repo"
@@ -701,7 +710,7 @@ JSON
   fi
 
   case "$api_repo" in
-    soramitsu/fearless-Android|soramitsu/fearless-iOS|soramitsu/shared-features-spm|soramitsu/fearless-wallet-web|soramitsu/fearless-site-web|tonswap-org/ton-indexer|solswap-io/solswap-indexer|sora-xor/polkaswap-indexer|hyperledger-iroha/iroha)
+    soramitsu/fearless-Android|soramitsu/fearless-iOS|soramitsu/shared-features-spm|soramitsu/fearless-wallet-web|soramitsu/fearless-site-web|soramitsu/fearless-release-readiness|tonswap-org/ton-indexer|solswap-io/solswap-indexer|sora-xor/polkaswap-indexer|hyperledger-iroha/iroha)
       ;;
     *)
       echo "unexpected gh api repo=$api_repo head=$api_head" >&2
@@ -772,7 +781,7 @@ while (($#)); do
 done
 
 case "$repo:$base" in
-  soramitsu/*:develop|tonswap-org/ton-indexer:master|tonswap-org/ton-indexer:develop|solswap-io/solswap-indexer:master|solswap-io/solswap-indexer:develop|sora-xor/polkaswap-indexer:develop|sora-xor/polkaswap-indexer:master|hyperledger-iroha/iroha:optimizations)
+  soramitsu/*:develop|soramitsu/fearless-release-readiness:main|tonswap-org/ton-indexer:master|tonswap-org/ton-indexer:develop|solswap-io/solswap-indexer:master|solswap-io/solswap-indexer:develop|sora-xor/polkaswap-indexer:develop|sora-xor/polkaswap-indexer:master|hyperledger-iroha/iroha:optimizations)
     ;;
   *)
     echo "unexpected query repo=$repo head=$head base=$base state=$state" >&2
@@ -810,6 +819,9 @@ success_checks() {
     soramitsu/shared-features-spm)
       printf '%s' '[{"__typename":"StatusContext","context":"continuous-integration/jenkins/pr-merge","state":"SUCCESS"}]'
       ;;
+    soramitsu/fearless-release-readiness)
+      printf '%s' '[{"name":"validate","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"verify","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"verify-owner","status":"COMPLETED","conclusion":"SUCCESS"}]'
+      ;;
     soramitsu/fearless-wallet-web)
       printf '%s' '[{"name":"validate","status":"COMPLETED","conclusion":"SUCCESS"},{"name":"verify","status":"COMPLETED","conclusion":"SUCCESS"}]'
       ;;
@@ -834,9 +846,19 @@ if [[ "$scenario" == "rest-fallback-merged" && "$repo" == "tonswap-org/ton-index
 fi
 
 case "$scenario:$repo" in
+  root-self-merged-null-decision:soramitsu/fearless-release-readiness)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"MERGED","mergedAt":"2026-06-26T12:00:00Z","headRefOid":"$merged_oid","isDraft":false,"reviewDecision":null,"mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[{"state":"APPROVED","submittedAt":"2026-06-26T12:00:00Z","commit":{"oid":"$merged_oid"}}]}]
+JSON
+    ;;
+  root-self-merged-no-approval:soramitsu/fearless-release-readiness)
+    cat <<JSON
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"MERGED","mergedAt":"2026-06-26T12:00:00Z","headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[]}]
+JSON
+    ;;
   merged:*|exact-ton-pr-12-merged:tonswap-org/ton-indexer|exact-site-pr-49-merged:soramitsu/fearless-site-web|exact-shared-features-pr-81-merged:soramitsu/shared-features-spm|exact-iroha-pr-5619-merged:hyperledger-iroha/iroha)
     cat <<JSON
-[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"MERGED","mergedAt":"2026-06-26T12:00:00Z","headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks)}]
+[{"number":$pr_number,"url":"https://github.com/$repo/pull/$pr_number","state":"MERGED","mergedAt":"2026-06-26T12:00:00Z","headRefOid":"$merged_oid","isDraft":false,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":$(success_checks),"reviews":[{"state":"APPROVED","submittedAt":"2026-06-26T12:00:00Z","commit":{"oid":"$merged_oid"}}]}]
 JSON
     ;;
   open-ready:*)
@@ -1667,6 +1689,127 @@ expect_failure "duplicate reviewed PR pin fixture" merged "duplicate reviewed PR
 
 printf '%s\n' "# reviewed_pr_pin	soramitsu/fearless-wallet-web	codex/orphan	develop	42	$expected_merged_oid" > "$config_file"
 expect_failure "orphan reviewed PR pin fixture" merged "reviewed PR pin has no matching release PR requirement"
+
+write_single_config \
+  soramitsu/fearless-wallet-web codex/web-bitcoin-broadcast-evidence \
+  develop merged validate,verify 42 @root-self
+expect_failure "root self pin cannot authorize another repository" merged "@root-self is reserved for the root-owner PR"
+
+write_single_config \
+  soramitsu/fearless-release-readiness codex/release-readiness-root-owner \
+  main merged validate,verify 2 @root-self
+expect_failure "root self pin rejects another PR number" merged "root reviewed PR must use the exact root-owner identity and @root-self pin"
+
+write_single_config \
+  soramitsu/fearless-release-readiness codex/other \
+  main merged validate,verify 1 @root-self
+expect_failure "root self pin rejects another branch" merged "root reviewed PR must use the exact root-owner identity and @root-self pin"
+
+write_single_config \
+  soramitsu/fearless-release-readiness codex/release-readiness-root-owner \
+  main merged validate,verify 1 "$expected_merged_oid"
+expect_failure "root PR cannot use a stale literal head pin" merged "root reviewed PR must use the exact root-owner identity and @root-self pin"
+
+root_self_checkout="$tmp_dir/root-self-checkout"
+root_self_config="$root_self_checkout/config/release-readiness-prs.tsv"
+mkdir -p "$root_self_checkout/config"
+git -C "$root_self_checkout" init -q -b codex/release-readiness-root-owner
+git -C "$root_self_checkout" remote add origin https://github.com/soramitsu/fearless-release-readiness.git
+cat > "$root_self_config" <<'TSV'
+# reviewed_pr_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	1	@root-self
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	validate	github-actions	15368	github-actions	9007	.github/workflows/readiness.yml
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	verify	github-actions	15368	github-actions	9007	.github/workflows/readiness.yml
+# required_check_provenance_pin	soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	verify-owner	github-actions	15368	github-actions	9007	.github/workflows/readiness.yml
+soramitsu/fearless-release-readiness	codex/release-readiness-root-owner	main	merged	validate,verify,verify-owner
+TSV
+git -C "$root_self_checkout" add config/release-readiness-prs.tsv
+git -C "$root_self_checkout" -c user.name='Root Self Test' -c user.email='root-self@example.invalid' -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m 'Root self pin fixture'
+root_self_sha="$(git -C "$root_self_checkout" rev-parse HEAD)"
+
+run_root_self_audit() {
+  local scenario="$1"
+  shift
+  local active_head_file="$tmp_dir/fake-gh-root-active-head"
+  : > "$active_head_file"
+  FAKE_GH_SCENARIO="$scenario" \
+    FAKE_GH_HEAD_OID="${ROOT_FAKE_GH_HEAD_OID:-$root_self_sha}" \
+    FAKE_GH_PR_NUMBER=1 \
+    FAKE_GH_ACTIVE_HEAD_FILE="$active_head_file" \
+    RELEASE_PR_READINESS_ROOT="$root_self_checkout" \
+    GH_BIN="$fake_gh" \
+    bash "$AUDIT_SCRIPT" --config "$root_self_config" "$@"
+}
+
+expect_root_self_success() {
+  local name="$1"
+  shift
+  local output
+  if ! output="$(run_root_self_audit "$@" 2>&1)"; then
+    echo "$output" >&2
+    fail "$name unexpectedly failed"
+  fi
+}
+
+expect_root_self_failure() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+  local output
+  set +e
+  output="$(run_root_self_audit "$@" 2>&1)"
+  local status=$?
+  set -e
+  if [[ "$status" -eq 0 || "$output" != *"$expected"* ]]; then
+    echo "$output" >&2
+    fail "$name did not fail with expected text: $expected"
+  fi
+}
+
+expect_root_self_success "clean root self pin resolves to its exact merged PR head" merged
+GIT_DIR="$tmp_dir/forged-git-dir" GIT_INDEX_FILE="$tmp_dir/forged-index" GIT_WORK_TREE="$tmp_dir" \
+  expect_root_self_success "ambient Git environment cannot substitute root self checkout" merged
+expect_root_self_success "merged root keeps exact approval when reviewDecision is null" root-self-merged-null-decision
+expect_root_self_failure "merged root PR still requires current-head approval" \
+  "rootCurrentHeadApprovalRequired=true" root-self-merged-no-approval
+expect_root_self_success "clean root self pin supports exact protected-merge handoff" \
+  open-ready --verify-open-candidate \
+  soramitsu/fearless-release-readiness codex/release-readiness-root-owner main 1 "$root_self_sha"
+
+printf '%s\n' '# dirty root self config' >> "$root_self_config"
+expect_root_self_failure "dirty root checkout cannot resolve self pin" "checkout is dirty" merged
+git -C "$root_self_checkout" checkout -- config/release-readiness-prs.tsv
+
+git -C "$root_self_checkout" update-index --assume-unchanged config/release-readiness-prs.tsv
+printf '%s\n' '# hidden root self config change' >> "$root_self_config"
+expect_root_self_failure "assume-unchanged cannot hide altered root config" "index flags conceal tracked source" merged
+git -C "$root_self_checkout" update-index --no-assume-unchanged config/release-readiness-prs.tsv
+git -C "$root_self_checkout" checkout -- config/release-readiness-prs.tsv
+
+git -C "$root_self_checkout" update-index --skip-worktree config/release-readiness-prs.tsv
+expect_root_self_failure "skip-worktree cannot hide root source" "index flags conceal tracked source" merged
+git -C "$root_self_checkout" update-index --no-skip-worktree config/release-readiness-prs.tsv
+
+git -C "$root_self_checkout" switch -q -c codex/wrong-root-branch
+expect_root_self_failure "root self pin rejects another local branch" "branch mismatch" merged
+git -C "$root_self_checkout" switch -q codex/release-readiness-root-owner
+
+git -C "$root_self_checkout" remote set-url origin https://github.com/soramitsu/fearless-release-readiness
+expect_root_self_success "root self pin accepts exact Actions HTTPS origin" merged
+git -C "$root_self_checkout" remote set-url origin git@github.com:soramitsu/fearless-release-readiness.git
+expect_root_self_success "root self pin accepts exact operator SSH origin" merged
+
+git -C "$root_self_checkout" remote set-url origin https://github.com/attacker/substituted.git
+expect_root_self_failure "root self pin rejects substituted repository" "origin mismatch" merged
+git -C "$root_self_checkout" remote set-url origin https://github.example/soramitsu/fearless-release-readiness.git
+expect_root_self_failure "root self pin rejects substituted host" "origin mismatch" merged
+git -C "$root_self_checkout" remote set-url origin https://github.com/soramitsu/fearless-release-readiness.git
+
+cp "$root_self_config" "$config_file"
+expect_root_self_failure "root self pin rejects untracked config override" "config path mismatch" merged --config "$config_file"
+
+ROOT_FAKE_GH_HEAD_OID="$expected_drift_oid" \
+  expect_root_self_failure "root self pin rejects moved GitHub PR head" \
+  "reviewedHeadShaPinMismatch expected=$root_self_sha actual=$expected_drift_oid" merged
 
 printf '%s\n' "# only comments" > "$config_file"
 expect_failure "empty config fixture" merged "no release PR requirements were found"

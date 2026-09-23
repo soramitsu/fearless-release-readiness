@@ -373,8 +373,7 @@ Git with an isolated environment for both checkout validation and private-file
 enumeration. The platform and root fixtures pass, including ambient `GIT_DIR`
 and `GIT_INDEX_FILE` substitution attempts; the real Android/iOS private-overlay
 comparison passes. Android commit `62a6e5709` and iOS commit `04e521410` contain
-the platform fixes and require push and exact-head CI after the preceding hosted
-runs finish.
+the platform fixes. Both are pushed; exact-head CI remains in progress.
 
 The Taira audit's mobile lookups now read consolidated candidates, but its full
 suite and real static audit stop on the current Iroha OpenAPI artifact: required
@@ -397,6 +396,35 @@ reconciliation. The full root source-publication adversarial suite also passes
 88 negative cases locally. This adds no HTTP service, native decrypt verifier, owner
 lifecycle integration or permission to enable recovery. Exact-head hosted CI
 and independent review remain required after publication.
+
+## Published candidate heads and remaining audit debt — 2026-09-23
+
+The consolidated Android branch is pushed at
+`84c1d31291340a42309fa42bedca3251e0d4dff5` and the iOS branch at
+`04e52141081d97863cf0df09bf647bddd036f4cf`. Both PR descriptions now
+identify those heads and their still-disabled recovery/send boundaries. The
+prior Android hosted run passed the API 30, 31 and 36 compatibility shards and
+its IAS job passed. The full API 34 instrumentation run was interrupted by the
+new push; its partial result-parser failure was a consequence of cancellation,
+not a completed migration result. The prior iOS hosted build passed. New
+exact-head mobile CI is running. Root commit `0e7d2317` passed hosted CI.
+
+The broad `audit-plan-readiness.sh` still fails. A diagnostic full run during
+candidate reconciliation reported 319 static failures across current mobile
+sources, other maintained services, root plan assertions and the separately
+owned Iroha checkout. Some are stale
+assumptions from older candidates; others are genuine missing release evidence.
+Its 4,211-case fixture also needs source reconciliation. No gate was waived to
+turn this into a passing result, and no Iroha files or branches were changed.
+The final release PR pins and detached shipping manifest remain open until the
+shipping heads have current independent review and exact artifacts.
+Root PR #1 now uses a narrowly scoped self-pin resolved from a clean committed
+checkout, with exact GitHub origin, branch, review and required-check binding.
+Focused substitution and replay fixtures pass. The full PR-audit fixture was
+still progressing after 15 minutes locally and was stopped; exact-head hosted
+CI must complete it. The self-pin validator must run from a clean checkout of
+`codex/release-readiness-root-owner` at the reviewed PR head even after merge;
+the detached manifest then binds that exact source commit.
 
 ## Current local access check
 

@@ -30,7 +30,12 @@ Every requirement must also have one immutable evidence line in the same file:
   # reviewed_pr_pin<TAB>repo<TAB>head<TAB>base<TAB>pr_number<TAB>head_sha
 
 The reviewed pull request number and exact 40-character lowercase head commit are
-mandatory even when the remote topic branch has already been deleted.
+mandatory even when the remote topic branch has already been deleted. The sole
+exception is @root-self for soramitsu/fearless-release-readiness PR #1 on
+codex/release-readiness-root-owner into main. It resolves to the clean, tracked
+root checkout HEAD; the detached shipping manifest binds that final commit.
+After merge, retain a clean checkout on that topic branch at the merged PR head
+even if GitHub deletes the remote topic branch.
 
 Every required check must pin the authority allowed to emit it:
 
@@ -301,6 +306,11 @@ const file = process.argv[2]
 const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
 const requirements = []
 const pins = new Map()
+const rootRepo = 'soramitsu/fearless-release-readiness'
+const rootHead = 'codex/release-readiness-root-owner'
+const rootBase = 'main'
+const rootPrNumber = 1
+const rootSelfPin = '@root-self'
 
 function fail(message) {
   console.error(message)
@@ -333,7 +343,13 @@ for (const [index, line] of lines.entries()) {
     if (!/^[1-9][0-9]*$/.test(prNumberRaw) || !Number.isSafeInteger(Number(prNumberRaw))) {
       fail(`${file}:${lineNumber}: reviewed PR pin number must be canonical positive digits`)
     }
-    if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    if (repo === rootRepo) {
+      if (head !== rootHead || base !== rootBase || Number(prNumberRaw) !== rootPrNumber || headSha !== rootSelfPin) {
+        fail(`${file}:${lineNumber}: root reviewed PR must use the exact root-owner identity and @root-self pin`)
+      }
+    } else if (headSha === rootSelfPin) {
+      fail(`${file}:${lineNumber}: @root-self is reserved for the root-owner PR`)
+    } else if (!/^[0-9a-f]{40}$/.test(headSha)) {
       fail(`${file}:${lineNumber}: reviewed PR head pin must be an exact lowercase 40-character commit SHA`)
     }
     const identity = key(repo, head, base)
@@ -372,6 +388,66 @@ for (const [identity, pin] of pins) {
 }
 
 console.log(JSON.stringify([...pins.values()]))
+NODE
+}
+
+resolve_root_self_pin() {
+  node - "$ROOT_DIR" "$CONFIG_FILE" <<'NODE'
+const fs = require('fs')
+const path = require('path')
+const { spawnSync } = require('child_process')
+
+const [rootArg, configArg] = process.argv.slice(2)
+const allowedOrigins = new Set([
+  'https://github.com/soramitsu/fearless-release-readiness',
+  'https://github.com/soramitsu/fearless-release-readiness.git',
+  'git@github.com:soramitsu/fearless-release-readiness.git',
+])
+const expectedBranch = 'codex/release-readiness-root-owner'
+const expectedConfig = 'config/release-readiness-prs.tsv'
+
+function fail(message) {
+  console.error(`root self pin ${message}`)
+  process.exit(1)
+}
+
+function git(root, ...args) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')))
+  const result = spawnSync('/usr/bin/git', ['-C', root, ...args], {
+    env, timeout: 20000, maxBuffer: 1024 * 1024,
+  })
+  if (result.status !== 0 || result.error) fail(`cannot verify Git ${args[0]}`)
+  return result.stdout
+}
+
+let root
+let config
+try {
+  root = fs.realpathSync(rootArg)
+  config = fs.realpathSync(configArg)
+  if (fs.lstatSync(configArg).isSymbolicLink() || !fs.statSync(config).isFile()) {
+    fail('config must be a regular tracked file')
+  }
+} catch (_) {
+  fail('checkout or config is missing')
+}
+if (config !== path.join(root, expectedConfig)) fail('config path mismatch')
+const gitRoot = git(root, 'rev-parse', '--show-toplevel').toString('utf8').trim()
+if (fs.realpathSync(gitRoot) !== root) fail('checkout substituted')
+if (git(root, 'symbolic-ref', '--quiet', '--short', 'HEAD').toString('utf8').trim() !== expectedBranch) {
+  fail('branch mismatch')
+}
+if (!allowedOrigins.has(git(root, 'remote', 'get-url', 'origin').toString('utf8').trim())) {
+  fail('origin mismatch')
+}
+const head = git(root, 'rev-parse', 'HEAD').toString('utf8').trim()
+if (!/^[0-9a-f]{40}$/.test(head)) fail('HEAD is not an exact commit')
+const tracked = git(root, 'ls-files', '-v', '-z').toString('utf8').split('\0').filter(Boolean)
+if (tracked.some((row) => !row.startsWith('H '))) fail('index flags conceal tracked source')
+if (git(root, 'status', '--porcelain=v1', '--untracked-files=all').length !== 0) fail('checkout is dirty')
+const committedConfig = git(root, 'show', `HEAD:${expectedConfig}`)
+if (!fs.readFileSync(config).equals(committedConfig)) fail('config differs from committed bytes')
+process.stdout.write(`${head}\n`)
 NODE
 }
 
@@ -779,6 +855,7 @@ NODE
 line_number=0
 checked_count=0
 verified_open_candidate_count=0
+root_self_reviewed_head_sha=""
 requirement_keys=()
 
 init_report
@@ -868,6 +945,15 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
   IFS=$'\t' read -r reviewed_pr_number reviewed_head_sha <<< "$review_pin"
+  if [[ "$reviewed_head_sha" == "@root-self" ]]; then
+    if ! reviewed_head_sha="$(resolve_root_self_pin 2>&1)"; then
+      failure="$CONFIG_FILE:$line_number: $reviewed_head_sha"
+      record_failure "$failure"
+      append_report_record "failed" "$line_number" "$repo" "$head" "$base" "$required_state" "$required_checks" "$failure"
+      continue
+    fi
+    root_self_reviewed_head_sha="$reviewed_head_sha"
+  fi
   required_check_provenance_json="$(required_check_provenance_for_requirement "$required_check_provenance_pins_json" "$repo" "$head" "$base")"
 
   checked_count=$((checked_count + 1))
@@ -1782,6 +1868,17 @@ if (reviewedState === 'OPEN') {
 
 if (reviewedState === 'MERGED') {
   const merged = reviewed
+  if (repo === 'soramitsu/fearless-release-readiness') {
+    const hasCurrentHeadApproval = Array.isArray(merged.reviews) && merged.reviews.some((review) => {
+      const approvalCommit = review && review.commit && typeof review.commit.oid === 'string'
+        ? review.commit.oid.trim().toLowerCase()
+        : ''
+      return review && review.state === 'APPROVED' && approvalCommit === reviewedHeadSha
+    })
+    if (!hasCurrentHeadApproval) {
+      fail(`${repo}#${reviewedPrNumber} is merged without a current-head approval: ${reviewedUrl} rootCurrentHeadApprovalRequired=true`)
+    }
+  }
   if (currentHeadOid) {
     if (currentHeadOid.toLowerCase() !== reviewedHeadSha) {
       fail(`${repo}#${reviewedPrNumber} is merged but head branch '${head}' has new commits after merge: ${reviewedUrl} currentHeadOid=${currentHeadOid} mergedHeadRefOid=${reviewedHeadSha}`)
@@ -1827,6 +1924,14 @@ NODE
     append_report_record "failed" "$line_number" "$repo" "$head" "$base" "$required_state" "$required_checks" "$failure"
   fi
 done < "$CONFIG_FILE"
+
+if [[ -n "$root_self_reviewed_head_sha" ]]; then
+  if ! final_root_self_sha="$(resolve_root_self_pin 2>&1)"; then
+    record_failure "root self pin changed during PR audit: $final_root_self_sha"
+  elif [[ "$final_root_self_sha" != "$root_self_reviewed_head_sha" ]]; then
+    record_failure "root self pin changed during PR audit: expected=$root_self_reviewed_head_sha actual=$final_root_self_sha"
+  fi
+fi
 
 if [[ "$checked_count" -eq 0 ]]; then
   failure="$CONFIG_FILE: no release PR requirements were found"
