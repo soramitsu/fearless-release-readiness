@@ -56,6 +56,15 @@ for one storage key must not authorize another, even if account names match.
    durable SQLite transaction with collision and counter checks. Retain an
    encrypted, immutable pre-cutover snapshot for audit and forward recovery.
    Import is not a Google-account operation.
+
+   The offline `quarantineLegacyCredentialSnapshot` tool can now capture an
+   exact, digest-checked, schema-validated private JSON image and report a
+   redacted read-only reconciliation. It requires an independently supplied
+   expected digest and refuses to overwrite a duplicate image. It cannot prove
+   that the JSON writer was stopped, cannot establish a random owner, and
+   cannot import or activate a credential. Its file remains an operator-held
+   snapshot; future admission must verify its digest again against a durable
+   cutover manifest and collect the two fresh ownership proofs above.
 3. The local HTTP composition candidate must use that same SQLite database as the **sole**
    credential and grant writer for all seven protected routes. The exact raw
    request-body grant and registration/counter/revocation change must commit

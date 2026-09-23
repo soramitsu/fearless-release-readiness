@@ -54,18 +54,20 @@ and IAS validation are still running. This is not a cross-platform format,
 installer or enabled Drive backup.
 
 The latest pushed iOS candidate is
-`1d1c99d6a256fe5866f4d60bf3d71ccb47750ad3` on
+`abf16a61fca9167f8212da1ac82817365c2917f3` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its in-memory
 draft captures every known V2 root and chain-account Keychain slot, plus wallet
 identities, selection/order and the two historical Core Data display
 preferences that the ordinary wallet model omits. Signing preflight runs after
 capture and a final present/absent-slot reread detects stable substitutions;
-reflection is redacted. The focused iOS 18.1 simulator suite passed 21/21,
-SwiftFormat and diff checks passed. Exact-head hosted checks are pending.
-An independent read-only review found that a shared Core Data/Keychain writer
-lock and proof that every optional phrase/seed/path reproduces the original
-identity are still required before backup completion. The draft has no
-serializer, uploader or restore installer.
+reflection is redacted. The draft now rejects mnemonic/path bytes that do not
+rederive the original Substrate root, advertised EVM root, or applicable generic
+chain public identity. It retains ambiguous historical seed bytes without
+guessing their derivation. The focused iOS simulator suite passed 22/22 and
+adjacent export suites passed 11/11; SwiftFormat and diff checks passed.
+Exact-head hosted checks are pending. A shared Core Data/Keychain writer lock,
+account-level export/reimport proof, specialized chain derivation proof and
+the shared serializer/installer remain required before backup completion.
 
 The non-deployed SQLite owner authority's one-writer HTTP candidate covers all
 seven protected route contracts in local tests (111/111). Its root source at
@@ -979,6 +981,21 @@ The cutover needs a sealed verified import, reviewed startup manifest, proxy
 identity, independent review and device acceptance before production admission.
 The current iOS `c29acdf15781574ae566aa50d676ca632dd6b4cd` Release Safety
 check passed at exact head; Codecov remains in progress at this checkpoint.
+
+## Offline legacy credential quarantine — 2026-09-24
+
+The non-deployed owner-authority tooling can now capture an exact, expected-
+digest-matched private image of the historical schema-3/4 credential JSON,
+validate its public-metadata inventory against the read-only SQLite view, and
+publish it without replacing an existing snapshot. Concurrent capture and
+replay tests show only one private snapshot is retained. The command returns
+a redacted count/diagnostic report and always denies migration; it creates no
+owner, credential, binding, grant or proof. It cannot establish that the live
+JSON writer was drained. The fresh legacy-credential assertion, random-owner
+session, wallet possession, attestation and reviewed one-writer cutover remain
+required. The owner-authority tests pass 115/115 with syntax checks. The root
+source and bundle inventories now include the quarantine files and the
+previously omitted owner HTTP composition source and test.
 
 ## Completion record
 

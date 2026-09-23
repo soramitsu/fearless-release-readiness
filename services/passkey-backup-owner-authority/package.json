@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint:syntax": "node --check src/authority.js && node --check src/store.js && node --check src/http.js && node --check src/legacy-reconciliation.js && node --check src/validation.js && node --check src/webauthn-verifier.js && node --check scripts/reconcile-legacy-credentials.mjs && node --check test/authority.test.js && node --check test/challenge-credential-mutation.test.js && node --check test/generation-head.test.js && node --check test/http.test.js && node --check test/legacy-reconciliation.test.js && node --check test/legacy-schema-migration.test.js && node --check test/process-worker.js && node --check test/webauthn-verifier.test.js"
+    "lint:syntax": "node --check src/authority.js && node --check src/store.js && node --check src/http.js && node --check src/legacy-reconciliation.js && node --check src/legacy-quarantine.js && node --check src/validation.js && node --check src/webauthn-verifier.js && node --check scripts/reconcile-legacy-credentials.mjs && node --check scripts/quarantine-legacy-credentials.mjs && node --check test/authority.test.js && node --check test/challenge-credential-mutation.test.js && node --check test/generation-head.test.js && node --check test/http.test.js && node --check test/legacy-reconciliation.test.js && node --check test/legacy-quarantine.test.js && node --check test/legacy-schema-migration.test.js && node --check test/process-worker.js && node --check test/webauthn-verifier.test.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "13.3.2"

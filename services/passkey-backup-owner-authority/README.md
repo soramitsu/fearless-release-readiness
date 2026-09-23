@@ -71,6 +71,14 @@ node services/passkey-backup-owner-authority/scripts/reconcile-legacy-credential
   /absolute/private/credentials.json /absolute/private/authority.sqlite
 ```
 
+For an operator-controlled private source capture, `quarantine-legacy-credentials.mjs` accepts an **already expected** SHA-256 digest of the exact JSON bytes and a distinct pre-existing `0700` quarantine directory. It requires a private regular source file and directory, reads a bounded exact image, validates that copied schema-3/4 image against the read-only SQLite inventory, and publishes `legacy-<sha256>.json` with `0600` permissions using a no-replace operation and directory fsync. A repeated or concurrent attempt with that digest fails without overwriting the first snapshot. It returns a redacted inventory and exits `3` on successful capture, deliberately preserving `migrationPermitted: false`. Neither this command nor its `quarantineLegacyCredentialSnapshot` API creates an owner, credential, binding, proof, grant, or migration record, and neither can establish that the JSON writer was drained. A future importer must rehash this copy, verify a fresh legacy-credential assertion and current random-owner session against the exact sealed cohort, and perform the reviewed one-writer cutover; that proof contract is not implemented.
+
+```sh
+node services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentials.mjs \
+  /absolute/private/credentials.json /absolute/private/authority.sqlite \
+  /absolute/private/quarantine EXPECTED_LOWERCASE_SHA256_HEX
+```
+
 ## Concrete integration gates (not implemented)
 
 - Independently review the cryptographic verifier: the optional WebAuthn adapter verifies existing-owner assertions, enrollment, and internal v5 claimed registration/assertion with exact challenge, RP, configured platform origin, UV/UP, stored COSE key, counter and backup flags. It still rejects first-owner bootstrap, has no wallet-proof vectors or app-attestation binding, and is not wired into an admitted production HTTP composition. Independently qualify native iOS18+ GPM and Android PRF without raising existing app OS minima.
