@@ -3,7 +3,8 @@
 This is a design for a future, reviewed migration. **No live credential route is
 converted or admitted by this document.** The current challenge HTTP process
 writes schema-4 JSON after separate grant introspection; the owner authority
-uses schema-5 SQLite and has no HTTP listener. The read-only reconciliation
+uses schema-5 SQLite. Its local HTTP candidate requires explicit test admission
+and rejects production construction. The read-only reconciliation
 report always denies migration. Its two file snapshots are sequential and are
 not proof of ownership or an atomic cross-store view.
 
@@ -55,14 +56,15 @@ for one storage key must not authorize another, even if account names match.
    durable SQLite transaction with collision and counter checks. Retain an
    encrypted, immutable pre-cutover snapshot for audit and forward recovery.
    Import is not a Google-account operation.
-3. A new HTTP composition must use that same SQLite database as the **sole**
+3. The local HTTP composition candidate must use that same SQLite database as the **sole**
    credential and grant writer for all seven protected routes. The exact raw
    request-body grant and registration/counter/revocation change must commit
    together under `BEGIN IMMEDIATE`. After asynchronous WebAuthn work, recheck
    the owner session/generation, credential identity, handle, counter,
-   revocation and storage binding before commit. Challenge discovery and
-   listing must read the same authority; no JSON fallback, dual write or
-   route-by-route mixed mode is permitted.
+   revocation and storage binding before commit. The candidate now exercises
+   all seven protected routes under fixture-proven bindings. Challenge
+   discovery and listing must read the same authority; no JSON fallback,
+   dual write or route-by-route mixed mode is permitted.
 4. Production startup must verify a reviewed cutover manifest naming the
    sealed source digest, migration schema, proof commitments, route inventory,
    SQLite file identity and shipping binary. It must reject a writable legacy
@@ -98,9 +100,10 @@ implements this **internal** issue/claim/commit state machine for an already
 proven storage binding. The internal server-owned WebAuthn adapter now verifies
 the claimed nonce, RP, configured platform origin, UV/UP, registration
 metadata, stored assertion public key and counter before the same core commits
-typed public evidence. The live JSON HTTP routes do not call this path, and
-the all-seven-route one-writer composition and independently proven legacy
-owner admission are still required before cutover.
+typed public evidence. The live JSON HTTP routes do not call this path. A
+non-deployed test HTTP candidate calls it for all seven protected routes, but
+independently proven legacy-owner admission and reviewed production startup
+gates remain required before cutover.
 
 The same non-deployed SQLite core consumes an exact-body owner grant and
 issues `registration/challenge` and `assertion/challenge` pending rows in one

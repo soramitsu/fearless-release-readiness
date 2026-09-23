@@ -31,10 +31,11 @@ latest app sources must complete. Both app trees are on review branches, and
 independent security review, protected qualification and distribution
 acceptance remain outstanding.
 
-The metadata-only owner/grant authority and challenge service still have
-separate credential writers. First-owner wallet proof, verified legacy
-migration, one-writer live HTTP cutover, deployment and native Drive/PRF
-recovery remain unintegrated. The root source gate selects the consolidated
+The deployed JSON challenge service remains a separate credential writer from
+the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
+candidate now covers all seven protected routes, but first-owner wallet
+proof, verified legacy migration, production startup admission, live cutover,
+deployment and native Drive/PRF recovery remain unintegrated. The root source gate selects the consolidated
 mobile worktrees and site-association PR #49. The complete frozen route
 inventory/unified manifest, transaction-byte/fee/hash/receipt qualification,
 general TON sends, production-service repairs and store/device acceptance
@@ -920,6 +921,31 @@ build/test CI. This resolves one native signing safety blocker, not the
 production wallet serializer, original-key export proof, native provider
 interoperability or replacement-device restoration. New-feature activation
 remains disabled.
+
+## One-writer HTTP composition candidate — 2026-09-24
+
+The SQLite owner authority now has a non-deployed HTTP composition candidate
+for the seven existing protected passkey routes. It also exposes separate
+discoverable authentication challenge/completion and exact-body grant issuance
+in local tests. Registration and assertion completion call the server-owned
+WebAuthn verification path; read/challenge, credential insert, counter update
+and revocation use the same SQLite lifecycle writer that consumes their
+single-use grants. Responses preserve the existing route shapes, including
+the proven storage key returned after a completion. A protected request needs
+both a current owner session and its one-use grant. Local transport checks
+cover body limits, duplicate sensitive headers, exact paths, missing sessions,
+wrong body, replay, generation invalidation and all seven route contracts.
+The owner suite passes 111/111 with syntax checks.
+
+This factory has no executable deployment entrypoint, requires explicit test
+admission and rejects production construction. The existing deployed JSON
+service has not switched. Tests use fixture-proven storage bindings and
+test-only verifiers; they do not prove historical JSON credential ownership,
+first-owner wallet possession, app attestation or native provider recovery.
+The cutover needs a sealed verified import, reviewed startup manifest, proxy
+identity, independent review and device acceptance before production admission.
+The current iOS `c29acdf15781574ae566aa50d676ca632dd6b4cd` Release Safety
+check passed at exact head; Codecov remains in progress at this checkpoint.
 
 ## Completion record
 

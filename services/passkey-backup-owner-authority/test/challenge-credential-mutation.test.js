@@ -142,7 +142,7 @@ test('exact grant consumption and registration share one SQLite commit, includin
   assert.equal(row(path, id), undefined);
   const committed = core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes,
     evidence);
-  assert.deepEqual(committed, { status: 'registered', credentialId: id, generation: 1 });
+  assert.deepEqual(committed, { status: 'registered', storageKey: 'storage:wallet-test', credentialId: id, generation: 1 });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
@@ -307,7 +307,7 @@ test('verified counter commit rejects stale counter, wrong handle and revoked cr
   denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
     assertionRequest(id, b64(50), JSON.parse(body.bytes).assertionId).bytes, evidence), 'invalid_request');
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence),
-    { status: 'authenticated', credentialId: id, counter: 1 });
+    { status: 'authenticated', storageKey: 'storage:wallet-test', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
   const staleChallenge = claimedAssertion(core, owner, id);
   const stale = core.issueGrant(owner.sessionToken, staleChallenge.body.request);
@@ -337,7 +337,7 @@ test('atomic challenge counter commit accepts a proven legacy credential handle'
   const grant = core.issueGrant(owner.sessionToken, body.request);
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
     body.bytes, evidence),
-  { status: 'authenticated', credentialId: id, counter: 1 });
+  { status: 'authenticated', storageKey: 'storage:wallet-test', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
 
   const wrongPending = core.beginChallengeCredentialMutation(owner.sessionToken,
@@ -366,7 +366,7 @@ test('null assertion handle requires a claimed server-owned credential-directed 
   assert.equal(row(path, id).counter, 0);
   assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request,
     body.bytes, evidence),
-  { status: 'authenticated', credentialId: id, counter: 1 });
+  { status: 'authenticated', storageKey: 'storage:wallet-test', credentialId: id, counter: 1 });
   assert.equal(row(path, id).counter, 1);
   denied(() => core.consumeGrant(grant.token, body.request), 'authorization_failed');
 });
@@ -655,7 +655,7 @@ test('precommit failure rolls back counter and grant; ambiguous postcommit failu
   assert.equal(row(path, id).counter, 0);
   const recovered = open();
   assert.deepEqual(recovered.commitChallengeCredentialMutation(first.token, body.request, body.bytes, evidence),
-    { status: 'authenticated', credentialId: id, counter: 1 });
+    { status: 'authenticated', storageKey: 'storage:wallet-test', credentialId: id, counter: 1 });
   const secondAttempt = claimedAssertion(recovered, owner, id);
   const second = recovered.issueGrant(owner.sessionToken, secondAttempt.body.request);
   faultStage = 'afterCommit';
@@ -826,7 +826,8 @@ test('proven legacy wallet key admits exact registration challenge and atomic co
     aaguid: '00000000-0000-0000-0000-000000000000', transportsJson: null };
   assert.deepEqual(core.commitChallengeCredentialMutation(completionGrant.token,
     completion.request, completion.bytes, evidence),
-  { status: 'registered', credentialId: id, generation: 1 });
+  { status: 'registered', storageKey: 'storage:UomOL69zIgGTGAZa-7E9Wsyf1-ELzo2cg7lN6P07LJk',
+    credentialId: id, generation: 1 });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 0, revoked: 0 });
 });
 
@@ -859,6 +860,6 @@ test('explicit v1-to-v5 owner migration retains existing credential and permits 
   const { body, evidence } = claimedAssertion(migrated, owner, id);
   const grant = migrated.issueGrant(owner.sessionToken, body.request);
   assert.deepEqual(migrated.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, evidence),
-  { status: 'authenticated', credentialId: id, counter: 1 });
+  { status: 'authenticated', storageKey: 'storage:wallet-test', credentialId: id, counter: 1 });
   assert.deepEqual(row(path, id), { owner: owner.subject, counter: 1, revoked: 0 });
 });

@@ -251,7 +251,7 @@ for (const [platform, origin] of [['ios', iosOrigin], ['android', androidOrigin]
     const authenticator = createAuthenticator(`v5-${platform}`);
     const registered = await registerForKey(core, owner, authenticator, origin);
     assert.deepEqual(registered.result, {
-      status: 'registered', credentialId: registered.credential.id, generation: 1,
+      status: 'registered', storageKey, credentialId: registered.credential.id, generation: 1,
     });
     const db = new DatabaseSync(path, { readOnly: true });
     try {
@@ -282,7 +282,7 @@ for (const [platform, origin] of [['ios', iosOrigin], ['android', androidOrigin]
     const grant = core.issueGrant(resumed.sessionToken, body.request);
     assert.deepEqual(await core.verifyAndCommitChallengeCredentialMutation(resumed.sessionToken,
       grant.token, body.request, body.bytes),
-    { status: 'authenticated', credentialId: registered.credential.id, counter: 2 });
+    { status: 'authenticated', storageKey, credentialId: registered.credential.id, counter: 2 });
     assert.equal(dbOpenCounter(path, registered.credential.id), 2);
   });
 }

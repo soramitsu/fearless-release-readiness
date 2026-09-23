@@ -645,7 +645,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
             verified.record.id, pending.storage_key, verified.aaguid,
             verified.transportsJson, pending.platform);
           tx.run('DELETE FROM pending_challenges WHERE id=?', pending.id);
-          result = { status: 'registered', credentialId: target.credentialId,
+          result = { status: 'registered', storageKey: pending.storage_key, credentialId: target.credentialId,
             generation: bumpGeneration(tx, owner).generation };
         } else if (target.kind === 'assertion') {
           const credential = activeCredential(tx, target.credentialId, owner.subject);
@@ -661,7 +661,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           tx.run('UPDATE credentials SET counter=?, backed_up=? WHERE id=?',
             verified.newCounter, Number(verified.backedUp), credential.id);
           tx.run('DELETE FROM pending_challenges WHERE id=?', pending.id);
-          result = { status: 'authenticated', credentialId: credential.id, counter: verified.newCounter };
+          result = { status: 'authenticated', storageKey: pending.storage_key,
+            credentialId: credential.id, counter: verified.newCounter };
         } else if (target.kind === 'revoke') {
           boundLegacyStorage(tx, target.storageKey, owner.subject);
           const credential = tx.query('SELECT owner,revoked FROM credentials WHERE id=?', target.credentialId);
