@@ -6,7 +6,9 @@ WebAuthn credential. The existing `FPBKAEAD` v1 wallet-backup envelope remains
 unchanged. Neither the DEK nor a native WebAuthn PRF result belongs in a server
 request, Drive metadata, logs or crash reports. The owner service stores only
 credential/authorization metadata; Drive stores encrypted envelopes and opaque
-wrappers. This contract alone does not make a backup recoverable.
+wrappers. This contract alone does not make a backup recoverable. The immutable
+container and its head/journal rules are specified in
+[passkey generation v1](passkey-generation-v1.md).
 
 All strings below are UTF-8 with a four-byte big-endian byte-length prefix;
 integers are signed big-endian and must be nonnegative where appropriate. Base64url
