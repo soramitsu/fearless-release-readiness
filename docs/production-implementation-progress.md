@@ -665,13 +665,16 @@ remote-backup compatibility stub remains unavailable and portable recovery is
 still disabled. Exact-head hosted Android CI is pending.
 
 iOS draft [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
-now points to pushed source `10b33d20e037a507682d7956e63197717f195f7d`.
+now points to pushed source `c81e587eccc02954f280ab45652d59b6b0296c18`.
 The legacy cloud-backup flow rejects absent cloud storage and incomplete seed
 or keystore exports. After upload it downloads and decrypts the candidate,
 compares all intended wallet-material fields, and reports completion only
-after the local backed-up state write succeeds. The exact changed source
-passes a single-architecture iOS Simulator Debug workspace build and diff
-check; exact-head hosted Release CI remains pending. The local Release build
+after the local backed-up state write succeeds. The code at preceding commit
+`10b33d20e037a507682d7956e63197717f195f7d` passes a single-architecture
+iOS Simulator Debug workspace build and diff check. The subsequent documentation
+commit inventories the original Keychain roots, native TON material and
+chain-specific accounts that a shared wallet format must preserve. Exact-head
+hosted Release CI remains pending. The local Release build
 could not complete because its dual-architecture Charts dependency compiler
 jobs consumed excessive memory. This change does not provide the production
 passkey wallet serializer, owner-session integration, or replacement-device
