@@ -268,7 +268,7 @@ test('database requires explicit private durable creation; missing/corrupt/schem
   denies(() => createOwnerAuthority({ path: path + '.missing', audience }), 'store_unavailable');
   denies(() => open({ create: true }), 'store_unavailable');
   chmodSync(path, 0o644); denies(() => open(), 'store_unavailable'); chmodSync(path, 0o600);
-  const db = new DatabaseSync(path); db.exec('PRAGMA user_version=2'); db.close(); denies(() => open(), 'store_unavailable');
+  const db = new DatabaseSync(path); db.exec('PRAGMA user_version=3'); db.close(); denies(() => open(), 'store_unavailable');
   writeFileSync(path, 'not a database'); denies(() => open(), 'store_unavailable');
 });
 test('revoked credential is checked even if an unexpired session/grant row remains', async (t) => {

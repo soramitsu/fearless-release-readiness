@@ -193,6 +193,32 @@ digests. It binds all selected repositories, four source dependencies, route and
 feature-policy digests, distribution identities, artifacts and raw evidence.
 No actual shipping manifest exists yet, so the production gate correctly fails.
 
+## Backup-head authority increment — 2026-09-23
+
+The detached shipping-manifest and signed passkey-acceptance gates now require
+the same exact raw evidence rows for the seven enabled-recovery categories and
+reject reuse of one retained file for multiple artifact/evidence kinds. The
+five shipping-manifest synthetic tests and 23 enabled-acceptance cases pass.
+Root head `5721ecfad30c2ce3c1a74bf92428c4d9d9833da4` passed all three hosted
+jobs; the follow-up evidence-binding commit `8a2653cee70368c5b2f5720d21ce43f9ee1ee9d1`
+is pushed, with exact-head CI in progress. The 88-case source-publication suite
+and both release-bundle export/verification suites passed locally before the
+new authority increment below.
+
+The non-deployed owner core now has schema-v2 backup-head metadata and an
+explicit transactional v1→v2 migration preserving owner/credential state.
+Authenticated reads expose current and retained previous descriptors; an exact
+operation ID reconciles ambiguous commits. The SQLite transaction compares the
+expected head revision/digest, keeps the storage-account binding fixed, rejects
+unreviewed backup-key epoch changes and duplicate generation/Drive IDs, then
+advances one head. Separate-process concurrent writers, crash before/after
+commit, altered replay, revocation, migration and malformed inputs are covered.
+All 52 owner tests pass on local Node 24 and 26. No new HTTP/grant route is
+exposed, no Drive file is deleted, and the server cannot attest client-side
+upload/download/decryption. Atomic integration with the existing challenge
+store, native immutable-generation clients and live device evidence are still
+required. This is metadata groundwork, not portable recovery acceptance.
+
 ## Current local access check
 
 Read-only inspection on 2026-09-22 found valid Apple Development and Apple Distribution identities. Apple device records exist, but none had an active tunnel (81 disconnected, one unavailable). The configured Android SDK's `adb` is available and reported zero connected devices. Receipt: `build/reports/mobile-local-access-summary-20260922.json`. These checks establish local inventory only; store access, provisioning, private-key use and actual device qualification remain unverified. No device was reset or uninstalled.

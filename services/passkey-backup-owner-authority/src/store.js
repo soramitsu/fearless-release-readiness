@@ -3,9 +3,24 @@ import { constants, closeSync, fsyncSync, lstatSync, openSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, deny } from './validation.js';
 
+const SCHEMA_VERSION = 2;
+const BACKUP_HEAD_SCHEMA = `
+CREATE TABLE backup_operations (
+ operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
+ revision INTEGER NOT NULL CHECK(revision>0), generation_id TEXT NOT NULL UNIQUE,
+ bundle_sha256 TEXT NOT NULL, key_epoch INTEGER NOT NULL CHECK(key_epoch>0),
+ drive_file_id TEXT NOT NULL UNIQUE, account_binding TEXT NOT NULL,
+ UNIQUE(owner,revision)
+) STRICT;
+CREATE INDEX backup_operations_owner ON backup_operations(owner);
+CREATE TABLE backup_heads (
+ owner TEXT PRIMARY KEY REFERENCES owners(subject), revision INTEGER NOT NULL CHECK(revision>0),
+ operation_id TEXT NOT NULL REFERENCES backup_operations(operation_id)
+) STRICT;
+`;
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=1)) STRICT;
-INSERT INTO meta VALUES(1,0,0,1);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=2)) STRICT;
+INSERT INTO meta VALUES(1,0,0,2);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -37,7 +52,16 @@ CREATE TABLE limits (bucket INTEGER PRIMARY KEY, count INTEGER NOT NULL CHECK(co
 CREATE INDEX sessions_owner ON sessions(owner);
 CREATE INDEX grants_session ON grants(session);
 CREATE INDEX ceremonies_expiry ON ceremonies(expires);
-PRAGMA user_version=1;
+${BACKUP_HEAD_SCHEMA}
+PRAGMA user_version=2;
+`;
+const MIGRATE_V1_TO_V2 = `
+${BACKUP_HEAD_SCHEMA}
+CREATE TABLE meta_v2 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=2)) STRICT;
+INSERT INTO meta_v2 SELECT id,wall,observed,2 FROM meta WHERE id=1 AND version=1;
+DROP TABLE meta;
+ALTER TABLE meta_v2 RENAME TO meta;
+PRAGMA user_version=2;
 `;
 
 function privateFile(path, directory = false) {
@@ -56,7 +80,7 @@ export class AuthorityStore {
   #anchorWall;
   #anchorMonotonic;
   #fault;
-  constructor({ path, create = false, now = Date.now, monotonic = () => Number(process.hrtime.bigint() / 1_000_000n), fault = () => {} }) {
+  constructor({ path, create = false, migrate = false, now = Date.now, monotonic = () => Number(process.hrtime.bigint() / 1_000_000n), fault = () => {} }) {
     if (!isAbsolute(path)) deny('store_unavailable');
     this.#wall = now;
     this.#monotonic = monotonic;
@@ -79,10 +103,17 @@ export class AuthorityStore {
       this.#db.exec('BEGIN IMMEDIATE');
       try {
         if (create) this.#db.exec(SCHEMA);
-        if (this.#db.prepare('PRAGMA user_version').get().user_version !== 1 ||
-            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== 1 ||
+        const oldVersion = this.#db.prepare('PRAGMA user_version').get().user_version;
+        if (!create && migrate && oldVersion === 1 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 1) {
+          this.#db.exec(MIGRATE_V1_TO_V2);
+        }
+        if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
             this.#db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
             this.#db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
+        this.#db.prepare('SELECT owner, revision, operation_id FROM backup_heads LIMIT 0').all();
+        this.#db.prepare('SELECT owner, revision, operation_id FROM backup_operations LIMIT 0').all();
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');

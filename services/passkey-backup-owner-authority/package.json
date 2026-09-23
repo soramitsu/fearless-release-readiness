@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Metadata-only owner/session/exact-request grant core with an optional partial WebAuthn verifier; no production composition or HTTP listener.",
+  "description": "Metadata-only owner/session/grant and backup-head CAS core with an optional partial WebAuthn verifier; no production composition or HTTP listener.",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint:syntax": "node --check src/authority.js && node --check src/store.js && node --check src/validation.js && node --check src/webauthn-verifier.js && node --check test/authority.test.js && node --check test/process-worker.js && node --check test/webauthn-verifier.test.js"
+    "lint:syntax": "node --check src/authority.js && node --check src/store.js && node --check src/validation.js && node --check src/webauthn-verifier.js && node --check test/authority.test.js && node --check test/generation-head.test.js && node --check test/process-worker.js && node --check test/webauthn-verifier.test.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "13.3.2"

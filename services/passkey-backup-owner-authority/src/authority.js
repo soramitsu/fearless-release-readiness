@@ -7,6 +7,10 @@ import {
 const CEREMONY_MS = 120_000;
 const SESSION_MS = 600_000;
 const GRANT_MS = 60_000;
+const MAX_BACKUP_GENERATIONS = 256;
+const SHA256_HEX = /^[a-f0-9]{64}$/;
+const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{1,256}$/;
+const DECIMAL = /^(0|[1-9][0-9]{0,15})$/;
 const unavailableVerifier = Object.freeze({
   async bootstrap() { deny('verifier_unavailable'); },
   async authentication() { deny('verifier_unavailable'); },
@@ -75,16 +79,72 @@ function publicChallenge(row) {
 function verifierContext(row) {
   return Object.freeze(publicChallenge(row));
 }
+function decimal(value, minimum = 0) {
+  if (typeof value !== 'string' || !DECIMAL.test(value)) deny('invalid_request');
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < minimum) deny('invalid_request');
+  return number;
+}
+function digest(value) {
+  if (typeof value !== 'string' || !SHA256_HEX.test(value)) deny('invalid_request');
+  return value;
+}
+function generationRequest(input) {
+  exact(input, [
+    'schemaVersion', 'operationId', 'generationId', 'backupNamespace', 'expectedHeadRevision',
+    'expectedHeadSha256', 'bundleSha256', 'keyEpoch', 'driveFileId', 'storageAccountBinding',
+  ]);
+  if (input.schemaVersion !== 1 || typeof input.backupNamespace !== 'string' ||
+      !/^backup:[A-Za-z0-9_-]{43}$/.test(input.backupNamespace)) deny('invalid_request');
+  base64(input.operationId, 32, 32);
+  base64(input.generationId, 32, 32);
+  if (input.operationId === input.generationId) deny('invalid_request');
+  const expectedRevision = decimal(input.expectedHeadRevision);
+  if (expectedRevision === 0 ? input.expectedHeadSha256 !== null : !SHA256_HEX.test(input.expectedHeadSha256)) {
+    deny('invalid_request');
+  }
+  digest(input.bundleSha256);
+  decimal(input.keyEpoch, 1);
+  if (typeof input.driveFileId !== 'string' || !DRIVE_FILE_ID.test(input.driveFileId)) deny('invalid_request');
+  digest(input.storageAccountBinding);
+  return {
+    schemaVersion: 1, operationId: input.operationId, generationId: input.generationId,
+    backupNamespace: input.backupNamespace, expectedHeadRevision: input.expectedHeadRevision,
+    expectedHeadSha256: input.expectedHeadSha256, bundleSha256: input.bundleSha256,
+    keyEpoch: input.keyEpoch, driveFileId: input.driveFileId,
+    storageAccountBinding: input.storageAccountBinding,
+  };
+}
+function generationDescriptor(row) {
+  if (!row) return null;
+  return Object.freeze({
+    headRevision: String(row.revision), generationId: row.generation_id,
+    bundleSha256: row.bundle_sha256, keyEpoch: String(row.key_epoch),
+    driveFileId: row.drive_file_id, storageAccountBinding: row.account_binding,
+  });
+}
+function backupHead(tx, owner) {
+  const current = tx.query('SELECT revision, operation_id FROM backup_heads WHERE owner=?', owner.subject);
+  if (!current) return { schemaVersion: 1, ownerSubject: owner.subject, backupNamespace: owner.namespace, head: null, previous: null };
+  const head = tx.query('SELECT * FROM backup_operations WHERE operation_id=? AND owner=? AND revision=?',
+    current.operation_id, owner.subject, current.revision);
+  if (!head) throw Error('Backup head references a missing operation');
+  const previous = current.revision > 1 ? tx.query('SELECT * FROM backup_operations WHERE owner=? AND revision=?',
+    owner.subject, current.revision - 1) : null;
+  if (current.revision > 1 && !previous) throw Error('Backup head has no retained predecessor');
+  return { schemaVersion: 1, ownerSubject: owner.subject, backupNamespace: owner.namespace,
+    head: generationDescriptor(head), previous: generationDescriptor(previous) };
+}
 
 /**
  * verifier is a server-only cryptographic adapter, never request-supplied data.
  * It is deliberately unavailable by default. See README for its exact proof
  * obligations; returning {verified:true} is not the adapter contract.
  */
-export function createOwnerAuthority({ path, create = false, audience, verifier = unavailableVerifier, now, monotonic, fault } = {}) {
+export function createOwnerAuthority({ path, create = false, migrate = false, audience, verifier = unavailableVerifier, now, monotonic, fault } = {}) {
   if (typeof audience !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(audience)) deny('invalid_configuration');
   if (!verifier || ['bootstrap', 'authentication', 'enrollment'].some((key) => typeof verifier[key] !== 'function')) deny('invalid_configuration');
-  const store = new AuthorityStore({ path, create, now, monotonic, fault });
+  const store = new AuthorityStore({ path, create, migrate, now, monotonic, fault });
   const challenge = (kind, requestedPlatform, token) => store.transaction((tx) => {
     let context;
     if (kind === 'enrollment') {
@@ -259,6 +319,58 @@ export function createOwnerAuthority({ path, create = false, audience, verifier 
       return store.transaction((tx) => {
         const current = session(tx, token);
         return { generation: bumpGeneration(tx, activeOwner(tx, current.owner, current.generation)).generation };
+      });
+    },
+    readBackupHead(token) {
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        return backupHead(tx, activeOwner(tx, current.owner, current.generation));
+      });
+    },
+    backupOperationStatus(token, operationId) {
+      base64(operationId, 32, 32);
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        const operation = tx.query('SELECT * FROM backup_operations WHERE operation_id=? AND owner=?', operationId, owner.subject);
+        return operation ? { status: 'committed', descriptor: generationDescriptor(operation) } : { status: 'absent' };
+      });
+    },
+    // Metadata CAS only. The caller must have uploaded, downloaded, unwrapped,
+    // decrypted and checked the exact immutable bytes before invoking this.
+    // This core has no HTTP route and does not claim to verify that device work.
+    commitGenerationMetadata(token, input) {
+      const request = generationRequest(input);
+      const requestHash = hash(JSON.stringify(request));
+      return store.transaction((tx) => {
+        const current = session(tx, token);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        if (request.backupNamespace !== owner.namespace) deny();
+        const priorOperation = tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId);
+        if (priorOperation) {
+          if (priorOperation.owner !== owner.subject || priorOperation.request_hash !== requestHash) deny('operation_conflict');
+          return { status: 'committed', descriptor: generationDescriptor(priorOperation) };
+        }
+        const state = backupHead(tx, owner);
+        const expectedRevision = decimal(request.expectedHeadRevision);
+        if (Number(state.head?.headRevision ?? 0) !== expectedRevision) deny('head_conflict');
+        if ((state.head?.bundleSha256 ?? null) !== request.expectedHeadSha256) deny('head_conflict');
+        const epoch = decimal(request.keyEpoch, 1);
+        if (epoch !== (state.head === null ? 1 : Number(state.head.keyEpoch))) deny('key_epoch_transition_required');
+        if (state.head && state.head.storageAccountBinding !== request.storageAccountBinding) deny('storage_account_changed');
+        const revision = expectedRevision + 1;
+        if (!Number.isSafeInteger(revision) ||
+            tx.query('SELECT count(*) AS n FROM backup_operations WHERE owner=?', owner.subject).n >= MAX_BACKUP_GENERATIONS) {
+          deny('capacity_exceeded');
+        }
+        if (tx.query('SELECT operation_id FROM backup_operations WHERE generation_id=? OR drive_file_id=?',
+          request.generationId, request.driveFileId)) deny('generation_conflict');
+        tx.run('INSERT INTO backup_operations VALUES(?,?,?,?,?,?,?,?,?)', request.operationId, owner.subject,
+          requestHash, revision, request.generationId, request.bundleSha256, epoch, request.driveFileId,
+          request.storageAccountBinding);
+        tx.run('INSERT INTO backup_heads VALUES(?,?,?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision, operation_id=excluded.operation_id',
+          owner.subject, revision, request.operationId);
+        return { status: 'committed', descriptor: generationDescriptor(tx.query('SELECT * FROM backup_operations WHERE operation_id=?', request.operationId)) };
       });
     },
   });
