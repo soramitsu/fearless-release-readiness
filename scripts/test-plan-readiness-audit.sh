@@ -863,10 +863,12 @@ write_android_repo() {
   write_file "$repo/scripts/ensure-fearless-utils.sh" \
     "#!/usr/bin/env bash" \
     'export GIT_NO_REPLACE_OBJECTS=1' \
-    'EXPECTED_COMMIT="${FEARLESS_UTILS_COMMIT:-7500809f33243ee47ecb2ec8563fc284ac4de0d6}"' \
+    'EXPECTED_COMMIT="${FEARLESS_UTILS_COMMIT:-1c80a2bf3fa1f996cf1328873e09f282ee29b69e}"' \
     'FEARLESS_UTILS_LIBRARY_ONLY="${FEARLESS_UTILS_LIBRARY_ONLY:-false}"' \
     'git hash-object --no-filters source.txt' \
-    'echo "pinned HEAD plus the committed library-only overlay"' \
+    'echo "index differs from pinned HEAD"' \
+    'echo '\''index_matches_worktree "$head_index"'\''' \
+    'echo "never applies a patch"' \
     "echo \"\$EXPECTED_COMMIT \$FEARLESS_UTILS_LIBRARY_ONLY\""
   write_file "$repo/scripts/test-fearless-utils-derived-tree.sh" \
     "#!/usr/bin/env bash" \
@@ -875,15 +877,14 @@ write_android_repo() {
     "#!/usr/bin/env bash" \
     "echo 'android-public-dependency-upstream-delta'" \
     "echo 'publicCompatibilityModules'" \
-    "echo 'patchTouchedPaths'" \
-    "echo 'scripts/fearless-utils-library-only.patch'" \
+    "echo \"sourceMode: 'pristine-committed-source'\"" \
     "echo 'soramitsu/fearless-utils-Android'"
   write_file "$repo/scripts/test-public-dependency-upstream-delta-export.sh" \
     "#!/usr/bin/env bash" \
-    "echo 'missing overlay patch'" \
+    "echo 'obsolete overlay was exported'" \
     "echo 'missing compatibility module'" \
     "echo 'unparseable utils pin'" \
-    "echo 'patch outside upstream scope'"
+    "echo 'missing derived-tree self-test'"
   write_file "$repo/scripts/audit-xcm-registry-metadata.sh" \
     "#!/usr/bin/env bash" \
     "requireExecutable=true" \
@@ -1153,7 +1154,7 @@ write_android_repo() {
     "jobs:" \
     "  test:" \
     "    env:" \
-    "      FEARLESS_UTILS_COMMIT: 7500809f33243ee47ecb2ec8563fc284ac4de0d6" \
+    "      FEARLESS_UTILS_COMMIT: 1c80a2bf3fa1f996cf1328873e09f282ee29b69e" \
     '      FEARLESS_UTILS_PATH: ${{ github.workspace }}/fearless-utils-Android' \
     "      FORCE_LOCAL_UTILS: \"true\"" \
     "      FEARLESS_UTILS_LIBRARY_ONLY: \"true\"" \
@@ -1193,7 +1194,7 @@ write_android_repo() {
     "jobs:" \
     "  release:" \
     "    env:" \
-    "      FEARLESS_UTILS_COMMIT: 7500809f33243ee47ecb2ec8563fc284ac4de0d6" \
+    "      FEARLESS_UTILS_COMMIT: 1c80a2bf3fa1f996cf1328873e09f282ee29b69e" \
     '      FEARLESS_UTILS_PATH: ${{ github.workspace }}/fearless-utils-Android' \
     "      FORCE_LOCAL_UTILS: \"true\"" \
     "      FEARLESS_UTILS_LIBRARY_ONLY: \"true\"" \
@@ -1779,6 +1780,27 @@ write_android_repo() {
     mkdir -p "$repo/$(dirname "$relative_path")"
     cp "$fixture_source/$relative_path" "$repo/$relative_path"
   done
+
+  # The retained migration fixture supplies workflow structure, but the
+  # consolidated candidate owns the reviewed fearless-utils source revision.
+  python3 - "$repo/.github/workflows/android-ci.yml" "$repo/.github/workflows/android-release.yml" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+pin = "1c80a2bf3fa1f996cf1328873e09f282ee29b69e"
+for name in sys.argv[1:]:
+    path = Path(name)
+    source = path.read_text()
+    updated, count = re.subn(
+        r"FEARLESS_UTILS_COMMIT:[ \t]*[0-9a-f]{40}",
+        f"FEARLESS_UTILS_COMMIT: {pin}",
+        source,
+    )
+    if count == 0:
+        raise SystemExit(f"missing fixture fearless-utils workflow pin: {name}")
+    path.write_text(updated)
+PY
 
   # Keep the migration fixture aligned with the current aggregate inventory
   # while the dedicated migration checkout still carries the predecessor
@@ -7914,7 +7936,7 @@ write_root_readiness_scripts() {
 	'echo "Upstream or vendor every carried iOS shared-features/native-crypto delta"' \
 	'echo "requires_external_action_for_slug() ios-shared-features-delta"' \
 	'echo "ios-delta-blocked expected --skip-live to retain blocked iOS shared-features diagnostics"' \
-	    'write_blocker_report() { echo "# Release Readiness Blockers"; echo "Recommended action"; echo "Requires external action:"; echo "Unblock category:"; echo "External prerequisite:"; echo "Verification command:"; echo "Get every PR in config/release-readiness-prs.tsv approved"; echo "all GitHub review conversations resolved including outdated unresolved threads"; echo "resolve-release-pr-review-threads.sh --dry-run"; echo "merge-release-prs.sh --dry-run"; echo "Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift"; echo "Android public artifact boundary and handoff bundle"; echo "public dependency upstream handoff bundle"; echo "Restore the iOS shared-features delta self-test/report gate"; echo "Record the passkey backup image digest"; echo "healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json"; echo "independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate"; echo "PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate"; echo "AAB upload-key evidence is rejected"; echo "absence or mismatch keeps passkey flags disabled"; echo "live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "keep Android/iOS passkey backup flags disabled"; echo "Pin NEXUS_EXPECTED_BUILD_COMMIT in config/iroha-release-readiness.env to the exact deployed Iroha build"; echo "bounded, non-redirecting HTTP 200 application/json Torii/Nexus status response with fresh observed_at_ms and last_block_committed_at_ms"; echo "exact ordered SORA routing policy (default 0/0, governance 1/1, smartcontract::deploy 2/2)"; echo "unsealed dataspace_catalog containing ready canonical 0/0, 1/1, and 2/2 targets"; echo "Nexus route publication, canary, and wallet live transfer smoke evidence"; echo "Record E2E transfer evidence for every required Android XCM route"; echo "xcm-production-evidence.json, with one record per scripts/xcm-required-routes.tsv route"; echo "0x-prefixed 32-byte extrinsicHash"; echo "--require-gap-file scripts/xcm-discovery-only-routes.tsv"; echo "Run a funded Bitcoin testnet send through the web wallet smoke flow"; echo "confirmed indexer status.block_time proof"; echo "evidence timestamp is at or after the confirmed block time"; echo "registry/mainnet.json with reviewed non-placeholder mainnet contract addresses"; echo "Record the TI Docker image digest"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=ti.soramitsu.io with TON mainnet identity"; echo "healthInfo.serviceId=ti.soramitsu.io"; echo "healthInfo.lastMasterSeqno"; echo "Record the SI Docker image digest"; echo "Deploy the current SI image with Solana mainnet configuration"; echo "Current SI image deployed with Solana mainnet configuration"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with solana mainnet identity"; echo "healthInfo.ok=true with healthInfo.serviceId=si.soramitsu.io"; echo "PI production smoke is failing at https://pi.soramitsu.io/graphql until the current image is deployed"; echo "Record operator-attested evidence only after the current-image production smoke passes"; echo "Record the PI Docker image digest"; echo "health.service=polkaswap-indexer"; echo "health.serviceId=ti.soramitsu.io"; echo "TI production smoke also requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=ti.soramitsu.io"; echo "chainId=ton:mainnet"; echo "OpenAPI title TONSWAP Indexer API"; echo "health no longer advertises api.testnet.solana.com"; echo "SI production smoke requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=si.soramitsu.io"; echo "chainId=solana:mainnet"; echo "OpenAPI title Solswap Indexer API"; echo "Deploy the current polkaswap-indexer image to https://pi.soramitsu.io/graphql"; echo "health.serviceId=pi.soramitsu.io"; echo "health.schemaVersion=1"; echo "health.ecosystem=sora2"; echo "health.chainId=sora:mainnet"; echo "health.publicBaseUrl=https://pi.soramitsu.io/graphql"; echo "TON and Solana/Solswap indexer contracts"; }' \
+	    'write_blocker_report() { echo "# Release Readiness Blockers"; echo "Recommended action"; echo "Requires external action:"; echo "Unblock category:"; echo "External prerequisite:"; echo "Verification command:"; echo "Get every PR in config/release-readiness-prs.tsv approved"; echo "all GitHub review conversations resolved including outdated unresolved threads"; echo "resolve-release-pr-review-threads.sh --dry-run"; echo "merge-release-prs.sh --dry-run"; echo "Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift"; echo "Android public artifact boundary and handoff bundle"; echo "public dependency upstream handoff bundle"; echo "Restore the iOS shared-features delta self-test/report gate"; echo "Record the passkey backup image digest"; echo "healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json"; echo "independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate"; echo "PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate"; echo "AAB upload-key evidence is rejected"; echo "absence or mismatch keeps passkey flags disabled"; echo "live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1"; echo "keep Android/iOS passkey backup flags disabled"; echo "Pin NEXUS_EXPECTED_BUILD_COMMIT in config/iroha-release-readiness.env to the exact deployed Iroha build"; echo "bounded, non-redirecting HTTP 200 application/json Torii/Nexus status response with fresh observed_at_ms and last_block_committed_at_ms"; echo "exact ordered SORA routing policy (default 0/0, governance 1/1, smartcontract::deploy 2/2)"; echo "unsealed dataspace_catalog containing ready canonical 0/0, 1/1, and 2/2 targets"; echo "Nexus route publication, canary, and wallet live transfer smoke evidence"; echo "Record E2E transfer evidence for every required Android XCM route"; echo "xcm-production-evidence.json, with one record per scripts/xcm-required-routes.tsv route"; echo "0x-prefixed 32-byte extrinsicHash"; echo "--require-gap-file scripts/xcm-discovery-only-routes.tsv"; echo "Run a funded Bitcoin testnet send through the web wallet smoke flow"; echo "confirmed indexer status.block_time proof"; echo "evidence timestamp is at or after the confirmed block time"; echo "registry/mainnet.json with reviewed non-placeholder mainnet contract addresses"; echo "Record the TI Docker image digest"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=ti.soramitsu.io with TON mainnet identity"; echo "healthInfo.serviceId=ti.soramitsu.io"; echo "healthInfo.lastMasterSeqno"; echo "Record the SI Docker image digest"; echo "Deploy the current SI image with Solana mainnet configuration"; echo "Current SI image deployed with Solana mainnet configuration"; echo "serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with solana mainnet identity"; echo "healthInfo.ok=true with healthInfo.serviceId=si.soramitsu.io"; echo "PI production smoke is failing at https://pi.soramitsu.io/graphql until the current image is deployed"; echo "Record operator-attested evidence only after the current-image production smoke passes"; echo "Record the PI Docker image digest"; echo "health.service=polkaswap-indexer"; echo "health.serviceId=ti.soramitsu.io"; echo "TI production smoke also requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=ti.soramitsu.io"; echo "chainId=ton:mainnet"; echo "OpenAPI title TONSWAP Indexer API"; echo "health no longer advertises api.testnet.solana.com"; echo "SI production smoke requires serviceInfo.schemaVersion=1, serviceInfo.serviceId=si.soramitsu.io"; echo "chainId=solana:mainnet"; echo "OpenAPI title Solswap Indexer API"; echo "Deploy the current polkaswap-indexer image to https://pi.soramitsu.io/graphql"; echo "health.serviceId=pi.soramitsu.io"; echo "health.schemaVersion=1"; echo "health.ecosystem=sora2"; echo "health.chainId=sora:mainnet"; echo "health.publicBaseUrl=https://pi.soramitsu.io/graphql"; echo "TON and Solana/Solswap indexer contracts"; }' \
 	    "echo 'serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with Solana mainnet identity'" \
 	    "echo 'healthInfo with ok=true, serviceId=si.soramitsu.io'" \
 	    "echo 'syncedAt as an integer no more than 120 seconds before and no more than 30 seconds after smokePassedAt'" \
@@ -8063,7 +8085,7 @@ write_root_readiness_scripts() {
     'validate_release_cleanup_target() { return 0; }' \
     'rm -f "$template_report" "$release_template_report"' \
     'run_polkaswap_deployment_evidence() { template_report="build/reports/production-deployment-evidence-template.json"; "$YARN_BIN" generate:deployment-evidence-template --output "$template_report"; "$YARN_BIN" audit:deployment-evidence --require-ready; }' \
-    'run_android_public_dependency_provenance() { cd fearless-Android; FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android ./scripts/ensure-fearless-utils.sh; bash ./scripts/test-public-dependency-upstream-delta-export.sh; bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta; ./scripts/audit-public-artifacts.sh --strict-provenance; }' \
+    'run_android_public_dependency_provenance() { cd fearless-Android; FEARLESS_UTILS_PATH="$ROOT_DIR/fearless-utils-Android-production-20260922" FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android ./scripts/ensure-fearless-utils.sh; bash ./scripts/test-public-dependency-upstream-delta-export.sh; bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta; ./scripts/audit-public-artifacts.sh --strict-provenance; }' \
     'run_ios_shared_features_delta() { cd fearless-iOS; bash scripts/deps/test-shared-features-delta-report.sh; local -a readiness_args=(); if [[ "$RUN_LIVE" == true ]]; then readiness_args+=(--require-ready); fi; bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json "${readiness_args[@]}"; }' \
     "run_check_with_network_retries \"GitHub governance\" \"github-governance\" run_github_governance" \
     "RELEASE_READINESS_NETWORK_ATTEMPTS" \
@@ -10107,7 +10129,7 @@ perl -0pi -e 's/Docker action is not pinned by sha256 digest/Docker tags accepte
 expect_failure "missing workflow action Docker digest gate" "root workflow action Docker digest gate missing"
 
 reset_fixture
-perl -0pi -e 's#fearless-site-web-app-associations-20260726/scripts/verify-app-associations\.mjs#fearless-site-web-app-associations-20260726/scripts/weaker-live-check.mjs#' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's#fearless-site-web-app-associations-20260726/scripts/verify-app-associations\.mjs#fearless-site-web-app-associations-20260726/scripts/weaker-live-check.mjs#g' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "missing strict live site association aggregate gate" "root aggregate audit strict live site association verifier missing"
 
 reset_fixture
@@ -10119,7 +10141,7 @@ perl -0pi -e 's/fs\.realpathSync\(args\[1\]\) === fs\.realpathSync\(siteRoot\)/t
 expect_failure "missing strict live site association source-root assertion fixture" "root aggregate audit live site association source-root assertion fixture missing"
 
 reset_fixture
-perl -0pi -e 's#--live-base-url https://fearlesswallet\.io#--live-base-url https://staging.fearlesswallet.io#' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's#--live-base-url https://fearlesswallet\.io#--live-base-url https://staging.fearlesswallet.io#g' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "noncanonical live site association aggregate URL" "root aggregate audit canonical live site association URL missing"
 
 reset_fixture
@@ -11015,7 +11037,7 @@ rm "$workspace/fearless-Android/scripts/test-public-dependency-upstream-delta-ex
 expect_failure "missing Android public dependency handoff exporter self-test" "fearless-Android public dependency upstream handoff exporter self-test missing"
 
 reset_fixture
-perl -0pi -e 's/\n      FEARLESS_UTILS_COMMIT: 7500809f33243ee47ecb2ec8563fc284ac4de0d6//' "$workspace/fearless-Android/.github/workflows/android-ci.yml"
+perl -0pi -e 's/\n      FEARLESS_UTILS_COMMIT: 1c80a2bf3fa1f996cf1328873e09f282ee29b69e//' "$workspace/fearless-Android/.github/workflows/android-ci.yml"
 expect_failure "missing Android pinned fearless-utils commit" "fearless-Android main CI pinned fearless-utils commit missing"
 
 reset_fixture
@@ -18175,7 +18197,7 @@ perl -0pi -e 's/android-public-dependency-provenance/android-public-dependency-d
 expect_failure "missing aggregate Android public dependency provenance summary slug" "root aggregate audit Android public dependency provenance summary slug missing"
 
 reset_fixture
-perl -0pi -e 's/Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift/Restore Android dependency drift/' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's/Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift/Restore Android dependency drift/' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "missing aggregate Android public dependency blocker action" "root aggregate audit Android public dependency blocker action missing"
 
 reset_fixture
@@ -20608,7 +20630,7 @@ perl -0pi -e 's/bash scripts\/audit-release-readiness\.sh/source publication aud
 expect_failure "incomplete source publication verification command" "root aggregate tested-source complete verification command missing"
 
 reset_fixture
-perl -0pi -e 's/FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6/FEARLESS_UTILS_COMMIT=0000000000000000000000000000000000000000/' "$workspace/scripts/audit-release-readiness.sh"
+perl -0pi -e 's/FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e/FEARLESS_UTILS_COMMIT=0000000000000000000000000000000000000000/g' "$workspace/scripts/audit-release-readiness.sh"
 expect_failure "Android fearless-utils commit pin drift" "root aggregate audit canonical Android fearless-utils commit missing"
 
 reset_fixture

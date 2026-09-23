@@ -863,7 +863,7 @@ recommended_action_for_slug() {
       printf '%s' "Remove private product-source drift and keep only allowed release overlay files, then rerun bash scripts/audit-private-overlay-readiness.sh."
       ;;
     android-public-dependency-provenance)
-      printf '%s' "Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android."
+      printf '%s' "Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android-production-20260922 ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android-production-consolidated-20260731."
       ;;
     ios-shared-features-delta)
       printf '%s' "Upstream or vendor every carried iOS shared-features/native-crypto delta, remove post-resolution checkout mutation, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready in fearless-iOS."
@@ -941,7 +941,7 @@ verification_command_for_slug() {
       printf '%s' "bash scripts/audit-private-overlay-readiness.sh"
       ;;
     android-public-dependency-provenance)
-      printf '%s' "cd fearless-Android && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance"
+      printf '%s' "cd fearless-Android-production-consolidated-20260731 && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android-production-20260922 FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance"
       ;;
     ios-shared-features-delta)
       printf '%s' "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
@@ -2221,8 +2221,8 @@ run_private_overlays() {
 run_android_public_dependency_provenance() {
   cd "$ANDROID_CANDIDATE_ROOT"
   bash ./scripts/test-fearless-utils-derived-tree.sh
-  FEARLESS_UTILS_PATH="$ROOT_DIR/fearless-utils-Android" \
-    FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 \
+  FEARLESS_UTILS_PATH="$ROOT_DIR/fearless-utils-Android-production-20260922" \
+    FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e \
     FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android \
     FEARLESS_UTILS_LIBRARY_ONLY=true \
     ./scripts/ensure-fearless-utils.sh

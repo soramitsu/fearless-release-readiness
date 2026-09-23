@@ -44,6 +44,25 @@ replacement-device recovery or capped funded evidence.
 
 ## Current source checkpoint — 2026-09-24
 
+The shipping-manifest audit now selects the clean Android Utils checkout at
+`1c80a2bf3fa1f996cf1328873e09f282ee29b69e` and rejects dependency
+commits or trees that differ from the exact Android runtime pins, iOS source
+contracts, Swift package declarations and both iOS resolver files. It also
+rejects hidden dependency index flags and substituted effective Git origins.
+The aggregate Android public-dependency gate now uses that same source pin;
+the older `7500809...` commit remains only as provenance for already vendored
+SR25519 native binaries. Synthetic shipping-manifest tests pass 21/21; the
+clean Utils checkout passed its strict source check, derived-tree tests,
+public dependency handoff tests and strict binary provenance audit. No final
+shipping manifest has been issued: the enabled features, exact distribution
+artifacts and acceptance evidence are still unavailable. The aggregate
+release-audit fixture passes 239 scenarios, including rejection of a shipping
+manifest mismatch before live passkey smoke. The real full-live and static
+plan audits remain red on separate candidate and external qualification gaps.
+The static audit no longer reports the five obsolete Android Utils/patch
+expectations; 38 other Android warnings remain across IAS, migration/Play,
+XCM, Iroha readiness and the native passkey ceremony.
+
 The latest pushed Android candidate is
 `86b498992bacd39a96d089e3356b77b3ff476cdf` on
 [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260). Its

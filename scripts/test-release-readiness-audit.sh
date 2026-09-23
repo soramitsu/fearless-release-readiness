@@ -100,6 +100,9 @@ setup_fixture() {
   write_file "$workspace/scripts/audit-passkey-enabled-acceptance.mjs" \
     'if (process.env.FAKE_RELEASE_SCENARIO === "passkey-enabled-acceptance-fail") { console.error("passkey enabled acceptance evidence missing"); process.exit(1) }' \
     'console.log("passkey enabled acceptance fixture passed")'
+  write_file "$workspace/scripts/audit-release-shipping-manifest.mjs" \
+    'if (process.env.FAKE_RELEASE_SCENARIO === "shipping-manifest-fail") { console.error("shipping manifest dependency pin mismatch"); process.exit(1) }' \
+    'console.log("shipping manifest fixture passed")'
   write_fake_audit_script "$workspace/scripts/audit-plan-readiness.sh" "plan-fail,multi-fail"
   write_fake_audit_script "$workspace/scripts/audit-github-governance.sh" "github-fail,live-fail"
   write_fake_audit_script "$workspace/scripts/audit-release-pr-readiness.sh" "release-pr-fail,live-fail,multi-fail"
@@ -474,8 +477,8 @@ setup_fixture() {
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
     'scenario="${FAKE_RELEASE_SCENARIO:-good}"' \
-    'expected_path="${PWD%/fearless-Android}/fearless-utils-Android"' \
-    'if [[ "${FEARLESS_UTILS_PATH:-}" != "$expected_path" || "${FEARLESS_UTILS_COMMIT:-}" != "7500809f33243ee47ecb2ec8563fc284ac4de0d6" || "${FEARLESS_UTILS_REPOSITORY:-}" != "soramitsu/fearless-utils-Android" ]]; then' \
+    'expected_path="${PWD%/fearless-Android}/fearless-utils-Android-production-20260922"' \
+    'if [[ "${FEARLESS_UTILS_PATH:-}" != "$expected_path" || "${FEARLESS_UTILS_COMMIT:-}" != "1c80a2bf3fa1f996cf1328873e09f282ee29b69e" || "${FEARLESS_UTILS_REPOSITORY:-}" != "soramitsu/fearless-utils-Android" ]]; then' \
     '  echo "fearless-utils canonical identity was not pinned: path=${FEARLESS_UTILS_PATH:-<unset>} commit=${FEARLESS_UTILS_COMMIT:-<unset>} repository=${FEARLESS_UTILS_REPOSITORY:-<unset>}" >&2' \
     '  exit 1' \
     'fi' \
@@ -2110,7 +2113,7 @@ assert_summary "single Android public dependency provenance failure" failed true
   ios-shared-features-delta=passed
 assert_blocker_report "single Android public dependency provenance failure" \
   "android-public-dependency-provenance" \
-  "Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift" \
+  "Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift" \
   "fearless-utils provenance failed for forced fixture"
 
 setup_fixture
@@ -2293,6 +2296,17 @@ grep -q "passkey enabled acceptance evidence missing" "$report_dir/passkey-produ
   fail "enabled acceptance failure must remain visible in the production smoke log"
 assert_summary "enabled passkey acceptance is mandatory after successful smoke" failed true 1 0 \
   passkey-backup-prerequisites=passed \
+  passkey-production-smoke=failed \
+  iroha-release-readiness=passed
+
+setup_fixture
+expect_failure "shipping manifest is mandatory before live passkey smoke" shipping-manifest-fail "Passkey production smoke"
+grep -q "shipping manifest dependency pin mismatch" "$report_dir/passkey-production-smoke.log" ||
+  fail "shipping manifest failure must remain visible in the production smoke log"
+if grep -q "passkey production smoke passed" "$report_dir/passkey-production-smoke.log"; then
+  fail "passkey production smoke ran despite a shipping manifest mismatch"
+fi
+assert_summary "shipping manifest is mandatory before live passkey smoke" failed true 1 0 \
   passkey-production-smoke=failed \
   iroha-release-readiness=passed
 

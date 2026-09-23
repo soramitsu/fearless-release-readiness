@@ -16,10 +16,20 @@ const COMMIT = /^[a-f0-9]{40}$/u;
 const DIGEST = /^[a-f0-9]{64}$/u;
 const RELEASE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{7,63}$/u;
 const DEPENDENCIES = new Map([
-  ['android-utils', 'fearless-utils-Android'],
+  ['android-utils', 'fearless-utils-Android-production-20260922'],
   ['android-websocket', 'fearless-nv-websocket-production-20260922'],
   ['ios-shared-features', 'shared-features-spm-production-20260922'],
   ['ios-starscream', 'fearless-starscream-production-20260922'],
+]);
+const DEPENDENCY_REPOSITORIES = new Map([
+  ['android-utils', 'soramitsu/fearless-utils-Android'],
+  ['android-websocket', 'soramitsu/fearless-nv-websocket-client'],
+  ['ios-shared-features', 'soramitsu/shared-features-spm'],
+  ['ios-starscream', 'soramitsu/fearless-starscream'],
+]);
+const IOS_SOURCE_CONTRACTS = new Map([
+  ['ios-shared-features', ['config/shared-features-source.json', 'https://github.com/soramitsu/shared-features-spm.git']],
+  ['ios-starscream', ['config/starscream-source.json', 'https://github.com/soramitsu/fearless-starscream']],
 ]);
 const FILES = new Map([
   ['passkey-policy', 'config/passkey-backup-production.json'],
@@ -164,7 +174,10 @@ function validateAndroidRoutes(root, files) {
     'Android compiled local-chain digest mismatch');
 }
 function git(directory, ...args) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const env = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
+    GIT_NO_REPLACE_OBJECTS: '1',
+  };
   const result = spawnSync('/usr/bin/git', ['-C', directory, ...args], {
     env, encoding: 'utf8', timeout: 20_000, maxBuffer: 1024 * 1024,
   });
@@ -177,6 +190,101 @@ function gitIdentity(directory, branch, commit, label) {
   assert.equal(git(directory, 'symbolic-ref', '--quiet', '--short', 'HEAD'), branch, `${label} branch mismatch`);
   assert.equal(git(directory, 'rev-parse', 'HEAD'), commit, `${label} source commit mismatch`);
   assert.equal(git(directory, 'status', '--porcelain=v1', '--untracked-files=all'), '', `${label} source is dirty`);
+}
+function dependency(manifest, role) {
+  return manifest.dependencies.find((row) => row.role === role);
+}
+function dependencyDirectory(root, manifest, role) {
+  return checkoutDirectory(root, dependency(manifest, role).path, role);
+}
+function dependencyIndexFlags(directory, role) {
+  const entries = git(directory, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
+  assert.ok(entries.length > 0, `${role} tracked source is empty`);
+  assert.ok(entries.every((entry) => entry.startsWith('H ')),
+    `${role} source index flags hide tracked files`);
+}
+function dependencyRepository(directory, role) {
+  const repository = DEPENDENCY_REPOSITORIES.get(role);
+  const configured = git(directory, 'config', '--null', '--get-all', 'remote.origin.url')
+    .split('\0').filter(Boolean);
+  assert.equal(configured.length, 1, `${role} configured origin URL count mismatch`);
+  const effective = git(directory, 'remote', 'get-url', '--all', 'origin').split('\n');
+  assert.equal(effective.length, 1, `${role} effective origin URL count mismatch`);
+  const expected = [
+    `https://github.com/${repository}`, `https://github.com/${repository}.git`,
+    `git@github.com:${repository}`, `git@github.com:${repository}.git`,
+    `ssh://git@github.com/${repository}`, `ssh://git@github.com/${repository}.git`,
+  ];
+  assert.ok(expected.includes(configured[0]), `${role} configured origin repository mismatch`);
+  assert.ok(expected.includes(effective[0]), `${role} effective origin repository mismatch`);
+}
+function pinnedJson(root, relative, label) {
+  return JSON.parse(readFile(regularFile(root, relative, label)).toString('utf8'));
+}
+function validateAndroidDependencyPins(root, manifest) {
+  const pins = pinnedJson(root,
+    'fearless-Android-production-consolidated-20260731/config/android-runtime-source-pins.json',
+    'Android runtime source pins');
+  keys(pins, ['schemaVersion', 'utils', 'websocket'], 'Android runtime source pins');
+  assert.equal(pins.schemaVersion, 1, 'Android runtime source pin schema mismatch');
+  for (const [role, name] of [['android-utils', 'utils'], ['android-websocket', 'websocket']]) {
+    const pin = pins[name];
+    keys(pin, ['repository', 'commit', 'tree'], `${role} runtime pin`);
+    assert.equal(pin.repository, DEPENDENCY_REPOSITORIES.get(role), `${role} runtime repository mismatch`);
+    matches(pin.commit, COMMIT, `${role} runtime commit`);
+    matches(pin.tree, COMMIT, `${role} runtime tree`);
+    assert.equal(dependency(manifest, role).sourceCommit, pin.commit, `${role} runtime commit mismatch`);
+    assert.equal(git(dependencyDirectory(root, manifest, role), 'rev-parse', 'HEAD^{tree}'),
+      pin.tree, `${role} runtime tree mismatch`);
+  }
+}
+function sourceContract(root, manifest, role) {
+  const [relative, repository] = IOS_SOURCE_CONTRACTS.get(role);
+  const contract = pinnedJson(root, `fearless-iOS-production-consolidated-20260731/${relative}`, `${role} source contract`);
+  assert.equal(contract.schema, 1, `${role} source contract schema mismatch`);
+  assert.equal(contract.repository, repository, `${role} source repository mismatch`);
+  matches(contract.revision, COMMIT, `${role} source revision`);
+  matches(contract.tree, COMMIT, `${role} source tree`);
+  assert.equal(contract.revision, dependency(manifest, role).sourceCommit, `${role} source revision mismatch`);
+  assert.equal(contract.tree, git(dependencyDirectory(root, manifest, role), 'rev-parse', 'HEAD^{tree}'),
+    `${role} source tree mismatch`);
+  return contract;
+}
+function swiftPackageRevision(root, relative, expression, label, expected) {
+  const source = readFile(regularFile(root, relative, label), 4 * 1024 * 1024).toString('utf8');
+  const revisions = [...source.matchAll(expression)].map((match) => match[1]);
+  assert.deepEqual(revisions, [expected], `${label} revision mismatch`);
+}
+function validateIosDependencyPins(root, manifest) {
+  const shared = sourceContract(root, manifest, 'ios-shared-features');
+  const starscream = sourceContract(root, manifest, 'ios-starscream');
+  for (const kind of ['ios-workspace-packages', 'ios-project-packages']) {
+    const resolved = pinnedJson(root, FILES.get(kind), kind);
+    assert.ok(Array.isArray(resolved.pins), `${kind} pins missing`);
+    for (const [role, identity, contract] of [
+      ['ios-shared-features', 'shared-features-spm', shared],
+      ['ios-starscream', 'fearless-starscream', starscream],
+    ]) {
+      const matches = resolved.pins.filter((pin) => pin.identity === identity);
+      assert.equal(matches.length, 1, `${kind} ${identity} pin coverage mismatch`);
+      const pin = matches[0];
+      keys(pin, ['identity', 'kind', 'location', 'state'], `${kind} ${identity} pin`);
+      keys(pin.state, ['revision'], `${kind} ${identity} state`);
+      assert.equal(pin.kind, 'remoteSourceControl', `${kind} ${identity} source kind mismatch`);
+      assert.equal(pin.location, contract.repository, `${kind} ${identity} repository mismatch`);
+      assert.equal(pin.state.revision, dependency(manifest, role).sourceCommit,
+        `${kind} ${identity} revision mismatch`);
+    }
+  }
+  swiftPackageRevision(root, 'fearless-iOS-production-consolidated-20260731/Packages/FearlessUtilsCompat/Package.swift',
+    /\.package\(url:\s*"https:\/\/github\.com\/soramitsu\/shared-features-spm\.git",\s*revision:\s*"([a-f0-9]{40})"\)/gu,
+    'FearlessUtilsCompat shared-features source', shared.revision);
+  swiftPackageRevision(root, 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.pbxproj',
+    /repositoryURL = "https:\/\/github\.com\/soramitsu\/shared-features-spm\.git";\s*requirement = \{\s*kind = revision;\s*revision = ([a-f0-9]{40});\s*\};/gu,
+    'iOS project shared-features source', shared.revision);
+  swiftPackageRevision(dependencyDirectory(root, manifest, 'ios-shared-features'), 'Package.swift',
+    /\.package\(url:\s*"https:\/\/github\.com\/soramitsu\/fearless-starscream",\s*\.revision\("([a-f0-9]{40})"\)\)/gu,
+    'shared-features Starscream source', starscream.revision);
 }
 function rows(list, names, label, sourceBound = false) {
   assert.ok(Array.isArray(list) && list.length === names.size, `${label} coverage mismatch`);
@@ -322,10 +430,14 @@ export function auditReleaseShippingManifest(root = ROOT) {
   for (const row of manifest.dependencies) {
     const directory = checkoutDirectory(root, row.path, row.role);
     gitIdentity(directory, git(directory, 'symbolic-ref', '--quiet', '--short', 'HEAD'), row.sourceCommit, row.role);
+    dependencyIndexFlags(directory, row.role);
+    dependencyRepository(directory, row.role);
   }
   for (const row of [...manifest.files, ...manifest.artifacts, ...manifest.evidence]) {
     assert.equal(sha256(regularFile(root, row.path, row.kind)), row.sha256, `${row.kind} digest mismatch`);
   }
+  validateAndroidDependencyPins(root, manifest);
+  validateIosDependencyPins(root, manifest);
   validateAndroidRoutes(root, manifest.files);
   return { releaseId: manifest.releaseId, manifestSha256: createHash('sha256').update(manifestBytes).digest('hex') };
 }
