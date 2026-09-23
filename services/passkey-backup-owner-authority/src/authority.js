@@ -14,6 +14,7 @@ const GENERATION_COMMIT_SCOPE = 'passkey.backup.generation.commit';
 const MAX_BACKUP_GENERATIONS = 256;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{1,256}$/;
+const LEGACY_STORAGE_KEY = /^[A-Za-z0-9._:-]{8,128}$/;
 const DECIMAL = /^(0|[1-9][0-9]{0,15})$/;
 const unavailableVerifier = Object.freeze({
   async bootstrap() { deny('verifier_unavailable'); },
@@ -44,6 +45,10 @@ function activeCredential(tx, id, subject) {
   const credential = tx.query('SELECT * FROM credentials WHERE id=?', id);
   if (!credential || credential.revoked !== 0 || (subject && credential.owner !== subject)) deny();
   return credential;
+}
+function boundLegacyStorage(tx, storageKey, subject) {
+  const binding = tx.query('SELECT owner FROM storage_bindings WHERE storage_key=?', storageKey);
+  if (!binding || binding.owner !== subject) deny();
 }
 function session(tx, token) {
   const digest = hash(opaque(token, 'session.'));
@@ -176,12 +181,14 @@ function challengeMutationRequest(request, rawBody) {
     exact(body, ['storageKey', 'credentialId', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
     if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
     base64(body.credentialId, 1, 384);
-    return { kind: 'revoke', credentialId: body.credentialId };
+    if (typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
+    return { kind: 'revoke', credentialId: body.credentialId, storageKey: body.storageKey };
   }
   if (request.path === revokeAll) {
     exact(body, ['storageKey', 'rpId', 'schemaVersion', 'confirmFinalRecoveryRemoval']);
     if (body.rpId !== RP_ID || body.schemaVersion !== 1 || body.confirmFinalRecoveryRemoval !== true) deny('invalid_request');
-    return { kind: 'revoke-all' };
+    if (typeof body.storageKey !== 'string' || !LEGACY_STORAGE_KEY.test(body.storageKey)) deny('invalid_request');
+    return { kind: 'revoke-all', storageKey: body.storageKey };
   }
   deny('invalid_request');
 }
@@ -415,13 +422,23 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
             verified.newCounter, Number(verified.backedUp), credential.id);
           result = { status: 'authenticated', credentialId: credential.id, counter: verified.newCounter };
         } else if (target.kind === 'revoke') {
+          boundLegacyStorage(tx, target.storageKey, owner.subject);
           activeCredential(tx, target.credentialId, owner.subject);
+          if (!tx.query('SELECT credential_id FROM legacy_credential_metadata WHERE credential_id=? AND storage_key=?',
+            target.credentialId, target.storageKey)) deny();
           tx.run('UPDATE credentials SET revoked=1 WHERE id=?', target.credentialId);
-          const remaining = tx.query('SELECT count(*) AS n FROM credentials WHERE owner=? AND revoked=0', owner.subject).n;
+          const remaining = tx.query('SELECT count(*) AS n FROM credentials c JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE m.storage_key=? AND c.revoked=0', target.storageKey).n;
           result = { status: 'revoked', credentialId: target.credentialId,
             remainingCredentials: remaining, generation: bumpGeneration(tx, owner).generation };
         } else {
-          tx.run('UPDATE credentials SET revoked=1 WHERE owner=?', owner.subject);
+          boundLegacyStorage(tx, target.storageKey, owner.subject);
+          // Legacy revoke-all is scoped to one storageKey, not the entire
+          // random owner. An active credential with no proven key mapping
+          // would make a successful "all" response ambiguous, so deny it.
+          if (tx.query('SELECT 1 FROM credentials c LEFT JOIN legacy_credential_metadata m ON m.credential_id=c.id WHERE c.owner=? AND c.revoked=0 AND m.credential_id IS NULL LIMIT 1',
+            owner.subject)) deny();
+          tx.run('UPDATE credentials SET revoked=1 WHERE owner=? AND id IN (SELECT credential_id FROM legacy_credential_metadata WHERE storage_key=?)',
+            owner.subject, target.storageKey);
           result = { status: 'revoked-all', remainingCredentials: 0,
             generation: bumpGeneration(tx, owner).generation };
         }

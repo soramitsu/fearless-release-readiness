@@ -30,13 +30,24 @@ function registration(id) {
 function assertionRequest(id, handle) {
   return bound('assertion', { assertionId: 'assert:test', rpId: 'fearlesswallet.io', credential: assertion(handle, id) });
 }
-function revocation(id) {
-  return bound('revoke', { storageKey: 'storage:wallet-test', credentialId: id,
+function revocation(id, storageKey = 'storage:wallet-test') {
+  return bound('revoke', { storageKey, credentialId: id,
     rpId: 'fearlesswallet.io', schemaVersion: 1, confirmFinalRecoveryRemoval: true });
 }
-function revokeAll() {
-  return bound('revokeAll', { storageKey: 'storage:wallet-test',
+function revokeAll(storageKey = 'storage:wallet-test') {
+  return bound('revokeAll', { storageKey,
     rpId: 'fearlesswallet.io', schemaVersion: 1, confirmFinalRecoveryRemoval: true });
+}
+function bindLegacyCredential(path, owner, storageKey, credentialId, seed = 1) {
+  const db = new DatabaseSync(path);
+  try {
+    db.exec('PRAGMA foreign_keys=ON');
+    db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+      storageKey, owner.subject, b64(seed), Buffer.alloc(32, seed).toString('hex'),
+      Buffer.alloc(32, seed + 20).toString('hex'), 1);
+    db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+      credentialId, storageKey, '00000000-0000-0000-0000-000000000000', null, 'android');
+  } finally { db.close(); }
 }
 function record(id, handle) {
   return { id, publicKey: b64(31), userHandle: handle, counter: 0,
@@ -174,6 +185,7 @@ test('grant-bound revocation bumps generation in the same commit and retains tom
   const { core, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
   const body = revocation(id);
   const grant = core.issueGrant(owner.sessionToken, body.request);
   const result = core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, {});
@@ -252,6 +264,7 @@ test('grant-bound revoke-all is atomic and invalidates every owner grant', async
   const { core, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const id = b64(2);
+  bindLegacyCredential(path, owner, 'storage:wallet-test', id);
   const body = revokeAll();
   const grant = core.issueGrant(owner.sessionToken, body.request);
   const pending = core.issueGrant(owner.sessionToken, assertionRequest(id, b64(1)).request);
@@ -259,6 +272,65 @@ test('grant-bound revoke-all is atomic and invalidates every owner grant', async
     { status: 'revoked-all', remainingCredentials: 0, generation: 1 });
   assert.equal(row(path, id).revoked, 1);
   denied(() => core.consumeGrant(pending.token, assertionRequest(id, b64(1)).request), 'authorization_failed');
+});
+
+test('legacy revocation is bound to the exact storage key and revoke-all cannot cross wallets', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const firstId = b64(2);
+  const secondId = b64(53);
+  const secondKey = 'storage:second-wallet';
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+      secondId, owner.subject, b64(31), challenge.userHandle, 0, 'multiDevice', 1);
+  } finally { db.close(); }
+  bindLegacyCredential(path, owner, 'storage:wallet-test', firstId, 1);
+  bindLegacyCredential(path, owner, secondKey, secondId, 2);
+
+  const wrong = revocation(secondId);
+  const wrongGrant = core.issueGrant(owner.sessionToken, wrong.request);
+  denied(() => core.commitChallengeCredentialMutation(wrongGrant.token, wrong.request,
+    wrong.bytes, {}), 'authorization_failed');
+  assert.equal(row(path, secondId).revoked, 0);
+  assert.equal(core.consumeGrant(wrongGrant.token, wrong.request).active, true);
+
+  const body = revokeAll();
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  assert.deepEqual(core.commitChallengeCredentialMutation(grant.token, body.request, body.bytes, {}),
+    { status: 'revoked-all', remainingCredentials: 0, generation: 1 });
+  assert.equal(row(path, firstId).revoked, 1);
+  assert.equal(row(path, secondId).revoked, 0);
+});
+
+test('legacy revoke-all rejects an unbound storage key without spending its grant', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const body = revokeAll('storage:unbound-wallet');
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, {}), 'authorization_failed');
+  assert.equal(row(path, b64(2)).revoked, 0);
+  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
+});
+
+test('legacy revoke-all refuses success while a live owner credential has no storage mapping', async (t) => {
+  const { core, path, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  bindLegacyCredential(path, owner, 'storage:wallet-test', b64(2));
+  const unclassifiedId = b64(54);
+  const db = new DatabaseSync(path);
+  try {
+    db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+      unclassifiedId, owner.subject, b64(31), challenge.userHandle, 0, 'multiDevice', 1);
+  } finally { db.close(); }
+  const body = revokeAll();
+  const grant = core.issueGrant(owner.sessionToken, body.request);
+  denied(() => core.commitChallengeCredentialMutation(grant.token, body.request,
+    body.bytes, {}), 'authorization_failed');
+  assert.equal(row(path, b64(2)).revoked, 0);
+  assert.equal(row(path, unclassifiedId).revoked, 0);
+  assert.equal(core.consumeGrant(grant.token, body.request).active, true);
 });
 
 test('an exact grant from one owner cannot mutate another owner credential', async (t) => {

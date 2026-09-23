@@ -755,8 +755,20 @@ user handle is accepted only with server-owned evidence naming the exact
 credential ID selected by that challenge. Discoverable owner authentication
 still requires the historical credential's concrete handle. Wrong or absent
 direction evidence leaves the credential counter and grant unchanged. The full
-owner suite passes 79/79 with syntax and diff checks. No HTTP service supplies
-that evidence yet, and the shared one-writer cutover remains blocked.
+owner suite passed 79/79 with syntax and diff checks at this checkpoint. No
+HTTP service supplies that evidence yet, and the shared one-writer cutover
+remains blocked.
+
+The same internal target now requires a matching immutable legacy storage-key
+binding for revocation. Revoke-all touches only credentials in the named
+wallet cohort, leaving another wallet under the same owner intact. An unknown
+or mismatched binding fails without consuming the exact grant. These tests
+also deny an ambiguous revoke-all success when any live owner credential has
+no storage-key mapping. They seed public metadata fixtures; no verified legacy
+import exists, and
+registration/assertion still need trusted pending-challenge storage-key
+binding before the route cutover can run.
+The full owner suite now passes 82/82 with syntax and diff checks.
 
 The selected site branch [PR #49](https://github.com/soramitsu/fearless-site-web/pull/49)
 contains the intended JSON association contracts and response headers. The
