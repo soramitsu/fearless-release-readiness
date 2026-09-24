@@ -2459,6 +2459,10 @@ ceremony and ignores late callbacks after cancellation. Its focused iOS 18.1
 arm64 simulator suite passed **40/40** App Attest and adjacent PRF tests;
 the unsigned arm64 Release simulator app build succeeded on the same source.
 Scoped SwiftFormat/SwiftLint, project syntax and diff checks passed.
+Exact-head hosted `validate`, `release-contracts`, `ios-release-safety`,
+`build`, Jenkins and Codecov checks subsequently passed on
+`38c83b5a0c85272308acb9474f75880591fc9742`. No Apple-delivered signed
+archive or physical-device recovery is established by those checks.
 
 The broader dual-architecture Release simulator build failed at the existing
 x86_64 IrohaCrypto native link (unresolved `_blake2b`, `_ed25519_*`,
@@ -2515,11 +2519,25 @@ server-owned time and is not wired into a production listener. Apple's
 published sample passes at its historical timestamp; wrong app/key/challenge,
 stale or future time, tampering, truncation and trailing bytes fail. The owner
 suite passes **244/244** with zero failures/skips; the long release-source
-fixture suites are rerunning with the new receipt files in every required
-inventory. The sample uses a raw challenge where our native adapter hashes
+fixture suites passed with the new receipt files in every required inventory:
+source publication covered **95 negative cases**, and the release-bundle
+exporter, command-contract and verifier suites all passed. The sample uses a
+raw challenge where our native adapter hashes
 the challenge, so real iOS→server interoperability remains unverified.
-Apple's online fraud metric, independent security review, sealed credential
+Apple’s online fraud metric, independent security review, sealed credential
 cutover and production deployment remain open.
+
+The read-only Codex Security diff scan of exact root
+`c8894503bab58eba233681b39c3a59e8114c9752..fa53f5c648c604a054526428f2c17be2aeca47ef`
+covered all 15 changed files, including nine executable/security review items,
+and reported zero findings (scan
+`2203e6f7-db7c-4e1b-8895-24ff7965d325`; report SHA-256
+`e5398547cc0ddb3c8559f322018258a18466863ba97a5e3779cf0560a2a65e8b`).
+The independent read-only code pass caught an incorrect field-19 admission
+check, which was removed before the scanned commit: Apple defines that field
+as earliest fraud-metric refresh time, not the start of receipt validity.
+Neither review is independent human release approval or a live Apple receipt
+test.
 
 ## Completion record
 
