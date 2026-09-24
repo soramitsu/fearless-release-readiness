@@ -2388,6 +2388,29 @@ owner suite passes **237/237** including short, long and padded-key rejection.
 This transport constraint is not an Apple certificate-chain verifier or a
 provisioned native ceremony.
 
+## Android native Play Integrity request candidate — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is clean and pushed at `a1338aa8af0efe377decd282f0f6b3a550d46501`.
+Its disabled, unwired native Standard Integrity adapter requires an explicitly
+configured Cloud project and requests a token for the exact first-owner
+wallet-proof binding. Kotlin tests consume the server's public Ed25519 and
+secp256k1 signed-proof vectors; the secp256k1 key is normalized before the
+request hash is compared. The fixture SHA-256 is
+`b05bcb66af769e304e2928ee3be32ee76d848758d16c781b2a4ac03b3dabcf3f`.
+The focused suite passed **237/237**; the strict pinned-source full `runTest`
+passed **1,691 cases**, zero failures or errors and 14 existing skips.
+`detektAll`, provenance verification, its two positive/65 negative self-tests,
+the pinned Utils/WebSocket source check and strict release runtime resolution
+passed. The stale `settings.gradle` provenance pin was corrected to the
+reviewed current source after tracing its change in commit `2bf823661`.
+At the recorded exact-head CI snapshot, `validate` passed while
+`build-and-test` and IAS candidate validation were running. There is no live
+Google verdict, audited Cloud project, Play certificate/version configuration,
+production owner HTTP integration or replacement-device proof. The recovery
+flag remains false; earlier unsigned AAB/device evidence belongs to an older
+Android commit.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
