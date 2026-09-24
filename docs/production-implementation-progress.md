@@ -1269,6 +1269,28 @@ findings. A scoped read-only review found no actionable issue. No production
 recovery installer calls this path, and exact-head hosted CI and formal
 independent security review remain pending.
 
+The iOS PR then advanced to pushed
+`f67935b8031297f303b05d5adc3f44e6173123be`. Its pure, unwired receiving
+plan runs the root, reviewed-genesis Substrate and named-chain key proofs,
+preserves the complete decoded wallet cohort, and records unproven sources,
+chains, watch identities and the unavailable transactional installer as
+blockers. It makes no Core Data or Keychain write. The exact-source preflight
+suite passes 45/45 on iPhone 15/iOS 17.2. The new production file passes
+SwiftFormat and strict SwiftLint; the modified test file has the same 58
+SwiftFormat and six strict SwiftLint findings by rule count as its prior
+revision. Project-file and diff checks pass. Hosted CI and independent
+security review for this head remain open; recovery stays disabled.
+
+The iOS PR then advanced to pushed
+`9f75d56dbc4e69c8b84155905c5a147bfc73ca4a`. The receiving plan now
+distinguishes a proven chain signing key from unverified optional seed/export
+bytes and always blocks historical legacy Substrate source recipes. The
+expanded preflight suite passed 46/46 before the final legacy guard; both
+focused legacy and chain-source tests pass 2/2 on the final source. The new
+production file still passes SwiftFormat and strict SwiftLint, and the
+modified test file retains the same baseline rule counts. Hosted CI,
+independent review and the actual installer remain open.
+
 Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 advanced to pushed `23dab9199957d7760fed87fca1290dda773888a8`.
 Its unwired receiving proof verifies Android-origin Substrate ED25519,
@@ -1306,8 +1328,19 @@ across V1/V2/V3 stores, auxiliary originals and selection. That broader
 journal, key/export parity, exact-head hosted CI, and independent security
 review remain open. Cross-device recovery is still disabled.
 
+The Android PR then advanced to pushed
+`29bbd53a7c0ccf186746801f0a1df92b9b694c67`. A pure, versioned
+`FPWCAI01` cohort after-image binds ordered local wallet IDs to the exact
+canonical semantic bytes, derives candidate V3/V2/V1 secret namespaces and
+retains wallet, metadata, source, watch, selection and blocker inventories.
+It rejects duplicate candidate keys, malformed wire, unsupported V2 IDs and
+V1 address/public-key mismatches. It cannot stage or install a wallet. Its
+focused JVM tests pass 6/6; forced scoped Detekt on the three touched Kotlin
+files and diff checks pass. Cohort-wide journal replay, original-source
+storage, exact-head hosted CI and independent review remain open.
+
 The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
-at `3027b38c0efcc226f09e6ac4eac0a44025d96a76` passed its `verify`,
+at `8c814c2527ce6b4d7465a9ef9fc8c3d533b2ba93` passed its `verify`,
 `verify-owner` and `validate` CI jobs. This supports that prior root commit
 only; the shipping source/artifact manifest and independent reviews remain
 open.
