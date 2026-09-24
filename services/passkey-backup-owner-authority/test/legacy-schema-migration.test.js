@@ -62,6 +62,39 @@ test('snapshot rejects a regular replacement at open and a path swap after open'
   }
 });
 
+test('snapshot rejects SQLite sidecars before and during a descriptor-alias read', async (t) => {
+  for (const suffix of ['-journal', '-wal', '-shm']) {
+    await t.test(suffix, (subtest) => {
+      const { core, path } = setup(subtest);
+      core.close();
+      const sidecar = `${path}${suffix}`;
+      fs.writeFileSync(sidecar, 'interrupted writer', { mode: 0o600 });
+      denied(() => readOwnerCredentialSnapshot(path));
+      fs.unlinkSync(sidecar);
+      assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 5);
+    });
+  }
+
+  const { core, path } = setup(t);
+  core.close();
+  const originalLstat = fs.lstatSync;
+  let journalChecks = 0;
+  fs.lstatSync = function createJournalDuringRead(target, ...args) {
+    if (target === `${path}-journal` && ++journalChecks === 2) {
+      fs.writeFileSync(target, 'interrupted writer', { mode: 0o600 });
+    }
+    return originalLstat(target, ...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    denied(() => readOwnerCredentialSnapshot(path));
+    assert.equal(journalChecks, 2);
+  } finally {
+    fs.lstatSync = originalLstat;
+    syncBuiltinESMExports();
+  }
+});
+
 test('explicit v2-to-v5 migration preserves credentials, grants, counters and backup head', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();

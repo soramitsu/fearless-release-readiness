@@ -81,6 +81,11 @@ for one storage key must not authorize another, even if account names match.
    the JSON writer has stopped, import anything, or allow production startup.
    It always reports `migrationPermitted: false` and exits `3` on a valid
    read-only report. A changed/unsafe image or invalid SQLite store exits `1`.
+   The descriptor-pinned SQLite read rejects rollback-journal and WAL sidecars
+   before and after its transaction. A crashed writer can leave uncommitted
+   pages in the main file; reading through an fd alias alone would miss the
+   journal at the original pathname. An interrupted database must be recovered
+   through its canonical path before a fresh offline comparison.
    Example after an operator-controlled quarantine capture:
 
    ```sh

@@ -302,6 +302,20 @@ function pinnedSqlitePath(fd) {
   deny('store_unavailable');
 }
 
+function assertNoSqliteSidecars(path) {
+  // An fd alias has a different pathname from the checked database. SQLite
+  // would look for an interrupted writer's hot rollback journal beside the
+  // alias and could return uncommitted main-file pages as valid rows.
+  for (const suffix of ['-journal', '-wal', '-shm']) {
+    try {
+      lstatSync(`${path}${suffix}`);
+      deny('store_unavailable');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+}
+
 /** Local durable filesystem only; no network filesystem, silent init, or memory fallback. */
 export class AuthorityStore {
   #db;
@@ -439,6 +453,7 @@ export function readOwnerCredentialSnapshot(path) {
   let fd;
   try {
     const directoryBefore = privateFile(dirname(path), true);
+    assertNoSqliteSidecars(path);
     const fileBefore = privateFile(path);
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     if (!sameFileImage(fileBefore, assertPrivateFileStat(fstatSync(fd)))) deny('store_unavailable');
@@ -470,6 +485,7 @@ export function readOwnerCredentialSnapshot(path) {
       ? db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
+    assertNoSqliteSidecars(path);
     if (!sameFileImage(fileBefore, assertPrivateFileStat(fstatSync(fd))) ||
         !sameFileImage(fileBefore, privateFile(path)) ||
         !sameFileIdentity(directoryBefore, privateFile(dirname(path), true))) deny('store_unavailable');

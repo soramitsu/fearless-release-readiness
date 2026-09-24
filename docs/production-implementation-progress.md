@@ -1517,6 +1517,22 @@ passes 112/112; syntax and diff checks pass. Fresh legacy-credential
 assertion plus random-owner proof, reviewed one-writer cutover and production
 admission still remain required.
 
+## Interrupted SQLite writer safety — 2026-09-24
+
+A scoped Codex Security diff scan of root `55b503a95b45353542d4298671529b857c4b5d6d`
+through `3a7cdad707c224ddd361fb9c2e1537bfdd87e53d` reviewed six changed source files.
+It had no reportable security finding under its operator-only reachability
+policy, but a disposable macOS/Node SQLite reproduction showed an offline
+integrity defect: reading the owner DB through a checked fd alias can miss a
+hot rollback journal at the canonical path and see uncommitted rows. The
+reader now refuses `-journal`, `-wal` and `-shm` sidecars before and after its
+transaction, so interrupted databases must first be recovered through their
+canonical path. Focused sidecar and migration tests pass 16/16; the combined
+owner-authority suite passes 154/154 with syntax and diff checks clean. This
+repair is not a production owner cutover or a substitute for independent
+review. Linux/deployment-image journal behavior and full owner-v5 crash
+recovery still require qualification.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
