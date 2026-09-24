@@ -1879,6 +1879,18 @@ policy, custody proof, installed original-key signing/export and both
 replacement-device directions remain blockers; portable recovery stays
 disabled.
 
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+then advanced to clean, pushed `32a2cf5d187a3276d6166478e7f18352d9bb14d4`.
+The pure receiving projection now assigns fresh-install Room `Int` positions
+`0..N-1` in FPWMSM01's authoritative wallet-list order, including tied,
+reversed and uint32-max historical source positions. It retains the exact
+source positions separately. Input bounds and the 128-wallet limit fail
+closed. The final-source account suite passes 277/277, including 11/11
+cohort cases, and forced scoped Detekt passes. The policy cannot merge with
+wallets already on a replacement device; ID reservation, atomic installation,
+backup-state/custody mapping, original-key signing/export and live two-way
+restore remain blocked. No storage write or feature enablement was added.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
