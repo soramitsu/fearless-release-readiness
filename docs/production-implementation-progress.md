@@ -25,18 +25,23 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `d6efdde1c5670c05e97940343e1523153a05fec6` and
-`d2782d2324b6a3e454b3e6d15cded11bf493615c`, respectively. Both clean app
+candidates are `92dae82f310281c4e32cc83e44de382471b58cc6` and
+`9d5aac5e73f7f6354f7c8a85175ab267470704b6`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
-314/314 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
-The exact iOS journal source passed 11/11 iOS 18.1 arm64 simulator tests;
+316/316 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+The exact iOS source-proof and Keychain projection suites passed 64/64 iOS 18.1
+arm64 Release simulator tests; the preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new heads remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
 recommendation was fixed before the current journal change.
 Protected qualification,
 independent human security approval and signed distribution acceptance remain
-outstanding.
+outstanding. The latest Android source composes V1, V2 and V3 original-source
+proofs across a mixed signing/watch cohort and rejects orphan or foreign
+source records. It remains read-only, with no app-owned exporter or installed
+replacement-key proof. Its exact pinned Utils and WebSocket source check passes;
+PR #1260's new hosted jobs are pending.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2937,6 +2942,30 @@ compilation pass. The SR25519 instrumentation test has **not** run on a device.
 FPWMSM01 retains V1 typed fields rather than opaque preference bytes. V1/V2/V3
 component proofs do not yet establish a complete iOS/Android cohort, installed
 key export or transactional replacement-device restore; recovery stays off.
+
+The next Android source at `92dae82f310281c4e32cc83e44de382471b58cc6`
+composes those V1, V2 and V3 proofs over one stable Android semantic snapshot.
+It requires one exact original Android source per V3 root and approved V2
+chain, validates typed V1 material, and rejects source orphans, foreign shapes,
+mixed watch/signed custody and unmapped metadata. Public watch/favorite slots
+receive structural checks only. A three-source signed-wallet test and a
+signed/watch cohort test pass. The final account suite passes **316/316**,
+forced four-file scoped Detekt and default Detekt pass, and the exact pinned
+Utils/WebSocket source check passes. This is still a read-only local proof; no
+app-owned first-generation exporter, installed-key export/readback, iOS source
+mapping or transactional replacement-device installer consumes it.
+
+The subsequent iOS source at `9d5aac5e73f7f6354f7c8a85175ab267470704b6`
+adds a read-only proof that iOS Keychain source bytes match their semantic
+root and chain bindings during draft encoding and receive planning. Its
+receive projection stages one destination Keychain item for an account-scoped
+source shared by distinct chain IDs, while rejecting duplicate chain bindings,
+conflicting bytes and other duplicate destinations. A verification failure
+best-effort zeros the encoded plaintext. The exact final iOS 18.1 arm64
+Release simulator suites passed **64/64** tests with no failures; strict
+SwiftLint, scoped SwiftFormat, syntax and diff checks passed. This does not
+prove atomic Core Data/Keychain installation, original-key export/readback,
+provider recovery, or a decryptable cross-device backup; recovery stays off.
 
 Neither mobile candidate has a production feature enabled. CI checks for the
 new heads, independent human security review, deployed one-writer authority, Drive/OAuth
