@@ -2240,6 +2240,16 @@ has no release-keystore inputs. These observations leave the real upload-key,
 tag-signer and protected-signing path unqualified; no production signing or
 Play publication was attempted.
 
+The local macOS Keychain contains the reviewed Soramitsu Apple Distribution
+identity (SHA-1 `84AB95335BE14CAE9B050A353910F86FF2F9539B`). Xcode's installed
+`Fearless App Store 2026.7.26` profile has the expected UUID
+`0d51265e-4b53-4a1f-814a-436dc9ca087b`, production bundle/team, matching
+embedded distribution certificate, app group, associated domains and CloudKit
+entitlements, and expires in July 2027. This establishes a local signing
+preflight only. No App Store Connect API credential or session is exposed in
+the current shell; build-number uniqueness, an exact-head signed archive,
+TestFlight delivery and an Apple-delivered upgrade have not been verified.
+
 ## Disabled iOS replacement-device readback step — 2026-09-24
 
 iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) is clean
@@ -2538,6 +2548,39 @@ check, which was removed before the scanned commit: Apple defines that field
 as earliest fraud-metric refresh time, not the start of receipt validity.
 Neither review is independent human release approval or a live Apple receipt
 test.
+
+At the pushed root documentation head
+`0be8ae01128633abc78c62c0a1ac736e0a94ce2e`, hosted `verify-owner`,
+`verify` and `validate` all passed. These are source and contract checks, not
+deployment or enabled-feature acceptance.
+
+## iOS App Attest retry and archive preflight — 2026-09-24
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) is clean
+and pushed at `34c0caba7a1cefbc27ded57890a3920e87eb60e7` on
+`codex/testflight-redesign-2026.8.17`. Its disabled App Attest adapter now
+keeps an Apple-generated key ID in a ThisDeviceOnly Keychain journal and
+retries `attestKey` with that exact key and client-data hash after Apple
+`serverUnavailable`. The journal binds the 32-byte server nonce, ceremony,
+random owner and short expiry; it cannot be reused across another owner or
+challenge. Other native errors are sanitized and fail closed. The signed
+iOS 18.1 arm64 simulator focused suite passed **14/14**, including a real
+Keychain round trip and protection/clear-failure checks. SwiftFormat,
+SwiftLint, Xcode project syntax and diff checks passed. No real Apple-device
+ceremony, owner HTTP integration or replacement-device recovery is proven,
+and the release flag remains disabled.
+
+The exact-head local Release identity audit passed for bundle
+`jp.co.soramitsu.fearlesswallet`, version `4.2.0`, build `2026.8.34`.
+Both historical user- and Substrate-storage model audits passed. The audited
+archive cannot start on this host: the generated Release service configuration
+is missing required Google OAuth client/callback, WalletConnect, TON,
+Alchemy, Etherscan and KaiaScan values. The current shell has no App Store
+Connect API credential/session, and the current iOS GitHub repository exposes
+no configured Actions secret names or environments through this access.
+These are provisioning and distribution prerequisites, not values to replace
+with fixtures. The new iOS commit's hosted `validate` passed; its other
+exact-head hosted checks were running at this record.
 
 ## Completion record
 
