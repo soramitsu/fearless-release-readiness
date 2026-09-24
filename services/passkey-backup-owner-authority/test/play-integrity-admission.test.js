@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { GoogleAuth, JWT } from 'google-auth-library';
 import { createPlayIntegrityAdcAccessTokenProvider,
   createPlayIntegrityBootstrapVerifier } from '../src/play-integrity-admission.js';
 import { AuthorityError } from '../src/validation.js';
@@ -124,6 +125,7 @@ test('ADC provider binds the configured service account before Google decode', a
   const getAccessToken = createPlayIntegrityAdcAccessTokenProvider({
     expectedServiceAccountEmail: serviceAccountEmail,
     authFactory: () => ({
+      async getClient() { return new JWT({ email: serviceAccountEmail }); },
       async getCredentials() { credentialReads += 1; return {
         client_email: serviceAccountEmail, universe_domain: 'googleapis.com' }; },
       async getAccessToken() { tokenReads += 1; return 'ya29.test_access_token'; },
@@ -144,7 +146,8 @@ test('ADC provider refuses another identity, universe, scope, abort and malforme
     let tokenReads = 0;
     const provider = createPlayIntegrityAdcAccessTokenProvider({
       expectedServiceAccountEmail: serviceAccountEmail,
-      authFactory: () => ({ getCredentials: async () => credentials,
+      authFactory: () => ({ getClient: async () => new JWT({ email: serviceAccountEmail }),
+        getCredentials: async () => credentials,
         getAccessToken: async () => { tokenReads += 1; return 'ya29.test_access_token'; } }),
     });
     await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
@@ -152,7 +155,8 @@ test('ADC provider refuses another identity, universe, scope, abort and malforme
   }
   const provider = createPlayIntegrityAdcAccessTokenProvider({
     expectedServiceAccountEmail: serviceAccountEmail,
-    authFactory: () => ({ getCredentials: async () => ({ client_email: serviceAccountEmail }),
+    authFactory: () => ({ getClient: async () => new JWT({ email: serviceAccountEmail }),
+      getCredentials: async () => ({ client_email: serviceAccountEmail }),
       getAccessToken: async () => 'short' }),
   });
   await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
@@ -167,7 +171,8 @@ test('ADC provider refuses another identity, universe, scope, abort and malforme
 test('ADC provider never reflects credential or token acquisition failures', async () => {
   const provider = createPlayIntegrityAdcAccessTokenProvider({
     expectedServiceAccountEmail: serviceAccountEmail,
-    authFactory: () => ({ getCredentials: async () => { throw Error('private key details'); },
+    authFactory: () => ({ getClient: async () => new JWT({ email: serviceAccountEmail }),
+      getCredentials: async () => { throw Error('private key details'); },
       getAccessToken: async () => 'ya29.test_access_token' }),
   });
   await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
@@ -176,4 +181,18 @@ test('ADC provider never reflects credential or token acquisition failures', asy
       expectedServiceAccountEmail: value }),
     (error) => error instanceof AuthorityError && error.code === 'invalid_configuration');
   }
+});
+
+test('an authorized_user ADC file cannot impersonate a service account using client_email metadata', async () => {
+  const forgedUserAdc = new GoogleAuth({
+    scopes: 'https://www.googleapis.com/auth/playintegrity',
+    credentials: { type: 'authorized_user', client_id: 'client-id',
+      client_secret: 'client-secret', refresh_token: 'refresh-token',
+      client_email: serviceAccountEmail },
+  });
+  const provider = createPlayIntegrityAdcAccessTokenProvider({
+    expectedServiceAccountEmail: serviceAccountEmail,
+    authFactory: () => forgedUserAdc,
+  });
+  await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
 });

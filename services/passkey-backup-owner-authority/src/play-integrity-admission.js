@@ -1,5 +1,5 @@
 import { appAttestation, deny } from './validation.js';
-import { GoogleAuth } from 'google-auth-library';
+import { BaseExternalAccountClient, Compute, GoogleAuth, Impersonated, JWT } from 'google-auth-library';
 
 const PACKAGE_NAME = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/u;
 const SHA256_HEX = /^[a-f0-9]{64}$/u;
@@ -24,13 +24,22 @@ export function createPlayIntegrityAdcAccessTokenProvider({ expectedServiceAccou
       !SERVICE_ACCOUNT_EMAIL.test(expectedServiceAccountEmail) ||
       typeof authFactory !== 'function') deny('invalid_configuration');
   const auth = authFactory();
-  if (!auth || typeof auth.getCredentials !== 'function' ||
+  if (!auth || typeof auth.getClient !== 'function' ||
+      typeof auth.getCredentials !== 'function' ||
       typeof auth.getAccessToken !== 'function') deny('invalid_configuration');
   return async function getAccessToken({ scope, signal } = {}) {
     if (scope !== PLAY_INTEGRITY_SCOPE || !(signal instanceof AbortSignal) || signal.aborted) {
       deny('verification_failed');
     }
     try {
+      const client = await auth.getClient();
+      // GoogleAuth.getCredentials() returns JSON's client_email even for an
+      // authorized_user credential with an extra, caller-chosen property.
+      // Inspect the actual auth client before trusting that identity field.
+      if (signal.aborted || !(
+        client instanceof JWT || client instanceof Compute ||
+        client instanceof Impersonated || client instanceof BaseExternalAccountClient
+      )) deny('verification_failed');
       const credentials = await auth.getCredentials();
       if (signal.aborted || credentials?.client_email !== expectedServiceAccountEmail ||
           (credentials.universe_domain !== undefined &&

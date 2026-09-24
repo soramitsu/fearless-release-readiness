@@ -2340,11 +2340,15 @@ for the Android Play Integrity verifier. It uses pinned Google Auth Library
 `11.1.0`, requests only the `playintegrity` OAuth scope, checks the resolved
 service-account email against an operator-supplied exact identity on every
 request, and rejects a changed universe, user ADC, wrong scope, cancellation
-or malformed token. Google auth failures are returned without credential or
-token details. An attached service account or workload identity can be used;
+or malformed token. A follow-up source review found that Google Auth Library
+can echo `client_email` from an `authorized_user` ADC JSON file. The callback
+now also checks the actual Google Auth client type, so a forged email on a
+user credential cannot pass as the configured service account. Google auth
+failures are returned without credential or token details. An attached service
+account or reviewed workload identity can be used;
 no private key or actual operator identity has been added to source.
 
-The complete owner-authority suite passed **234/234** with no failures or
+The complete owner-authority suite passed **235/235** with no failures or
 skips, including simulated server identity and decode tests; syntax and diff
 checks passed. The callback is still unwired from a production listener. The
 Play/Cloud linkage, exact Play certificate and release versions, live OAuth
@@ -2352,6 +2356,16 @@ credential, native request, real Google decode and device tests remain
 prerequisites. Google's [ADC guidance](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
 and [standard Play Integrity flow](https://developer.android.com/google/play/integrity/standard)
 describe the external provisioning and token exchange.
+A scoped Codex Security diff scan of
+`91d1c1be88a339f9cae072a8c8679c81d3fcd944..39d90f737c94f124091da66696ccafe6d8ded94e`
+completed before the client-type correction with zero reportable findings and
+complete coverage of both changed production source files, with the lockfile,
+tests and docs read as context
+(scan `102f3db5-2c2d-40c2-8d08-859f4f628644`, report SHA-256
+`1e83d60df2377e21dae1ffa866bca9156b40f3caa62d9d5512dbd8023e06ca48`).
+The subsequent manual review found the spoofable metadata above. The corrected
+source requires a fresh scoped review; neither scan is the required independent
+human approval.
 
 ## Completion record
 

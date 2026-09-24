@@ -35,9 +35,10 @@ or local decryption; mobile recovery remains disabled.
 
 The optional Android Google adapter obtains a Play Integrity OAuth token only
 through Google Auth Library with the exact `playintegrity` scope. Its ADC callback
-requires an operator-configured service-account email and checks the resolved
-workload identity on every use; local user ADC and identity substitution fail
-closed. Prefer an attached service account or workload identity federation so
+requires an operator-configured service-account email and checks both the
+actual Google Auth client type and resolved workload identity on every use;
+local user ADC cannot pass by adding a forged `client_email` field. Identity
+substitution fails closed. Prefer an attached service account or workload identity federation so
 there is no long-lived key file in the app or repository. The backend uses the
 token only for Google's fixed decode endpoint. The operator must verify the
 linked Play/Cloud project, the Play-distributed certificate and allowed release
