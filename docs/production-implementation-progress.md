@@ -1533,6 +1533,24 @@ repair is not a production owner cutover or a substitute for independent
 review. Linux/deployment-image journal behavior and full owner-v5 crash
 recovery still require qualification.
 
+## Journal-bound iOS Keychain receive projection — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `8e6a5798fe8f648423fa0a313c1ee49e32a57e78`.
+A read-only receiver now projects captured released iOS Keychain source bytes
+onto fresh destination tags. It requires the canonical semantic cohort and
+fresh wallet IDs to match the durable journal, and requires every projected
+tag and SHA-256 digest to equal the journal's complete key inventory. It
+rejects missing, duplicate, oversized, conflicting root signer and
+unsupported Android-source items. The separately preserved Bitcoin/Taira
+root-derived signing recipe remains distinct from a historical scoped key.
+The exact-source iPhone 15/iOS 17.2 focused suite passes 6/6; the full app
+compiled, targeted SwiftFormat/SwiftLint and project-file checks pass. This
+projection writes no Keychain or Core Data item and does not prove an
+installed wallet's signing/export behavior. The transactional installer,
+Android-source mapping, replacement-device recovery and independent review
+remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
