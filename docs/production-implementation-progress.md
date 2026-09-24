@@ -2469,6 +2469,24 @@ environment, same-key retry/persistence for transient Apple failures,
 real-device proof and Apple-signed upgrade acceptance remain open. The
 recovery feature is still compiled off.
 
+## Apple verifier review and release-source inventory — 2026-09-24
+
+The scoped Codex Security diff scan of root
+`ca266bffde84f42a589727ca8e4bdc4173a0b1a4..5667c534b8219c1e98018260af3569593031ed5d`
+covered both changed executable items and reported zero findings (scan
+`dc0aa54d-914e-4f36-bf09-ca0000f574e3`; report SHA-256
+`1f63215e68e34df19bcdf7e5cec27fc0b7485e9248186979735ae426bc14b110`).
+This static result supports review of the non-deployed verifier; it is not
+independent human approval, live Apple receipt verification or native-device
+interoperability evidence.
+
+The four new verifier, root-certificate and Apple sample paths are now in all
+six explicit source-publication and release-bundle inventories at root
+`1b991bcfb55c57a530aa260748f1974be36c7b32`. Source-publication's
+negative fixtures cover removal of each path. This makes omission from an
+exported release candidate a gate failure; the release-source fixture suites
+are being rerun on the exact inventory change.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
