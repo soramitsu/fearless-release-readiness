@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { readOwnerCredentialSnapshot } from '../src/store.js';
 import { hash } from '../src/validation.js';
-import { assertion, audience, b64, setup } from './fixtures.js';
+import { assertion, audience, b64, downgradeStoreFixture, setup } from './fixtures.js';
 
 const storageKey = 'storage:cutover-wallet';
 const legacyId = b64(77);
@@ -117,6 +117,42 @@ test('v1 cutover challenge binds exact sealed public cohort and only burns an un
   assert.deepEqual(readFileSync(item.legacySnapshotPath), beforeSource);
   assert.deepEqual(readOwnerCredentialSnapshot(item.path).credentials, beforeCredential);
   assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);
+});
+
+test('a v7 consumed claim migrates as unverified and cannot acquire a proof by direct SQL', async (t) => {
+  const item = await fixture(t);
+  const issued = item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, item.issueInput);
+  const claimed = { ...item.claims, challengeId: issued.challengeId };
+  item.core.claimLegacyCutoverChallenge(item.owner.sessionToken, claimed);
+  assert.equal(item.core.consumeLegacyCutoverClaim(item.owner.sessionToken, {
+    ...claimed, legacySnapshotPath: item.legacySnapshotPath,
+    expectedSourceSha256: item.expectedSourceSha256,
+  }).state, 'consumed-unverified');
+  item.core.close();
+  downgradeStoreFixture(item.path, 7);
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 7);
+  denied(() => item.open(), 'store_unavailable');
+  const migrated = item.open({ migrate: true });
+  assert.equal(row(item.path, issued.challengeId).state, 2);
+  const db = new DatabaseSync(item.path);
+  try {
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n, 0);
+    const old = row(item.path, issued.challengeId);
+    assert.throws(() => db.prepare(`INSERT INTO legacy_cutover_verified_proofs (
+      challenge_id,proof_sha256,source_sha256,owner,legacy_credential_id,owner_credential_id,
+      legacy_body_sha256,owner_body_sha256,legacy_challenge_sha256,owner_challenge_sha256,
+      legacy_new_counter,owner_new_counter,legacy_device_type,legacy_backed_up,
+      owner_device_type,owner_backed_up,verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      old.id, digest('forged-proof'), old.source_sha256, old.owner,
+      old.legacy_credential_id, old.owner_credential_id, old.legacy_body_sha256,
+      old.owner_body_sha256, digest(issued.legacyChallenge), digest(issued.ownerChallenge),
+      8, old.owner_credential_counter, 'multiDevice', 1, 'multiDevice', 1,
+      old.expires - 1000), /invalid legacy cutover proof/);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n, 0);
+  } finally { db.close(); }
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
+  migrated.close();
 });
 
 test('cutover claim rejects substitution, source changes and another owner session', async (t) => {
@@ -323,7 +359,7 @@ test('revoking the owner session retains a claimed replay tombstone across resta
   assert.equal(row(item.path, challenge.challengeId).state, 1);
   item.core.close();
   const reopened = item.open();
-  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 7);
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
   denied(() => reopened.claimLegacyCutoverChallenge(item.owner.sessionToken, claimInput));
   denied(() => reopened.consumeLegacyCutoverClaim(item.owner.sessionToken, {
     ...claimInput, legacySnapshotPath: item.legacySnapshotPath,

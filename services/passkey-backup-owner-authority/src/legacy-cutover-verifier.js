@@ -71,7 +71,7 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   }
   const source = readSealedSource(legacySnapshotPath, expectedSourceSha256);
   const target = readOwnerCredentialSnapshot(ownerPath);
-  if (target.schemaVersion !== 7) deny('cutover_owner_schema_mismatch');
+  if (![7, 8].includes(target.schemaVersion)) deny('cutover_owner_schema_mismatch');
   const comparedTargetRowsSha256 = createHash('sha256')
     .update('FP_LEGACY_PUBLIC_STATE_V1\0')
     .update(JSON.stringify([target.owners, target.credentials, target.storageBindings,

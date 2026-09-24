@@ -2144,6 +2144,37 @@ enrollment and upload/download/decrypt readback would misleadingly imply a
 recoverable backup; no iOS UI change was made. That integration remains an
 enabled-feature prerequisite.
 
+iOS `7fbd883a557bc49665b60362930eaafd3c11594e` is now clean and pushed
+on the existing consolidated PR branch. Its disabled generation-verification
+path uses a one-use local PRF key provider bound to the credential ID, PRF
+salt, owner, wallet metadata, key epoch and wrapper format. A cancelled,
+mismatched or failed key-access attempt consumes the shared verified PRF
+capability. The focused iOS 18+ simulator suite passes 29/29 after an added
+pre-cancellation/replay case, and an independent code pass found no blocking
+defect in this disabled scope. The default legacy backup client remains
+unavailable for portable keys, the visible backup UX is unchanged, and the
+release flag remains off. Production still needs an independently authenticated
+owner/head/epoch source, enrollment lifecycle, full wallet restoration and
+real iOS↔Android provider ceremonies. The new head's hosted release checks and
+human review are pending.
+
+The non-deployed owner authority now has an explicit schema-v7→v8 migration
+and a separate immutable metadata record for a successful dual signed
+legacy-cutover check. Migrated v7 consumed claims remain proofless. The signed
+path advances the current owner authenticator counter and writes source,
+response, challenge and counter commitments in one SQLite transaction; a
+failed insert rolls back both. Startup and offline reads check the retained
+challenge and commitment. An independent diff review found no further
+concrete bypass, but identified the slow-commit expiry outcome: a committed
+proof/counter can survive even when the caller receives
+`authorization_expired`. A real-signed regression now covers it, and the
+service docs state that outcome. The owner suite passes 212/212, with syntax
+and diff checks. The SHA-256 record is consistency metadata, not a stored
+signature transcript or import authorization; an intentional 128-row lifetime
+cap also makes this preparation path unsuitable as a deployed migration
+service. No owner link, historical credential import, production HTTP route or
+recovery enablement was added.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

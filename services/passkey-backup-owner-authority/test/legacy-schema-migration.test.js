@@ -71,7 +71,7 @@ test('snapshot rejects SQLite sidecars before and during a descriptor-alias read
       fs.writeFileSync(sidecar, 'interrupted writer', { mode: 0o600 });
       denied(() => readOwnerCredentialSnapshot(path));
       fs.unlinkSync(sidecar);
-      assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 7);
+      assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 8);
     });
   }
 
@@ -95,7 +95,7 @@ test('snapshot rejects SQLite sidecars before and during a descriptor-alias read
   }
 });
 
-test('explicit v2-to-v7 migration preserves credentials, grants, counters and backup head', async (t) => {
+test('explicit v2-to-v8 migration preserves credentials, grants, counters and backup head', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -122,19 +122,19 @@ test('explicit v2-to-v7 migration preserves credentials, grants, counters and ba
   assert.deepEqual(migrated.readBackupHead(owner.sessionToken), originalHead);
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
   denied(() => migrated.consumeGrant(grant.token, request()), 'authorization_failed');
-  const v7 = readOwnerCredentialSnapshot(path);
-  assert.equal(v7.schemaVersion, 7);
-  assert.deepEqual(v7.owners, v2.owners);
-  assert.deepEqual(v7.credentials, v2.credentials);
-  assert.deepEqual(v7.storageBindings, []);
-  assert.deepEqual(v7.legacyCredentialMetadata, []);
-  assert.deepEqual(v7.credentialScopes, [{ credential_id: b64(2), owner: owner.subject, scope: 'owner', storage_key: null }]);
+  const v8 = readOwnerCredentialSnapshot(path);
+  assert.equal(v8.schemaVersion, 8);
+  assert.deepEqual(v8.owners, v2.owners);
+  assert.deepEqual(v8.credentials, v2.credentials);
+  assert.deepEqual(v8.storageBindings, []);
+  assert.deepEqual(v8.legacyCredentialMetadata, []);
+  assert.deepEqual(v8.credentialScopes, [{ credential_id: b64(2), owner: owner.subject, scope: 'owner', storage_key: null }]);
   const db = new DatabaseSync(path, { readOnly: true });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 7);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
   db.close();
 });
 
-test('v7 stores exact historical public metadata, scoped credentials and empty owner tombstones', async (t) => {
+test('v8 stores exact historical public metadata, scoped credentials and empty owner tombstones', async (t) => {
   const { core, path, bootstrap, open } = setup(t);
   const first = (await bootstrap()).owner;
   const second = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -156,7 +156,7 @@ test('v7 stores exact historical public metadata, scoped credentials and empty o
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 7);
+  assert.equal(snapshot.schemaVersion, 8);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).user_handle, historicalHandle);
   assert.equal(snapshot.credentials.find((row) => row.id === b64(2)).counter, 7);
   assert.deepEqual(snapshot.storageBindings.map((row) => row.storage_key), [tombstone, storage]);
@@ -179,10 +179,10 @@ test('v7 stores exact historical public metadata, scoped credentials and empty o
   db.prepare('UPDATE credentials SET counter=8, revoked=1 WHERE id=?').run(b64(2));
   assert.equal(db.prepare('SELECT counter,revoked FROM credentials WHERE id=?').get(b64(2)).counter, 8);
   db.close();
-  open(); // The persisted tombstone and scope are valid for the v7 reader.
+  open(); // The persisted tombstone and scope are valid for the v8 reader.
 });
 
-test('explicit v3-to-v7 migration retains legacy wallet scope and owner-wide recovery scope', async (t) => {
+test('explicit v3-to-v8 migration retains legacy wallet scope and owner-wide recovery scope', async (t) => {
   const { core, path, open, bootstrap } = setup(t);
   const historical = (await bootstrap()).owner;
   const ownerWide = (await bootstrap(core, b64(3), b64(5))).owner;
@@ -205,7 +205,7 @@ test('explicit v3-to-v7 migration retains legacy wallet scope and owner-wide rec
   denied(() => open());
   const migrated = open({ migrate: true });
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 7);
+  assert.equal(snapshot.schemaVersion, 8);
   assert.deepEqual(snapshot.credentials, previous.credentials);
   assert.deepEqual(snapshot.storageBindings, previous.storageBindings);
   assert.deepEqual(snapshot.legacyCredentialMetadata, previous.legacyCredentialMetadata);
@@ -216,7 +216,7 @@ test('explicit v3-to-v7 migration retains legacy wallet scope and owner-wide rec
   assert.equal(migrated.readBackupHead(historical.sessionToken).ownerSubject, historical.subject);
 });
 
-test('explicit v4-to-v7 migration preserves authority and starts with no pending challenge', async (t) => {
+test('explicit v4-to-v8 migration preserves authority and starts with no pending challenge', async (t) => {
   const { core, path, open, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -228,7 +228,7 @@ test('explicit v4-to-v7 migration preserves authority and starts with no pending
   const migrated = open({ migrate: true });
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
   const snapshot = readOwnerCredentialSnapshot(path);
-  assert.equal(snapshot.schemaVersion, 7);
+  assert.equal(snapshot.schemaVersion, 8);
   assert.deepEqual(snapshot.owners, original.owners);
   assert.deepEqual(snapshot.credentials, original.credentials);
   const db = new DatabaseSync(path, { readOnly: true });
@@ -236,7 +236,7 @@ test('explicit v4-to-v7 migration preserves authority and starts with no pending
   finally { db.close(); }
 });
 
-test('explicit v6-to-v7 migration preserves sessions and begins with no cutover claim', async (t) => {
+test('explicit v6-to-v8 migration preserves sessions and begins with no cutover claim', async (t) => {
   const { core, path, open, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -248,7 +248,7 @@ test('explicit v6-to-v7 migration preserves sessions and begins with no cutover 
   const migrated = open({ migrate: true });
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
   const after = readOwnerCredentialSnapshot(path);
-  assert.equal(after.schemaVersion, 7);
+  assert.equal(after.schemaVersion, 8);
   assert.deepEqual(after.owners, before.owners);
   assert.deepEqual(after.credentials, before.credentials);
   assert.deepEqual(after.credentialScopes, before.credentialScopes);
@@ -257,7 +257,37 @@ test('explicit v6-to-v7 migration preserves sessions and begins with no cutover 
   finally { db.close(); }
 });
 
-test('v7 rejects a missing cutover transition trigger', (t) => {
+test('failed v7-to-v8 migration rolls back, then preserves live grants on retry', async (t) => {
+  const { core, open, path, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const grant = core.issueGrant(owner.sessionToken, request());
+  core.close();
+  downgradeStoreFixture(path, 7);
+  const db = new DatabaseSync(path);
+  db.exec('CREATE TABLE legacy_cutover_verified_proofs (sentinel TEXT) STRICT');
+  denied(() => open({ migrate: true }));
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 7);
+  assert.equal(db.prepare('SELECT version FROM meta WHERE id=1').get().version, 7);
+  assert.deepEqual(db.prepare('PRAGMA table_info(legacy_cutover_verified_proofs)').all()
+    .map((field) => field.name), ['sentinel']);
+  db.exec('DROP TABLE legacy_cutover_verified_proofs');
+  db.close();
+  const migrated = open({ migrate: true });
+  assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
+  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 8);
+});
+
+test('v8 refuses a missing verified-proof immutability trigger', (t) => {
+  const { core, path, open } = setup(t);
+  core.close();
+  const db = new DatabaseSync(path);
+  db.exec('DROP TRIGGER legacy_cutover_verified_proof_no_update');
+  db.close();
+  denied(() => open());
+  denied(() => readOwnerCredentialSnapshot(path));
+});
+
+test('v8 rejects a missing cutover transition trigger', (t) => {
   const { core, path, open } = setup(t);
   core.close();
   const db = new DatabaseSync(path);
@@ -267,7 +297,7 @@ test('v7 rejects a missing cutover transition trigger', (t) => {
   denied(() => readOwnerCredentialSnapshot(path));
 });
 
-test('v7 rejects missing challenge claim trigger and forged per-key handle', async (t) => {
+test('v8 rejects missing challenge claim trigger and forged per-key handle', async (t) => {
   const { core, path, open, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const db = new DatabaseSync(path);
@@ -284,7 +314,7 @@ test('v7 rejects missing challenge claim trigger and forged per-key handle', asy
   denied(() => readOwnerCredentialSnapshot(path));
 });
 
-test('v7 rejects a missing credential-revocation rotation trigger', (t) => {
+test('v8 rejects a missing credential-revocation rotation trigger', (t) => {
   const { core, path, open } = setup(t);
   core.close();
   const db = new DatabaseSync(path);
@@ -294,7 +324,7 @@ test('v7 rejects a missing credential-revocation rotation trigger', (t) => {
   denied(() => readOwnerCredentialSnapshot(path));
 });
 
-test('failed v2-to-v7 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
+test('failed v2-to-v8 migration rolls back all schema changes and remains explicitly retryable', async (t) => {
   const { core, open, path, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const grant = core.issueGrant(owner.sessionToken, request());
@@ -311,7 +341,7 @@ test('failed v2-to-v7 migration rolls back all schema changes and remains explic
   db.close();
   const migrated = open({ migrate: true });
   assert.equal(migrated.consumeGrant(grant.token, request()).subject, owner.subject);
-  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 7);
+  assert.equal(readOwnerCredentialSnapshot(path).schemaVersion, 8);
 });
 
 test('missing v4 immutability trigger rejects opening rather than silently running weaker schema', (t) => {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { AuthorityStore } from './store.js';
+import { AuthorityStore, legacyCutoverAssertionChallenge,
+  legacyCutoverProofCommitment } from './store.js';
 import { readSealedLegacyCredential } from './legacy-cutover-verifier.js';
 import {
   AuthorityError, RP_ID, appAttestation, backupFlags, base64, counter, credentialRecord, credentialResponse,
@@ -34,7 +35,10 @@ function prune(tx) {
   tx.run('DELETE FROM sessions WHERE expires<=?', tx.now);
   tx.run('DELETE FROM ceremonies WHERE expires<=?', tx.now);
   tx.run('DELETE FROM pending_challenges WHERE expires<=?', tx.now);
-  tx.run('DELETE FROM legacy_cutover_challenges WHERE expires<=?', tx.now);
+  // Verified proof metadata is retained for a future independently reviewed
+  // reconciliation. Expired claims without proof remain disposable tombstones.
+  tx.run(`DELETE FROM legacy_cutover_challenges WHERE expires<=? AND id NOT IN
+    (SELECT challenge_id FROM legacy_cutover_verified_proofs)`, tx.now);
   tx.run('DELETE FROM limits WHERE bucket<?', Math.floor(tx.now / 60_000) - 1);
 }
 
@@ -43,17 +47,6 @@ function sha256Hex(value) { return createHash('sha256').update(value).digest('he
 function cutoverSource(input) {
   try { return readSealedLegacyCredential(input); }
   catch { deny('cutover_source_invalid'); }
-}
-
-// Positional public transcript. The role prefix separates the two WebAuthn
-// challenges even though they belong to one durable, single-use nonce.
-function cutoverAssertionChallenge(row, role) {
-  const fields = [row.version, row.source_sha256, row.snapshot_name, row.storage_key,
-    row.legacy_owner_hash, row.legacy_credential_id, row.legacy_public_key_sha256,
-    row.legacy_counter, row.legacy_user_handle, row.legacy_scope,
-    row.owner, row.generation, row.session, row.owner_credential_id,
-    row.owner_credential_counter, row.rp_id, row.platform, row.nonce, row.expires];
-  return hash(Buffer.from(`FP_LEGACY_CUTOVER_${role}_V1\0${JSON.stringify(fields)}`, 'utf8'));
 }
 
 function cutoverAssertions(row, legacyAssertion, ownerAssertion, ownerUserHandle) {
@@ -546,6 +539,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         if (tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges').n >= 128 ||
             tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges WHERE owner=?', owner.subject).n >= 8 ||
             tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE legacy_credential_id=?',
+              source.legacyCredentialId) ||
+            tx.query('SELECT 1 FROM legacy_cutover_verified_proofs WHERE legacy_credential_id=?',
               source.legacyCredentialId)) deny('rate_limited');
         const expires = Math.floor(Math.min(current.expires, tx.now + CEREMONY_MS) / 1000) * 1000;
         if (expires <= tx.now) deny();
@@ -573,8 +568,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           storageKey: row.storage_key, legacyCredentialId: row.legacy_credential_id,
           ownerSubject: row.owner, ownerCredentialId: row.owner_credential_id,
           rpId: row.rp_id, platform: row.platform,
-          legacyChallenge: cutoverAssertionChallenge(row, 'LEGACY'),
-          ownerChallenge: cutoverAssertionChallenge(row, 'OWNER'), expiresAt: expires / 1000,
+          legacyChallenge: legacyCutoverAssertionChallenge(row, 'LEGACY'),
+          ownerChallenge: legacyCutoverAssertionChallenge(row, 'OWNER'), expiresAt: expires / 1000,
           migrationPermitted: false });
       });
     },
@@ -599,8 +594,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         tx.run(`UPDATE legacy_cutover_challenges SET state=1,legacy_body_sha256=?,owner_body_sha256=?
           WHERE id=? AND state=0`, responses.legacyBodySha256, responses.ownerBodySha256, row.id);
         return Object.freeze({ schemaVersion: 1, challengeId: row.id,
-          legacyChallenge: cutoverAssertionChallenge(row, 'LEGACY'),
-          ownerChallenge: cutoverAssertionChallenge(row, 'OWNER'),
+          legacyChallenge: legacyCutoverAssertionChallenge(row, 'LEGACY'),
+          ownerChallenge: legacyCutoverAssertionChallenge(row, 'OWNER'),
           state: 'claimed-unverified', expiresAt: row.expires / 1000,
           migrationPermitted: false });
       });
@@ -621,8 +616,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       });
     },
     // Internal server composition: durable claim, two real WebAuthn checks,
-    // then a locked recheck and burn. The v7 row is only a replay tombstone;
-    // this return value is not a durable import proof or owner binding.
+    // then a locked recheck, authenticator-counter CAS and metadata-only proof.
+    // The proof is not an import authorization or owner binding.
     async verifyAndConsumeLegacyCutoverClaim(sessionToken, input) {
       exact(input, ['schemaVersion', 'challengeId', 'legacySnapshotPath', 'expectedSourceSha256',
         'legacyAssertion', 'ownerAssertion']);
@@ -647,8 +642,8 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         };
       });
       const { row, source, ownerCredential } = prepared;
-      const legacyChallenge = cutoverAssertionChallenge(row, 'LEGACY');
-      const ownerChallenge = cutoverAssertionChallenge(row, 'OWNER');
+      const legacyChallenge = legacyCutoverAssertionChallenge(row, 'LEGACY');
+      const ownerChallenge = legacyCutoverAssertionChallenge(row, 'OWNER');
       const legacyRegistered = Object.freeze({ id: source.legacyCredentialId,
         publicKey: source.legacyPublicKey, userHandle: source.legacyUserHandle,
         counter: source.legacyCounter, deviceType: source.legacyDeviceType,
@@ -680,9 +675,46 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
             live.ownerCredential.backed_up !== ownerCredential.backed_up ||
             tx.query('SELECT 1 FROM credentials WHERE id=?', row.legacy_credential_id) ||
             tx.query('SELECT 1 FROM storage_bindings WHERE storage_key=?', row.storage_key)) deny();
-        tx.run('UPDATE legacy_cutover_challenges SET state=2 WHERE id=? AND state=1', row.id);
+        if (tx.run(`UPDATE credentials SET counter=?,backed_up=? WHERE id=? AND owner=?
+          AND counter=? AND revoked=0 AND public_key=? AND user_handle=?
+          AND device_type=? AND backed_up=?`,
+        ownerEvidence.newCounter, Number(ownerEvidence.backedUp), ownerCredential.id,
+        row.owner, ownerCredential.counter, ownerCredential.public_key,
+        ownerCredential.user_handle, ownerCredential.device_type,
+        ownerCredential.backed_up).changes !== 1) deny();
+        const proof = {
+          challenge_id: row.id, source_sha256: row.source_sha256, owner: row.owner,
+          legacy_credential_id: row.legacy_credential_id,
+          owner_credential_id: row.owner_credential_id,
+          legacy_body_sha256: row.legacy_body_sha256,
+          owner_body_sha256: row.owner_body_sha256,
+          legacy_challenge_sha256: sha256Hex(legacyChallenge),
+          owner_challenge_sha256: sha256Hex(ownerChallenge),
+          legacy_new_counter: legacyEvidence.newCounter,
+          owner_new_counter: ownerEvidence.newCounter,
+          legacy_device_type: legacyEvidence.deviceType,
+          legacy_backed_up: Number(legacyEvidence.backedUp),
+          owner_device_type: ownerEvidence.deviceType,
+          owner_backed_up: Number(ownerEvidence.backedUp),
+          verified_at: tx.now,
+        };
+        const proofSha256 = legacyCutoverProofCommitment(proof);
+        tx.run(`INSERT INTO legacy_cutover_verified_proofs (
+          challenge_id,proof_sha256,source_sha256,owner,legacy_credential_id,owner_credential_id,
+          legacy_body_sha256,owner_body_sha256,legacy_challenge_sha256,owner_challenge_sha256,
+          legacy_new_counter,owner_new_counter,legacy_device_type,legacy_backed_up,
+          owner_device_type,owner_backed_up,verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        proof.challenge_id, proofSha256, proof.source_sha256, proof.owner,
+        proof.legacy_credential_id, proof.owner_credential_id,
+        proof.legacy_body_sha256, proof.owner_body_sha256,
+        proof.legacy_challenge_sha256, proof.owner_challenge_sha256,
+        proof.legacy_new_counter, proof.owner_new_counter,
+        proof.legacy_device_type, proof.legacy_backed_up,
+        proof.owner_device_type, proof.owner_backed_up, proof.verified_at);
+        if (tx.run('UPDATE legacy_cutover_challenges SET state=2 WHERE id=? AND state=1', row.id)
+          .changes !== 1) deny();
         return Object.freeze({ schemaVersion: 1, challengeId: row.id,
-          state: 'consumed-after-verification', expiresAt: row.expires / 1000,
+          state: 'verified-proof-recorded', proofSha256, expiresAt: row.expires / 1000,
           migrationPermitted: false });
       });
     },

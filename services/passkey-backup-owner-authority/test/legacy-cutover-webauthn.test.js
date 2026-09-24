@@ -41,7 +41,7 @@ function signedResponse(challenge, authenticator, userHandle, credentialId, opti
   return rest;
 }
 
-async function fixture(t, { onVerify, wrongSourceKey = false } = {}) {
+async function fixture(t, { onVerify, wrongSourceKey = false, fault } = {}) {
   const adapter = { ...fakeVerifier(),
     async legacyCutoverAssertion(input) {
       const evidence = await realVerifier.legacyCutoverAssertion(input);
@@ -49,7 +49,7 @@ async function fixture(t, { onVerify, wrongSourceKey = false } = {}) {
       return evidence;
     },
   };
-  const item = setup(t, { verifier: adapter });
+  const item = setup(t, { verifier: adapter, fault });
   const { owner } = await item.bootstrap();
   const ownerCredential = readOwnerCredentialSnapshot(item.path).credentials[0];
   const ownerAuthenticator = createAuthenticator(`cutover-owner-${item.dir}`);
@@ -94,13 +94,23 @@ test('two signed, role-separated assertions verify and consume only a read-only 
   const before = readOwnerCredentialSnapshot(item.path);
   const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
   assert.deepEqual(result, { schemaVersion: 1, challengeId: item.issued.challengeId,
-    state: 'consumed-after-verification', expiresAt: item.issued.expiresAt,
+    state: 'verified-proof-recorded', proofSha256: database(item.path, (db) =>
+      db.prepare('SELECT proof_sha256 FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+        .get(item.issued.challengeId).proof_sha256), expiresAt: item.issued.expiresAt,
     migrationPermitted: false });
   assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  const proof = database(item.path, (db) => db.prepare(
+    'SELECT * FROM legacy_cutover_verified_proofs WHERE challenge_id=?').get(item.issued.challengeId));
+  assert.equal(proof.legacy_new_counter, 8);
+  assert.equal(proof.owner_new_counter, 2);
+  assert.equal(proof.source_sha256, item.input.expectedSourceSha256);
+  assert.equal(proof.legacy_body_sha256, row(item.path, item.issued.challengeId).legacy_body_sha256);
+  assert.equal(proof.owner_body_sha256, row(item.path, item.issued.challengeId).owner_body_sha256);
   await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
     'authorization_failed');
   const after = readOwnerCredentialSnapshot(item.path);
-  assert.deepEqual(after.credentials, before.credentials);
+  assert.deepEqual(after.credentials, before.credentials.map((credential) =>
+    credential.id === item.ownerCredential.id ? { ...credential, counter: 2 } : credential));
   assert.deepEqual(after.storageBindings, []);
   assert.deepEqual(readFileSync(item.input.legacySnapshotPath), item.sourceBytes);
 });
@@ -187,6 +197,8 @@ test('verified assertions fail at commit when the owner or sealed source changes
       await assert.rejects(item.core.verifyAndConsumeLegacyCutoverClaim(
         item.owner.sessionToken, item.input));
       assert.equal(row(item.path, item.issued.challengeId).state, 1);
+      assert.equal(database(item.path, (db) => db.prepare(
+        'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 0);
     });
   }
 });
@@ -199,4 +211,77 @@ test('one concurrent verifier wins the durable claim', async (t) => {
   ]);
   assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
   assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 1);
+  assert.equal(readOwnerCredentialSnapshot(item.path).credentials.find(
+    (credential) => credential.id === item.ownerCredential.id).counter, 2);
+});
+
+test('verified metadata survives expiry and restart but remains non-authorizing', async (t) => {
+  const item = await fixture(t);
+  const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  item.clock.mono += 121_000;
+  item.core.beginAuthentication('android'); // Prunes expired unverified claims.
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT proof_sha256 FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+    .get(item.issued.challengeId).proof_sha256), result.proofSha256);
+  item.core.close();
+  const reopened = item.open();
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
+  await denied(reopened.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_failed');
+  assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);
+});
+
+test('a commit crossing expiry retains the signed proof but returns no live authority', async (t) => {
+  let armed = false;
+  let commits = 0;
+  let item;
+  item = await fixture(t, { fault(stage) {
+    if (armed && stage === 'beforeCommit' && ++commits === 3) item.clock.mono += 121_000;
+  } });
+  armed = true;
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_expired');
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+    .get(item.issued.challengeId).n), 1);
+  assert.equal(readOwnerCredentialSnapshot(item.path).credentials.find(
+    (credential) => credential.id === item.ownerCredential.id).counter, 2);
+  assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_failed');
+});
+
+test('a failed proof insert rolls back the owner counter CAS and verified state', async (t) => {
+  const item = await fixture(t);
+  database(item.path, (db) => db.exec(`CREATE TRIGGER test_abort_verified_insert
+    BEFORE INSERT ON legacy_cutover_verified_proofs
+    BEGIN SELECT RAISE(ABORT,'injected proof write failure'); END;`));
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'store_unavailable');
+  assert.equal(row(item.path, item.issued.challengeId).state, 1);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT counter FROM credentials WHERE id=?').get(item.ownerCredential.id).counter), 1);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 0);
+});
+
+test('tampering with a retained proof commitment fails startup and offline reading', async (t) => {
+  const item = await fixture(t);
+  await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  item.core.close();
+  database(item.path, (db) => {
+    const trigger = db.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger'
+      AND name='legacy_cutover_verified_proof_no_update'`).get().sql;
+    db.exec('DROP TRIGGER legacy_cutover_verified_proof_no_update');
+    db.prepare('UPDATE legacy_cutover_verified_proofs SET proof_sha256=? WHERE challenge_id=?')
+      .run('f'.repeat(64), item.issued.challengeId);
+    db.exec(trigger);
+  });
+  assert.throws(() => item.open(), (error) => error.code === 'store_unavailable');
+  assert.throws(() => readOwnerCredentialSnapshot(item.path),
+    (error) => error.code === 'store_unavailable');
 });

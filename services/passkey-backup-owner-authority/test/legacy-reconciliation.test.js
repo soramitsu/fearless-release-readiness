@@ -47,7 +47,7 @@ test('read-only reconciliation reports real handle mismatch and retained tombsto
   assert.equal(report.mode, 'read-only');
   assert.equal(report.migrationPermitted, false);
   assert.equal(report.legacySchemaVersion, 3);
-  assert.equal(report.ownerSchemaVersion, 7);
+  assert.equal(report.ownerSchemaVersion, 8);
   assert.deepEqual(report.counts, {
     legacyStorageKeys: 2, legacyCredentials: 1, ownerSubjects: 1, ownerCredentials: 1,
     matchingPublicCredentialRows: 0, unmappedStorageKeys: 1, unmappedCredentials: 0,
