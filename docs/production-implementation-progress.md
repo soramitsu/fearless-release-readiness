@@ -1471,6 +1471,18 @@ signing/export and the cohort installer remain open. The receiving and
 backup-completion blockers have not changed, and hosted CI and independent
 review remain pending.
 
+## Exact iOS new-wallet restore order — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `15dae3bcdf01e882a6a6754010d7d562bc69838b`.
+For a new Core Data wallet row in exact-replacement mode with an explicit
+cohort order, the mapper now persists that order instead of assigning the
+next local order. Ordinary new-wallet saves retain their append behavior.
+The exact-source iPhone 15/iOS 17.2 mapper suite passes 15/15, including
+the order regression. The modified existing files retain their prior lint
+baseline; the source diff check passes. This mode still requires a verified
+receiving cohort and transactional Keychain/Core Data installer before use.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
