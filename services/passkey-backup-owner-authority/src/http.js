@@ -113,6 +113,71 @@ function ownerSession(request) {
   return value;
 }
 
+// JSON.parse silently keeps the last occurrence of a repeated member. The
+// owner/grant protocol must not let two clients or a proxy interpret the same
+// request as different metadata, including when a key uses a Unicode escape.
+function rejectDuplicateJsonMembers(raw) {
+  let position = 0;
+  const whitespace = () => {
+    while (position < raw.length && /[\t\n\r ]/.test(raw[position])) position += 1;
+  };
+  const string = () => {
+    const start = position;
+    if (raw[position++] !== '"') throw new Error('invalid_json');
+    while (position < raw.length) {
+      const character = raw[position++];
+      if (character === '"') return JSON.parse(raw.slice(start, position));
+      if (character === '\\') position += 1;
+    }
+    throw new Error('invalid_json');
+  };
+  const value = (depth) => {
+    if (depth > 32) throw new Error('invalid_json');
+    whitespace();
+    if (raw[position] === '{') {
+      position += 1;
+      const seen = new Set();
+      whitespace();
+      if (raw[position] === '}') { position += 1; return; }
+      while (position < raw.length) {
+        const member = string();
+        if (seen.has(member)) throw new Error('duplicate_json_member');
+        seen.add(member);
+        whitespace();
+        if (raw[position++] !== ':') throw new Error('invalid_json');
+        value(depth + 1);
+        whitespace();
+        const separator = raw[position++];
+        if (separator === '}') return;
+        if (separator !== ',') throw new Error('invalid_json');
+        whitespace();
+      }
+      throw new Error('invalid_json');
+    }
+    if (raw[position] === '[') {
+      position += 1;
+      whitespace();
+      if (raw[position] === ']') { position += 1; return; }
+      while (position < raw.length) {
+        value(depth + 1);
+        whitespace();
+        const separator = raw[position++];
+        if (separator === ']') return;
+        if (separator !== ',') throw new Error('invalid_json');
+        whitespace();
+      }
+      throw new Error('invalid_json');
+    }
+    if (raw[position] === '"') { string(); return; }
+    const start = position;
+    while (position < raw.length && !/[\t\n\r ,}\]]/.test(raw[position])) position += 1;
+    if (position === start) throw new Error('invalid_json');
+  };
+  value(0);
+  whitespace();
+  if (position !== raw.length) throw new Error('invalid_json');
+}
+
 async function readBody(request, maximum = MAX_BODY_BYTES) {
   const type = request.headers['content-type'];
   if (typeof type !== 'string' || type.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
@@ -132,7 +197,9 @@ async function readBody(request, maximum = MAX_BODY_BYTES) {
   const raw = Buffer.concat(chunks);
   if (!isUtf8(raw)) deny();
   try {
-    return { body: JSON.parse(raw.toString('utf8')), raw };
+    const text = raw.toString('utf8');
+    rejectDuplicateJsonMembers(text);
+    return { body: JSON.parse(text), raw };
   } catch { deny(); }
 }
 

@@ -25,12 +25,12 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `8dd03781fea3399d08a010d8eb9c1af0eb074785` and
-`686ae183c7592a5b3ca127f1f805602557a273b7`, respectively. Both clean
-app trees are on review branches. Exact-head local recovery-component tests
-and an independent static diff review passed as recorded below; their new
-hosted checks are still running. Protected qualification, independent human
-security approval and signed distribution acceptance remain outstanding.
+candidates are `41b4c91e8` and `d80ec7af7`, respectively. Both clean app
+trees are on review branches. Exact-source local recovery-component tests
+and an independent static diff review passed as recorded below; hosted checks
+for the new heads remain to be confirmed. Protected qualification,
+independent human security approval and signed distribution acceptance remain
+outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2733,6 +2733,28 @@ The adapter has no production callsite and cannot enable recovery or install
 a wallet. Exact-head hosted checks and real selected-account/device acceptance
 remain open.
 
+The new Android source at `41b4c91e8` on
+[PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260) adds a
+disabled, unwired owner-generation metadata client for grant, commit and
+operation-status routes. It binds the candidate to the authenticated head,
+owner session and verified selected Google subject, rejects malformed grants
+and substituted committed descriptors, and never sends Drive tokens, PRF
+output or wallet plaintext to the authority. The pinned-source backup JVM
+suite passed **257/257** without failures/errors/skips; `detektAll` and diff
+checks passed. No upload, decryption, original-key proof or backup completion
+is performed by this client. Hosted checks and device acceptance are open.
+
+The new iOS source at `d80ec7af7` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) now derives
+the expected owner-head storage binding from the selected Drive account
+inside the HTTP adapter. It rechecks the account and owner-session expiry
+after asynchronous HTTP and final readback, including after the last Google
+account check. The iOS 18.1 arm64 simulator owner-authentication and Drive
+tests passed **47/47** without failures/skips. Scoped SwiftFormat and strict
+SwiftLint, diff checks and independent read-only review found no remaining
+issue in this change. Native provider and signed distribution acceptance
+remain open; recovery stays disabled and unwired.
+
 The read-only sealed-credential cutover comparison now requires an imported
 historical credential to carry its verified post-assertion signature counter,
 rather than the older counter in the sealed JSON image. A regression proves
@@ -2742,6 +2764,13 @@ different sealed image also cannot make the comparison exact. Owner-authority
 tests pass **255/255** and syntax checks pass. This is a diagnostic fence only: no
 historical cohort has been imported, the old JSON writer has not been drained,
 and the report still denies migration and production startup.
+
+The owner-authority HTTP candidate now rejects duplicate JSON object members,
+including escaped-name aliases and nested duplicates, before `JSON.parse` can
+silently retain one value. The bounded body still follows the existing closed
+route schemas. Its full local suite passed **255/255**, syntax and diff checks
+passed, and an independent read-only review found no remaining issue in this
+change. This does not enable production startup or migrate legacy credentials.
 
 ## Completion record
 

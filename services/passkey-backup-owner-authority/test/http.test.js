@@ -340,6 +340,17 @@ test('candidate transport rejects duplicate sensitive headers and oversized bodi
     'Content-Type', 'application/json', 'Content-Type', 'application/json',
     'Content-Length', String(Buffer.byteLength(body)),
   ], body)).status, 400);
+  for (const duplicated of [
+    '{"schemaVersion":1,"schemaVersion":1,"platform":"android"}',
+    '{"schemaVersion":1,"platform":"android","\\u0070latform":"ios"}',
+    '{"schemaVersion":1,"platform":{"name":"android","\\u006eame":"ios"}}',
+  ]) {
+    assert.equal((await sendRaw([
+      'Host', new URL(base).host,
+      'Content-Type', 'application/json',
+      'Content-Length', String(Buffer.byteLength(duplicated)),
+    ], duplicated)).status, 400);
+  }
   const oversized = 'x'.repeat(64 * 1024 + 1);
   const rejected = await sendRaw([
     'Host', new URL(base).host,
