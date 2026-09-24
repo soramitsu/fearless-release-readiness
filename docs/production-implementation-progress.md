@@ -26,11 +26,12 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are `a74da1e0e78f1957fe4ee5f28240a3c92013a9f4` and
-`de3c8fbe7d22533e91b5a2e2c16802d6586d7cda`, respectively. Both clean app
+`98816e2f2cec251f92eeff49a2d0bd7152f96534`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
 322/322 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
-The exact iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
-arm64 Release simulator tests; the preceding journal source passed 11/11 and
+The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
+arm64 Release simulator tests; the latest XCM authorization/MainTab suites
+passed 116/116 on the exact current head. The preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
@@ -2988,6 +2989,19 @@ it never writes. The exact iOS 18.1 arm64 Release simulator suites passed
 diff checks passed. A future installer must hold a writer boundary from this
 observation through Keychain staging and Core Data commit. This proof does not
 reserve destinations or create an atomic installer.
+
+The next iOS source at `98816e2f2cec251f92eeff49a2d0bd7152f96534`
+fixes an enabled-path XCM signing deadlock. The final authorization lease
+already holds the nonrecursive process-policy lock; its context validation
+previously reached a route-validator default argument that read the same lock.
+Route-only validation now runs inside that held lease, while initial and
+confirmation checks still require an explicit current policy flag. The
+route-only path rejects changed assets. Exact-head iOS 18.1 arm64 Release
+simulator authorization and MainTab suites passed **116/116** tests with no
+failures or skips. Whole-file SwiftLint and SwiftFormat diagnostics on touched
+files match the parent commit by count and rule (40 and 125 existing findings,
+respectively); no new style findings were introduced. Required production
+trust, policy and route resources are absent, so new mutations remain denied.
 
 Android source `d54007148aec9cb92f993c4ecfc3be09ec708fde` adds an
 application-owned verified semantic exporter behind an internal, unwired
