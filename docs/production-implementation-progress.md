@@ -2045,6 +2045,74 @@ credentials into the SQLite owner authority, integrate real attestation or
 enable cross-device recovery. The deployed service and candidate authority
 remain separate, and their cutover still requires a verified single writer.
 
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is clean and pushed at `29c49af93f69b6dc22666b07b37f6bad0ef4295d`.
+Its previous hosted `build-and-test` run found 49 stale schema-version test
+expectations after Room v79: 47 expected v78, and two fail-closed tests used
+v78/79 as static bounds. The corrected assertions bind to the current schema
+constant, and the future-version fixture is one version above it. All 56
+affected API 34 instrumentation tests pass locally without failures or skips.
+The new exact-head hosted `build-and-test` run has passed source checks,
+static analysis, unit tests, lint, API 30/31/36 migration and restart
+compatibility, wallet migration/startup instrumentation, artifact builds and
+source-bound AAB/native payload verification. A clean-head, unsigned Release
+bundle ran all 1,405 Gradle tasks,
+including R8 and `bundleRelease`, with no forbidden
+metadata or ServiceLoader warning. The pinned bundletool verified embedded
+commit, package/version, SDK 26–36 policy, toolchain, network policy, exact
+components/permissions and native payload. All 16 libraries across four ABIs
+passed the 16 KiB ELF alignment check. The AAB SHA-256 is
+`dc5a7eec398c07282813d6b46ce0f7dd025ead66ee2d387d900b219de02d60b6`;
+its local receipt is
+`fearless-Android-production-consolidated-20260731/build/reports/android-unsigned-release-29c49af9-evidence.json`
+(SHA-256 `3cc08e59f40b794a83a4c6679d0820127889f5c06f0d40d1efee0f4b5789d683`).
+The AAB is preserved read-only under the adjacent
+`build/reports/android-unsigned-release-29c49af9.aab` path.
+This artifact is unsigned and does not establish Play signing, signed upgrade,
+or runtime behavior on a 16 KiB device.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+is clean and pushed at `96ad164a8b7f69cbcb1625904932ffddebac6e60`.
+A gated native Drive consent path now shows the selected Google email and
+subject and requires explicit Continue; cancellation, a different subject,
+an absent presentation window and a changed current account fail closed.
+The compiled-disabled gate is checked before Google initialization. Focused
+simulator tests pass 32/32; the English localization file passes `plutil`,
+and diff checks pass. There is no production-screen caller yet, other locale
+translations are pending, and no Google/provider device interoperability was
+claimed. The visible legacy password backup path remains unchanged. The new
+head's validate, release-contract, release-safety and hosted simulator build
+checks have passed. Independent review remains pending.
+
+The sealed legacy credential cutover verifier already compares a private
+JSON source image and public credential state against the candidate SQLite
+authority; it always denies migration. Schema v7 now adds an internal,
+two-minute issue/claim/consume challenge that binds that sealed source, old
+credential and storage key to the current owner session and two distinct
+assertion challenges. It stores only public commitments, enforces one-use
+replay state and rejects pending identity/source collisions. Independent code
+review found and fixed pending storage-key collision, post-commit expiry,
+nullable-hash and directed-null-handle issues. The focused cutover suite passes
+15/15, the complete owner-service suite passes 179/179, and the
+source-publication fixture passes 88 adversarial negative cases. The claim
+remains explicitly unverified and
+`migrationPermitted:false`; dual WebAuthn signature verification, proven owner
+link, transactional import, drained legacy writer and live cutover remain open.
+
+The root source-publication and release-bundle required-file inventories now
+include the existing bootstrap proof, sealed cutover verifier and their tests,
+as well as the new v7 challenge test. This prevents those critical files from
+being silently absent or substituted in a published release source bundle.
+The release audit and bundle handoffs now direct operators to the consolidated
+Android/iOS candidates, including Android XCM template generation and evidence
+paths; the old checkouts cannot satisfy those instructions. The release-unblock
+command-contract fixture and full release-audit fixture pass, the latter with
+239 aggregate scenarios, 146 production override probes, three production
+tool-path/function probes and six test-mode isolation probes. Both full bundle
+export and verification adversarial fixtures pass with exact route-key and
+source-byte identity checks. Their negative cases include same-count route
+substitution and evidence-template order changes, which now fail validation.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

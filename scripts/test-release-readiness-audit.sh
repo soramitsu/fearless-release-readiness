@@ -2176,7 +2176,7 @@ assert_action_manifest "blocked iOS shared-features removal readiness" failed tr
   "ios-shared-features-delta" \
   "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
   "Upstream shared-features publication of carried compatibility and native-crypto deltas." \
-  "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
+  "cd fearless-iOS-production-consolidated-20260731 && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
 assert_failed_check_metadata \
   "blocked iOS shared-features removal readiness" \
   "ios-shared-features-delta" \

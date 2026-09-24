@@ -1191,8 +1191,8 @@ const evidenceTemplateCommandsBySlug = {
     'bash scripts/generate-nexus-production-evidence-template.sh --output build/reports/nexus-production-evidence-template.json',
   ],
   'android-xcm-production-evidence': [
-    'cd fearless-Android && bash scripts/test-xcm-production-evidence-template.sh',
-    'cd fearless-Android && bash scripts/generate-xcm-production-evidence-template.sh --output build/reports/xcm-production-evidence-template.json',
+    'cd fearless-Android-production-consolidated-20260731 && bash scripts/test-xcm-production-evidence-template.sh',
+    'cd fearless-Android-production-consolidated-20260731 && bash scripts/generate-xcm-production-evidence-template.sh --output build/reports/xcm-production-evidence-template.json',
   ],
   'web-bitcoin-broadcast-evidence': [
     'cd fearless-wallet-web && yarn test:bitcoin-broadcast-evidence-template',
@@ -1248,11 +1248,11 @@ const evidenceTemplateHandoffBySlug = {
     ],
   },
   'android-xcm-production-evidence': {
-    selfTestCommand: 'cd fearless-Android && bash scripts/test-xcm-production-evidence-template.sh',
-    generateCommand: 'cd fearless-Android && bash scripts/generate-xcm-production-evidence-template.sh --output build/reports/xcm-production-evidence-template.json',
-    outputPath: 'fearless-Android/build/reports/xcm-production-evidence-template.json',
-    destinationManifest: 'fearless-Android/scripts/xcm-production-evidence.json',
-    readyAuditCommand: 'cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready',
+    selfTestCommand: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/test-xcm-production-evidence-template.sh',
+    generateCommand: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/generate-xcm-production-evidence-template.sh --output build/reports/xcm-production-evidence-template.json',
+    outputPath: 'fearless-Android-production-consolidated-20260731/build/reports/xcm-production-evidence-template.json',
+    destinationManifest: 'fearless-Android-production-consolidated-20260731/scripts/xcm-production-evidence.json',
+    readyAuditCommand: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready',
     requiredEvidenceContracts: [
       'one evidence record per scripts/xcm-required-routes.tsv route',
       'extrinsicHash must be a 0x-prefixed 32-byte hash',
@@ -1456,13 +1456,17 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'services/passkey-backup-challenge-service/package.json',
   'services/passkey-backup-challenge-service/src/server.js',
   'services/passkey-backup-owner-authority/README.md',
+  'services/passkey-backup-owner-authority/docs/bootstrap-proof.md',
   'services/passkey-backup-owner-authority/docs/legacy-cutover.md',
   'services/passkey-backup-owner-authority/package.json',
   'services/passkey-backup-owner-authority/package-lock.json',
   'services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs',
   'services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentials.mjs',
+  'services/passkey-backup-owner-authority/scripts/verify-sealed-legacy-cutover.mjs',
   'services/passkey-backup-owner-authority/src/authority.js',
+  'services/passkey-backup-owner-authority/src/bootstrap-proof.js',
   'services/passkey-backup-owner-authority/src/http.js',
+  'services/passkey-backup-owner-authority/src/legacy-cutover-verifier.js',
   'services/passkey-backup-owner-authority/src/legacy-quarantine.js',
   'services/passkey-backup-owner-authority/src/legacy-reconciliation.js',
   'services/passkey-backup-owner-authority/src/store.js',
@@ -1473,6 +1477,8 @@ const sourcePublicationWorkspaceRequiredFiles = [
   'services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js',
   'services/passkey-backup-owner-authority/test/generation-head.test.js',
   'services/passkey-backup-owner-authority/test/http.test.js',
+  'services/passkey-backup-owner-authority/test/legacy-cutover-challenge.test.js',
+  'services/passkey-backup-owner-authority/test/legacy-cutover-verifier.test.js',
   'services/passkey-backup-owner-authority/test/legacy-quarantine.test.js',
   'services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js',
   'services/passkey-backup-owner-authority/test/legacy-schema-migration.test.js',
@@ -2436,12 +2442,73 @@ function assertXcmRegistryGapReport(report, label) {
 
 const xcmEffectiveRegistrySourcePath = 'android-xcm-effective-registry-report.json'
 const xcmEffectiveRegistryArtifactPath = 'handoffs/android-xcm-effective-registry-report.json'
-const xcmEffectiveRegistryGeneratedPath = 'fearless-Android/build/reports/xcm-effective-registry-report.json'
+const xcmEffectiveRegistryGeneratedPath = 'fearless-Android-production-consolidated-20260731/build/reports/xcm-effective-registry-report.json'
 const xcmProductionDiscoveryUrl = 'https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json'
 const xcmEffectiveRegistryLocalInputs = {
   approvedRoutes: 'runtime/src/main/assets/approved_xcm_routes.tsv',
   requiredRoutes: 'scripts/xcm-required-routes.tsv',
   bundledRegistry: 'runtime/src/main/assets/local_chains.json',
+}
+const xcmCandidateDirectory = 'fearless-Android-production-consolidated-20260731'
+let xcmTemplateRequiredSourceIdentity = null
+let xcmEffectiveRequiredSourceIdentity = null
+
+function assertXcmSourceIdentity(actual, expected, label) {
+  if (actual.byteLength !== expected.byteLength) fail(`${label}.byteLength does not match candidate route source`)
+  if (actual.sha256 !== expected.sha256) fail(`${label}.sha256 does not match candidate route source`)
+}
+
+function assertXcmTemplateAndEffectiveSourceAgree() {
+  if (!xcmTemplateRequiredSourceIdentity || !xcmEffectiveRequiredSourceIdentity) return
+  assertXcmSourceIdentity(xcmTemplateRequiredSourceIdentity, xcmEffectiveRequiredSourceIdentity, 'Android XCM template required-route source')
+}
+
+function readCandidateXcmRoutes(relativeSource, label) {
+  const source = resolveWorkspaceFile(`${xcmCandidateDirectory}/${relativeSource}`, label)
+  assertRegularFile(source, label)
+  const bytes = fs.readFileSync(source)
+  if (bytes.length > 1024 * 1024) fail(`${label} exceeds 1 MiB`)
+  const routes = []
+  const seen = new Set()
+  for (const [index, line] of bytes.toString('utf8').split(/\r?\n/u).entries()) {
+    const trimmed = line.replace(/\s+#.*$/u, '').trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const parts = trimmed.split(/\s+/u)
+    if (parts.length !== 3) fail(`${label} line ${index + 1} must contain exactly origin destination asset columns`)
+    const [origin, destination, symbol] = parts
+    if (!/^[0-9a-f]{64}$/u.test(origin) || !/^[0-9a-f]{64}$/u.test(destination) || origin === destination) {
+      fail(`${label} line ${index + 1} has invalid chain identities`)
+    }
+    if (!/^[A-Z0-9][A-Z0-9._-]{0,31}$/u.test(symbol) || symbol.replace(/^xc/iu, '').toUpperCase() !== symbol) {
+      fail(`${label} line ${index + 1} has a noncanonical asset symbol`)
+    }
+    const key = `${origin}|${destination}|${symbol}`
+    if (seen.has(key)) fail(`${label} contains duplicate route: ${key}`)
+    seen.add(key)
+    routes.push(key)
+  }
+  if (routes.length === 0) fail(`${label} must contain at least one route`)
+  return { routes, byteLength: bytes.length, sha256: sha256(bytes) }
+}
+
+function assertXcmCandidateRouteParity(report, label) {
+  const approvedSource = readCandidateXcmRoutes(xcmEffectiveRegistryLocalInputs.approvedRoutes, `${label}.approvedRouteManifest`)
+  const requiredSource = readCandidateXcmRoutes(xcmEffectiveRegistryLocalInputs.requiredRoutes, `${label}.requiredRouteManifest`)
+  assertXcmSourceIdentity(approvedSource, report.inputs.approvedRoutes, `${label}.inputs.approvedRoutes`)
+  assertXcmSourceIdentity(requiredSource, report.inputs.requiredRoutes, `${label}.inputs.requiredRoutes`)
+  xcmEffectiveRequiredSourceIdentity = requiredSource
+  assertXcmTemplateAndEffectiveSourceAgree()
+  const approved = approvedSource.routes.sort((a, b) => a.localeCompare(b))
+  const required = requiredSource.routes.sort((a, b) => a.localeCompare(b))
+  if (approved.length !== required.length || approved.some((route, index) => route !== required[index])) {
+    fail(`${label}.approved and required route manifests must contain the same routes`)
+  }
+  if (report.routes.length !== approved.length) fail(`${label}.routes length must match candidate approved-route manifest`)
+  for (const [index, route] of report.routes.entries()) {
+    if (xcmEffectiveRouteKey(route) !== approved[index]) {
+      fail(`${label}.routes[${index}] does not match candidate approved-route manifest`)
+    }
+  }
 }
 const xcmEffectiveRegistryPolicy = {
   transactionAuthority: 'apk-approved-intersection',
@@ -2475,8 +2542,8 @@ const xcmEffectiveRegistryReasons = [
   'origin-asset-precision-mismatch',
 ]
 const xcmEffectiveRegistryAuditCommands = {
-  bundled: 'cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --write-report build/reports/xcm-effective-registry-report.json',
-  discovery: `cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url ${xcmProductionDiscoveryUrl} --require-all-approved --write-report build/reports/xcm-effective-registry-report.json`,
+  bundled: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --write-report build/reports/xcm-effective-registry-report.json',
+  discovery: `cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url ${xcmProductionDiscoveryUrl} --require-all-approved --write-report build/reports/xcm-effective-registry-report.json`,
 }
 
 function assertXcmEffectiveContentIdentity(value, label, expectedSource) {
@@ -2539,7 +2606,7 @@ function assertXcmEffectiveSortedUniqueRoutes(routes, label, allowedKeys, valida
 
 function assertXcmEffectiveWorkspaceInputParity(report, label, requireSources) {
   for (const [inputName, relativeSource] of Object.entries(xcmEffectiveRegistryLocalInputs)) {
-    const workspaceRelative = `fearless-Android/${relativeSource}`
+    const workspaceRelative = `fearless-Android-production-consolidated-20260731/${relativeSource}`
     const absolute = path.resolve(workspaceRoot, workspaceRelative)
     if (!fs.existsSync(absolute)) {
       if (requireSources) fail(`${label}.inputs.${inputName} workspace source missing: ${workspaceRelative}`)
@@ -2655,6 +2722,7 @@ function assertXcmEffectiveRegistryReport(report, label, runLive, requireWorkspa
   }
 
   assertXcmEffectiveWorkspaceInputParity(report, label, requireWorkspaceSources)
+  assertXcmCandidateRouteParity(report, label)
 }
 
 function assertExactStringArray(value, expected, label) {
@@ -4031,8 +4099,8 @@ const xcmProductionEvidenceTemplateContracts = [
 function assertXcmRequiredRouteSourcePath(value, label) {
   requireSingleLine(value, label)
   assertNoSecretLike(label, value)
-  if (value !== 'fearless-Android/scripts/xcm-required-routes.tsv' && !value.endsWith('/fearless-Android/scripts/xcm-required-routes.tsv')) {
-    fail(`${label} must point at fearless-Android/scripts/xcm-required-routes.tsv`)
+  if (value !== 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv' && !value.endsWith('/fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv')) {
+    fail(`${label} must point at fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv`)
   }
 }
 
@@ -4055,6 +4123,13 @@ function assertXcmProductionEvidenceTemplate(template, label) {
   if (template.evidence.length !== template.requiredRouteCount) {
     fail(`${label}.evidence length must match requiredRouteCount`)
   }
+  const requiredSource = readCandidateXcmRoutes(xcmEffectiveRegistryLocalInputs.requiredRoutes, `${label}.requiredRouteManifest`)
+  xcmTemplateRequiredSourceIdentity = requiredSource
+  assertXcmTemplateAndEffectiveSourceAgree()
+  const requiredRoutes = requiredSource.routes
+  if (template.requiredRouteCount !== requiredRoutes.length) {
+    fail(`${label}.requiredRouteCount must match candidate required-route manifest`)
+  }
   const seenRoutes = new Set()
   for (const [index, evidence] of template.evidence.entries()) {
     assertAllowedKeys(evidence, xcmProductionEvidenceRequiredFields, `${label}.evidence[${index}]`)
@@ -4065,6 +4140,7 @@ function assertXcmProductionEvidenceTemplate(template, label) {
     const routeKey = `${evidence.originChainId}|${evidence.destinationChainId}|${evidence.assetSymbol}`
     if (seenRoutes.has(routeKey)) fail(`${label}.evidence duplicate route: ${routeKey}`)
     seenRoutes.add(routeKey)
+    if (routeKey !== requiredRoutes[index]) fail(`${label}.evidence[${index}] does not match candidate required-route manifest order`)
     for (const [field, placeholder] of Object.entries(xcmProductionEvidencePlaceholderRecord)) {
       if (typeof placeholder === 'boolean') {
         requireBoolean(evidence[field], `${label}.evidence[${index}].${field}`)
@@ -4092,14 +4168,14 @@ function buildXcmProductionEvidenceTemplateHandoff(blockerSlug, artifacts) {
     sourceReportPath: xcmProductionEvidenceTemplateSourcePath,
     templateArtifact: xcmProductionEvidenceTemplateArtifactPath,
     templateSha256: artifact.sha256,
-    generatedTemplatePath: 'fearless-Android/build/reports/xcm-production-evidence-template.json',
-    destinationManifest: 'fearless-Android/scripts/xcm-production-evidence.json',
-    requiredRouteFile: 'fearless-Android/scripts/xcm-required-routes.tsv',
-    discoveryGapFile: 'fearless-Android/scripts/xcm-discovery-only-routes.tsv',
+    generatedTemplatePath: 'fearless-Android-production-consolidated-20260731/build/reports/xcm-production-evidence-template.json',
+    destinationManifest: 'fearless-Android-production-consolidated-20260731/scripts/xcm-production-evidence.json',
+    requiredRouteFile: 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv',
+    discoveryGapFile: 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv',
     requiredRouteCount: template.requiredRouteCount,
     requiredEvidenceFields: [...xcmProductionEvidenceRequiredFields],
     placeholderRecord: { ...xcmProductionEvidencePlaceholderRecord },
-    readyAuditCommand: 'cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready',
+    readyAuditCommand: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready',
     requiredContracts: [...xcmProductionEvidenceTemplateContracts],
   }
 }
@@ -4126,13 +4202,13 @@ function buildXcmRegistryHandoff(blockerSlug, artifacts, runLive) {
     gapReportArtifact: artifactPath,
     gapReportSha256: artifact.sha256,
     registryFile: report.registryFile,
-    requiredRouteFile: 'fearless-Android/scripts/xcm-required-routes.tsv',
-    discoveryGapFile: 'fearless-Android/scripts/xcm-discovery-only-routes.tsv',
-    generatedGapReportPath: 'fearless-Android/build/reports/xcm-registry-gap-report.json',
+    requiredRouteFile: 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv',
+    discoveryGapFile: 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv',
+    generatedGapReportPath: 'fearless-Android-production-consolidated-20260731/build/reports/xcm-registry-gap-report.json',
     remainingDiscoveryOnlyDestinations: report.summary.remainingDiscoveryOnlyDestinations,
     remainingDiscoveryOnlyRouteAssets: report.summary.remainingDiscoveryOnlyRouteAssets,
     missingExecutableDestinationCount: report.missingExecutableDestinations.length,
-    registryAuditCommand: 'cd fearless-Android && bash scripts/audit-xcm-registry-metadata.sh --require-executable --write-gap-report build/reports/xcm-registry-gap-report.json --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv --require-all-routes-executable',
+    registryAuditCommand: 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-registry-metadata.sh --require-executable --write-gap-report build/reports/xcm-registry-gap-report.json --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv --require-all-routes-executable',
     effectiveRegistry: {
       sourceReportPath: xcmEffectiveRegistrySourcePath,
       reportArtifact: xcmEffectiveRegistryArtifactPath,
@@ -4255,15 +4331,15 @@ const expectedRecommendedActionsBySlug = new Map([
   ['release-pr-readiness', 'Get every PR in config/release-readiness-prs.tsv approved, green, with all GitHub review conversations resolved including outdated unresolved threads, and merged through the protected branch flow. When the blocker is outdated-only, run bash scripts/resolve-release-pr-review-threads.sh --dry-run to inspect the exact thread IDs before any authorized resolution. After conversations are resolved and approvals are present, run bash scripts/merge-release-prs.sh --dry-run to inspect protected-branch merge candidates before any authorized merge, then rerun bash scripts/audit-release-pr-readiness.sh.'],
   ['source-publication-readiness', 'Do not commit or publish from a checkout with an in-progress merge, rebase, cherry-pick, revert, bisect, or sequencer operation or unresolved index stages; have that checkout\'s owner resolve the state first. Remove or quarantine every ignored non-published build output reported by the audit, then commit only reviewed tested changes. Assign the root release tooling and passkey challenge service to a canonical maintained GitHub repository, add its protected release PR to config/release-readiness-prs.tsv, and push exact topic-branch HEADs. Then rerun the full bash scripts/audit-release-readiness.sh flow so the remote-checked source preflight is captured before all release checks and matched by postflight.'],
   ['private-overlay-readiness', 'Remove private product-source drift and keep only allowed release overlay files, then rerun bash scripts/audit-private-overlay-readiness.sh.'],
-  ['android-public-dependency-provenance', 'Restore fearless-utils-Android to the pinned commit plus exact committed library-only overlay with no extra drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android.'],
-  ['ios-shared-features-delta', 'Upstream or vendor every carried iOS shared-features/native-crypto delta, remove post-resolution checkout mutation, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready in fearless-iOS.'],
+  ['android-public-dependency-provenance', 'Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift, then restore the Android public artifact boundary and handoff bundle. Rerun bash ./scripts/test-fearless-utils-derived-tree.sh, FEARLESS_UTILS_LIBRARY_ONLY=true FEARLESS_UTILS_PATH=../fearless-utils-Android-production-20260922 ./scripts/ensure-fearless-utils.sh, bash ./scripts/test-public-dependency-upstream-delta-export.sh, bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta, and ./scripts/audit-public-artifacts.sh in fearless-Android-production-consolidated-20260731.'],
+  ['ios-shared-features-delta', 'Upstream or vendor every carried iOS shared-features/native-crypto delta, remove post-resolution checkout mutation, review build/reports/shared-features-delta-report.json, and rerun bash scripts/deps/test-shared-features-delta-report.sh plus bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready in fearless-iOS-production-consolidated-20260731.'],
   ['passkey-challenge-service', 'Fix the passkey challenge-service implementation, Docker/deployment evidence, and adversarial tests, then rerun bash scripts/audit-passkey-challenge-service.sh.'],
   ['passkey-deployment-evidence', 'Record the passkey backup image digest, deployment ID, operator, healthResponse ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1, durable credential store paths /data/passkey-backup and /data/passkey-backup/credentials.json, WebAuthn origin allowlist, fail-closed request-access policy, trusted-proxy policy, platform provisioning evidence, and successful smoke timestamp. Independently obtain the distribution signer SHA-256 fingerprint from a distribution-signed APK or the Play app-signing certificate, set PASSKEY_ANDROID_RELEASE_SIGNER_EVIDENCE_SOURCE=distributed-apk|play-app-signing-certificate to identify the source, and prove the derived origin matches assetlinks; AAB upload-key evidence is rejected and absence or mismatch keeps passkey flags disabled. Then rerun npm run audit:deployment-evidence -- --require-ready in services/passkey-backup-challenge-service and bash scripts/audit-passkey-android-origin-parity.sh --require-ready from the workspace root.'],
   ['passkey-backup-prerequisites', 'Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS and require live health response ok=true/service=fearless-passkey-backup/rpId=fearlesswallet.io/schemaVersion=1. Deploy https://fearlesswallet.io association files so the strict site verifier observes exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects. Keep Android/iOS passkey backup flags disabled until health, site associations, and platform provisioning pass, then rerun PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io.'],
   ['passkey-production-smoke', 'Deploy and route https://backup.fearlesswallet.io to services/passkey-backup-challenge-service with valid DNS/TLS. Provision PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper as a readable executable that issues single-use bearer grants for the exact smoke requests, then run the passkey production smoke to verify health, all four ceremony routes, and credential list/revoke/revoke-all contracts without persisting a test credential or creating an owner record.'],
   ['iroha-release-readiness', 'Do not edit or publish from an unfinished external Iroha Git operation. Have its owner produce a stable reviewed source commit and restore the pinned Iroha JS SDK release artifact so package.json exports ./ivm-artifact and the packaged runtime/declaration surface passes the wallet artifact validator. Pin NEXUS_EXPECTED_BUILD_COMMIT in config/iroha-release-readiness.env to the exact deployed Iroha build. Restore https://minamoto.sora.org/status as a bounded, non-redirecting HTTP 200 application/json Torii/Nexus status response with fresh observed_at_ms and last_block_committed_at_ms, coherent block and queue counters, a matching non-placeholder build.git_commit_sha, the exact ordered SORA routing policy (default 0/0, governance 1/1, smartcontract::deploy 2/2), and an unsealed dataspace_catalog containing ready canonical 0/0, 1/1, and 2/2 targets; record Nexus route publication, canary, and wallet live transfer smoke evidence, keep Nexus release-gated until strict production evidence passes, then rerun bash scripts/audit-iroha-release-readiness.sh.'],
   ['iroha-wallet-coverage', 'Restore Android/iOS/web Iroha Taira/Nexus wallet coverage, fail-closed transfer tests, and each platform\'s explicit blocked production-send readiness contract; do not enable production send until reviewed codecs and key providers exist, then rerun bash scripts/audit-iroha-wallet-coverage.sh.'],
-  ['android-xcm-production-evidence', 'Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.'],
+  ['android-xcm-production-evidence', 'Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android-production-consolidated-20260731/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.'],
   ['web-bitcoin-broadcast-evidence', 'Run a funded Bitcoin testnet send through the web wallet smoke flow, record txid/outpoint/operator evidence plus canonical https://blockstream.info/testnet/api indexerUrl and confirmed indexer status.block_time proof in fearless-wallet-web/scripts/bitcoin-testnet-broadcast-evidence.json, ensure the evidence timestamp is at or after the confirmed block time, then rerun bash scripts/audit-bitcoin-broadcast-evidence.sh --require-ready in fearless-wallet-web.'],
   ['ti-deployment-evidence', 'Populate ../ton-indexer/registry/mainnet.json with reviewed non-placeholder mainnet contract addresses. Record the TI Docker image digest, deployment ID, operator, commit, serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=ti.soramitsu.io with TON mainnet identity, healthInfo.serviceId=ti.soramitsu.io with healthInfo.lastMasterSeqno from the successful https://ti.soramitsu.io smoke evidence, then rerun npm run audit:deployment-evidence -- --require-ready in ../ton-indexer.'],
   ['si-deployment-evidence', 'Deploy the current SI image with Solana mainnet configuration. Record the SI Docker image digest, deployment ID, operator, commit, serviceInfo.schemaVersion=1 plus serviceInfo.serviceId=si.soramitsu.io with Solana mainnet identity, and healthInfo with ok=true, serviceId=si.soramitsu.io, genesisHash=5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d, latestSlot as a positive safe integer, and syncedAt as an integer no more than 120 seconds before and no more than 30 seconds after smokePassedAt, plus successful https://si.soramitsu.io smoke evidence in ../solswap-indexer/scripts/production-deployment-evidence.json, then rerun npm run audit:deployment-evidence -- --require-ready in ../solswap-indexer.'],
@@ -4520,15 +4596,15 @@ const expectedVerificationCommandsBySlug = new Map([
   ['release-pr-readiness', 'bash scripts/audit-release-pr-readiness.sh'],
   ['source-publication-readiness', 'bash scripts/audit-release-readiness.sh'],
   ['private-overlay-readiness', 'bash scripts/audit-private-overlay-readiness.sh'],
-  ['android-public-dependency-provenance', 'cd fearless-Android && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android FEARLESS_UTILS_COMMIT=7500809f33243ee47ecb2ec8563fc284ac4de0d6 FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance'],
-  ['ios-shared-features-delta', 'cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready'],
+  ['android-public-dependency-provenance', 'cd fearless-Android-production-consolidated-20260731 && bash ./scripts/test-fearless-utils-derived-tree.sh && FEARLESS_UTILS_PATH=../fearless-utils-Android-production-20260922 FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android FEARLESS_UTILS_LIBRARY_ONLY=true ./scripts/ensure-fearless-utils.sh && bash ./scripts/test-public-dependency-upstream-delta-export.sh && bash ./scripts/export-public-dependency-upstream-delta.sh --output build/reports/public-dependency-upstream-delta && ./scripts/audit-public-artifacts.sh --strict-provenance'],
+  ['ios-shared-features-delta', 'cd fearless-iOS-production-consolidated-20260731 && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh "$PWD" --write-report build/reports/shared-features-delta-report.json --require-ready'],
   ['passkey-challenge-service', 'bash scripts/audit-passkey-challenge-service.sh'],
   ['passkey-deployment-evidence', 'cd services/passkey-backup-challenge-service && npm run audit:deployment-evidence -- --require-ready && cd ../.. && bash scripts/audit-passkey-android-origin-parity.sh --require-ready'],
   ['passkey-backup-prerequisites', 'PASSKEY_BACKUP_LIVE_HEALTH=1 bash scripts/audit-passkey-backup-prerequisites.sh && node fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs --root fearless-site-web-app-associations-20260726 --live-base-url https://fearlesswallet.io'],
   ['passkey-production-smoke', 'cd services/passkey-backup-challenge-service && PASSKEY_BACKUP_BASE_URL=https://backup.fearlesswallet.io PASSKEY_BACKUP_SMOKE_GRANT_HELPER=/run/secrets/passkey-smoke-grant-helper PASSKEY_BACKUP_SMOKE_TIMEOUT_MS=10000 npm run smoke:production'],
   ['iroha-release-readiness', 'IROHA_NEXUS_REQUIRE_PRODUCTION_EVIDENCE=1 IROHA_NEXUS_LIVE_HEALTH=1 bash scripts/audit-iroha-release-readiness.sh'],
   ['iroha-wallet-coverage', 'bash scripts/audit-iroha-wallet-coverage.sh'],
-  ['android-xcm-production-evidence', 'cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv'],
+  ['android-xcm-production-evidence', 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv'],
   ['web-bitcoin-broadcast-evidence', 'cd fearless-wallet-web && bash scripts/audit-bitcoin-broadcast-evidence.sh --require-ready'],
   ['ti-deployment-evidence', 'cd ../ton-indexer && npm run audit:deployment-evidence -- --require-ready'],
   ['si-deployment-evidence', 'cd ../solswap-indexer && npm run audit:deployment-evidence -- --require-ready'],

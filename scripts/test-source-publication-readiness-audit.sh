@@ -152,13 +152,17 @@ for file in \
   services/passkey-backup-challenge-service/package.json \
   services/passkey-backup-challenge-service/src/server.js \
   services/passkey-backup-owner-authority/README.md \
+  services/passkey-backup-owner-authority/docs/bootstrap-proof.md \
   services/passkey-backup-owner-authority/docs/legacy-cutover.md \
   services/passkey-backup-owner-authority/package.json \
   services/passkey-backup-owner-authority/package-lock.json \
   services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs \
   services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentials.mjs \
+  services/passkey-backup-owner-authority/scripts/verify-sealed-legacy-cutover.mjs \
   services/passkey-backup-owner-authority/src/authority.js \
+  services/passkey-backup-owner-authority/src/bootstrap-proof.js \
   services/passkey-backup-owner-authority/src/http.js \
+  services/passkey-backup-owner-authority/src/legacy-cutover-verifier.js \
   services/passkey-backup-owner-authority/src/legacy-quarantine.js \
   services/passkey-backup-owner-authority/src/legacy-reconciliation.js \
   services/passkey-backup-owner-authority/src/store.js \
@@ -169,6 +173,8 @@ for file in \
   services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js \
   services/passkey-backup-owner-authority/test/generation-head.test.js \
   services/passkey-backup-owner-authority/test/http.test.js \
+  services/passkey-backup-owner-authority/test/legacy-cutover-challenge.test.js \
+  services/passkey-backup-owner-authority/test/legacy-cutover-verifier.test.js \
   services/passkey-backup-owner-authority/test/legacy-quarantine.test.js \
   services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js \
   services/passkey-backup-owner-authority/test/legacy-schema-migration.test.js \
