@@ -25,13 +25,15 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `38173660d0e43d0f40db7dfb38124ec3d8a4fd81` and
-`f78b44d7eb9d5ab50c0c0806be51d14a0bb14898`, respectively. Both clean app
-trees are on review branches. Android's final-source backup JVM suite passed
-292/292 and Detekt; iOS's focused native first-owner PRF suite passed 17/17
-with lint and project validation. Hosted checks remain in progress. The
-internal diff review of the preceding iOS and current Android heads found no
-reportable finding; its iOS callback-binding recommendation is now fixed.
+candidates are `fb2600d9a1af20c9b1062a12814c432c490f4170` and
+`d2782d2324b6a3e454b3e6d15cded11bf493615c`, respectively. Both clean app
+trees are on review branches. Android's current account JVM suite passed
+309/309 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+The exact iOS journal source passed 11/11 iOS 18.1 arm64 simulator tests;
+the preceding native first-owner PRF source passed 17/17. Hosted checks for
+the new heads remain in progress. An internal diff review of the preceding
+mobile heads found no reportable finding; its iOS callback-binding
+recommendation was fixed before the current journal change.
 Protected qualification,
 independent human security approval and signed distribution acceptance remain
 outstanding.
@@ -2902,6 +2904,27 @@ challenge and PRF salt on the native callback, discarding mismatched local key
 material before returning it to the bootstrap completion path. This adapter has no production app-flow
 caller; concrete original-wallet signing/export, Google Password Manager
 device interoperability and replacement-device recovery remain open.
+
+The subsequent iOS source at `d2782d2324b6a3e454b3e6d15cded11bf493615c`
+atomically refuses a second first-generation journal candidate for the same
+owner and namespace, even after an uncertain Drive-create outcome or restart.
+The identical operation still reconciles its original encrypted bytes and
+file ID. Its focused workspace run passed **11/11** iOS 18.1 arm64 simulator
+tests with no failures; strict SwiftLint, diff check and scoped SwiftFormat
+passed. A separate read-only code review of this exact journal commit found no
+actionable defect; independent human security approval remains required. This
+is local journal integrity only, not an uploaded or decryptable backup.
+
+The subsequent Android source at `fb2600d9a1af20c9b1062a12814c432c490f4170`
+adds an unwired, read-only proof for exact original Android V3 SCALE root
+sources against their Substrate, EVM and native TON semantic slots. It checks
+the recorded recovery material, public identities and local signing evidence
+and fails closed on missing, duplicate, noncanonical, substituted or
+unsupported sources. Focused tests pass **4/4**; the final-source account JVM
+suite passes **309/309** with default and forced scoped Detekt. V1/V2, iOS,
+watch, auxiliary metadata, full-cohort export and installed-key readback are
+not proved by this component, so the app-owned first-generation exporter and
+recovery enablement remain absent.
 
 Neither mobile candidate has a production feature enabled. CI checks for the
 new heads, independent human security review, deployed one-writer authority, Drive/OAuth
