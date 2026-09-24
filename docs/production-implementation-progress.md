@@ -33,8 +33,9 @@ acceptance remain outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
-candidate now covers all seven protected routes, but first-owner wallet
-proof, verified legacy migration, production startup admission, live cutover,
+candidate now covers all seven protected routes. Its opt-in first-owner
+wallet proof still lacks real platform attestation; verified legacy migration,
+production startup admission, live cutover,
 deployment and native Drive/PRF recovery remain unintegrated. The root source gate selects the consolidated
 mobile worktrees and site-association PR #49. The complete frozen route
 inventory/unified manifest, transaction-byte/fee/hash/receipt qualification,
@@ -1451,6 +1452,24 @@ receiving preflight and new metadata suites pass 53/53; targeted SwiftFormat
 and strict SwiftLint, project syntax and diff checks pass. Hosted CI and
 formal independent security review remain outstanding. There is still no
 Core Data/Keychain cohort installer or replacement-device recovery proof.
+
+## Read-only Android V2 original-key proof — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to pushed `e0353261d0d6fa32866b5f1c7e0cdd28c8e91eb5`. An
+unwired receiver component requires an explicit canonical genesis and
+Substrate/Ethereum identity-kind policy. For each V2 chain account it requires
+one byte-exact Android V2 original SCALE source, checks original signing and
+recovery fields against the semantic slot with the production V2 validator,
+and signs and verifies a wallet-, genesis- and account-bound challenge.
+Unknown or wrong-kind genesis IDs and missing, duplicate, altered or lossy
+originals fail closed. The exact-source focused JVM suite passes 6/6 against
+clean pinned Utils `1c80a2bf3fa1f996cf1328873e09f282ee29b69e`; forced
+scoped Detekt and diff checks pass. SR25519 native-provider/device proof,
+iOS-specific chain originals, a reviewed compiled policy, installed-key
+signing/export and the cohort installer remain open. The receiving and
+backup-completion blockers have not changed, and hosted CI and independent
+review remain pending.
 
 ## Completion record
 
