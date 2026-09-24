@@ -1700,6 +1700,47 @@ recovery. The old Kaia Scope endpoint needs migration to KaiaScan OAPI and
 real provider-response qualification; current OKX authentication and X Layer
 history still need live checks. Neither provider is claimed production-ready.
 
+## Android history failure handling and iOS KaiaScan candidate — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to clean, pushed `9180bc535a55ad93f79c16e53b1f17a16364c82b`.
+OKLink and legacy Klaytn history no longer turn transport, provider or
+malformed-page failures into successful empty pages. The OKLink mapper now
+binds native history to the native symbol and token history to the exact
+contract, rejects precision loss, and uses the native utility asset's units
+for a token-transfer fee when known. The bundled X Layer explorer templates
+now distinguish mainnet and testnet. Focused history tests pass 7/7, the
+wallet module passes 202/202, and `detektAll` passes but excludes that
+module. Live authenticated provider, freshness, pagination and on-device
+retry/explorer checks remain open. The historical X Layer testnet chain ID
+has not been changed without a wallet-identity migration.
+
+Before that patch, the clean Android head
+`bbd9f34f4fc137444ce01defe45d5ba57e5b766c` built an unsigned,
+source-bound release AAB against the pinned Utils and WebSocket checkouts,
+Android SDK 36 and JDK 21. Artifact SHA-256
+`f958b9c6da5c55228db7ca107b736f1006ddf668b30206a8f8810f6091c183bc`
+passed the structural native check for all 16 libraries across four ABIs at
+16 KiB alignment. That AAB predates `9180bc535` and is not a Play-signed
+or accepted distribution artifact. The clean `9180bc535` head then built an
+unsigned intermediate AAB with SHA-256
+`90fdb72e05b4db15192ac474983a535f90e0834d08f7e899278db4b5cfe5d745`;
+the same structural verifier passed 16 native libraries across four ABIs at
+16 KiB alignment. The source-pin check and Release/R8 build passed. Real
+16 KiB-device startup/crypto, externally signed distribution and upgrade
+acceptance still need qualification.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to clean, pushed `3bfc8ead4716a7eae95abf60f68a7bfa01071ec8`.
+The native Kaia history source uses the documented KaiaScan account
+transaction and token-transfer feeds with a separately configured Bearer key,
+exact decimal amounts and fees, page validation, contract matching and
+fail-closed provider responses. Its iPhone 15/iOS 17.2 focused suite passes
+15/15 and the synthetic Release configuration audit passes 33/33. Exact-head
+hosted checks and independent review are pending. No live authenticated
+KaiaScan response, funded transfer/fee reconciliation, freshness or device
+retry result has been established; the provider key is not provisioned here.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
