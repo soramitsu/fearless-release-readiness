@@ -25,7 +25,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `f38a572b15f09f761cdc01006cf501856511183d` and
+candidates are `8dd03781fea3399d08a010d8eb9c1af0eb074785` and
 `686ae183c7592a5b3ca127f1f805602557a273b7`, respectively. Both clean
 app trees are on review branches. Exact-head local recovery-component tests
 and an independent static diff review passed as recorded below; their new
@@ -2702,7 +2702,7 @@ Hosted `validate` passes on the final head; build/test and IAS candidate
 checks are pending. No target secret or wallet row has been installed, and
 neither journal retirement nor portable recovery is enabled.
 
-The current pushed Android source is `f38a572b15f09f761cdc01006cf501856511183d`
+The preceding pushed Android source is `f38a572b15f09f761cdc01006cf501856511183d`
 on the same [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260).
 It adds a disabled, unwired discoverable-passkey owner-authentication client
 for the non-deployed authority. Android Credential Manager requests user
@@ -2717,6 +2717,31 @@ which was fixed and reviewed again with no remaining actionable issue. This
 candidate does not bootstrap an owner, use a session to install a wallet, or
 enable recovery. Exact-head hosted checks are pending; native GPM/Drive and
 cross-platform replacement-device acceptance remain open.
+
+The current pushed Android source is `8dd03781fea3399d08a010d8eb9c1af0eb074785`
+on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260).
+It adds a disabled, read-only owner-head HTTP adapter. The adapter obtains
+the expected storage-account binding from the selected Google subject through
+the Drive token provider, then rechecks that subject after the owner-service
+response; it never accepts a caller-supplied binding or sends the Drive token
+to the owner service. Strict response parsing and the authenticated-head
+model check the exact owner, namespace, current/previous generation chain and
+Drive file identities. Backup-module JVM tests passed **251/251** without
+failures/skips, `detektAll` and diff checks passed, and independent read-only
+review found no remaining actionable issue after the account-binding fix.
+The adapter has no production callsite and cannot enable recovery or install
+a wallet. Exact-head hosted checks and real selected-account/device acceptance
+remain open.
+
+The read-only sealed-credential cutover comparison now requires an imported
+historical credential to carry its verified post-assertion signature counter,
+rather than the older counter in the sealed JSON image. A regression proves
+that the old counter and an unaccounted later counter both fail the exact
+public-state check, while the proven counter passes. A retained proof from a
+different sealed image also cannot make the comparison exact. Owner-authority
+tests pass **255/255** and syntax checks pass. This is a diagnostic fence only: no
+historical cohort has been imported, the old JSON writer has not been drained,
+and the report still denies migration and production startup.
 
 ## Completion record
 

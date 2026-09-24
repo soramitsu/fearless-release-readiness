@@ -163,6 +163,7 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
       counts.sourceCredentials += 1;
       sourceCredentialIds.add(id);
       const proof = proofs.get(id);
+      let ownerAlignedProof = false;
       if (!proof) {
         proofCounts.missingProofs += 1;
         proofIssue('verified_proof_missing', index, credentialIndex);
@@ -195,6 +196,7 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
             proofIssue('verified_proof_binding_owner_mismatch', index, credentialIndex);
           } else {
             proofCounts.ownerAlignedProofs += 1;
+            ownerAlignedProof = true;
             if (binding.proof_sha256 === proof.proof_sha256) bindingAnchorMatched = true;
           }
         }
@@ -207,10 +209,20 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
         continue;
       }
       let exact = true;
+      // The sealed image records the pre-proof counter. A verified cutover
+      // assertion advances it; importing the old value would reopen a replay
+      // window for a cloned authenticator. Only a proof bound to this exact
+      // sealed source and random owner can supply the post-assertion counter.
+      // An unrelated retained proof cannot make public comparison appear exact.
+      const expectedCounter = ownerAlignedProof ? proof.legacy_new_counter : sourceCredential.counter;
+      if (proof && !ownerAlignedProof) {
+        issue('credential_verified_proof_unaligned', index, credentialIndex);
+        exact = false;
+      }
       if (!binding || targetCredential.owner !== binding.owner ||
           targetCredential.public_key !== sourceCredential.publicKey ||
           targetCredential.user_handle !== sourceCredential.userId ||
-          targetCredential.counter !== sourceCredential.counter ||
+          targetCredential.counter !== expectedCounter ||
           targetCredential.device_type !== sourceCredential.deviceType ||
           targetCredential.backed_up !== Number(sourceCredential.backedUp) ||
           targetCredential.revoked !== 0) {

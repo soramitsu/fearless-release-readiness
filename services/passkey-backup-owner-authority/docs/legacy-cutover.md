@@ -118,13 +118,19 @@ commit the owner link and historical credential cohort atomically.
    compares **every** source storage key, empty tombstone, credential ID,
    COSE public key, historical user handle, counter, device/backup/revocation
    state, AAGUID, transports, platform and wallet-key scope with schema-v8
-   SQLite. It checks each binding's exact source digest and historical owner
-   hash, rejects missing/extra target rows and flags split historical hashes
-   or merged random-owner aliases. Its report gives only aggregate counts and
-   entry positions, the sealed source digest, and a SHA-256 commitment to the
-   specific target public rows it compared. `publicRepresentationExact: true` means the currently
-   represented public fields match that sealed image; it is **not** an owner
-   proof. A separate `proofMetadata` section compares retained schema-v8
+   SQLite. When a retained verified proof exists, the target credential counter
+   must equal that proof's post-assertion counter, not the older sealed-source
+   counter. Restoring the old counter would reopen a cloned-authenticator replay
+   window. The tool still compares the sealed counter with the proof's claimed
+   pre-assertion counter. It checks each binding's exact source digest and
+   historical owner hash, rejects missing/extra target rows, and flags split
+   historical hashes or merged random-owner aliases. Its report gives only
+   aggregate counts, entry positions, the sealed source digest, and a SHA-256
+   commitment to the specific target public rows it compared.
+   `publicRepresentationExact: true` means the target public fields match the
+   sealed image, except that a proven credential must carry its verified
+   post-assertion counter. It is **not** an owner proof. A separate
+   `proofMetadata` section compares retained schema-v8
    challenge/proof metadata with the exact sealed source and each binding's
    commitment in the same pinned SQLite read transaction. Every source
    credential needs a matching proof aligned to the binding owner; one proof

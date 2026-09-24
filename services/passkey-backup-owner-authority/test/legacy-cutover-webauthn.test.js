@@ -163,6 +163,79 @@ test('offline proof diagnostics bind signed metadata to the sealed source withou
   }
 });
 
+test('sealed comparison rejects a historical credential imported at its pre-proof counter', async (t) => {
+  const item = await fixture(t);
+  const proof = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const historical = item.source.credentialsByStorageKey[0].credentials[0];
+  database(item.path, (db) => {
+    db.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE');
+    try {
+      db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+        storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+        item.input.expectedSourceSha256, proof.proofSha256, 123);
+      db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+        historical.id, item.owner.subject, historical.publicKey, historical.userId,
+        historical.counter, historical.deviceType, Number(historical.backedUp));
+      db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+        historical.id, storageKey, historical.aaguid, JSON.stringify(historical.transports),
+        historical.registrationPlatform);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  });
+  const args = { legacySnapshotPath: item.input.legacySnapshotPath, ownerPath: item.path,
+    expectedSourceSha256: item.input.expectedSourceSha256 };
+  const stale = verifySealedLegacyCutover(args);
+  assert.equal(stale.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(stale.publicRepresentationExact, false);
+  assert.ok(stale.diagnostics.some((entry) => entry.kind === 'credential_public_state_mismatch'));
+  assert.equal(stale.migrationPermitted, false);
+
+  database(item.path, (db) => db.prepare('UPDATE credentials SET counter=? WHERE id=?')
+    .run(historical.counter + 1, historical.id));
+  const current = verifySealedLegacyCutover(args);
+  assert.equal(current.publicRepresentationExact, true);
+  assert.equal(current.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(current.counts.matchedCredentials, 1);
+  assert.equal(current.migrationPermitted, false);
+
+  database(item.path, (db) => db.prepare('UPDATE credentials SET counter=? WHERE id=?')
+    .run(historical.counter + 2, historical.id));
+  const advanced = verifySealedLegacyCutover(args);
+  assert.equal(advanced.publicRepresentationExact, false);
+  assert.ok(advanced.diagnostics.some((entry) => entry.kind === 'credential_public_state_mismatch'));
+});
+
+test('a retained proof for another sealed image cannot make public comparison exact', async (t) => {
+  const item = await fixture(t);
+  const proof = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const historical = item.source.credentialsByStorageKey[0].credentials[0];
+  const alternateBytes = Buffer.from(`${JSON.stringify(item.source, null, 2)}\n`);
+  const alternateDigest = sha256(alternateBytes);
+  const alternatePath = join(item.dir, `legacy-${alternateDigest}.json`);
+  writeFileSync(alternatePath, alternateBytes, { mode: 0o600 });
+  database(item.path, (db) => {
+    db.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE');
+    try {
+      db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+        storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+        alternateDigest, proof.proofSha256, 123);
+      db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+        historical.id, item.owner.subject, historical.publicKey, historical.userId,
+        historical.counter, historical.deviceType, Number(historical.backedUp));
+      db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+        historical.id, storageKey, historical.aaguid, JSON.stringify(historical.transports),
+        historical.registrationPlatform);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  });
+  const report = verifySealedLegacyCutover({ legacySnapshotPath: alternatePath,
+    ownerPath: item.path, expectedSourceSha256: alternateDigest });
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.equal(report.publicRepresentationExact, false);
+  assert.ok(report.diagnostics.some((entry) => entry.kind === 'credential_verified_proof_unaligned'));
+  assert.equal(report.migrationPermitted, false);
+});
+
 test('two signed credentials on one storage key need both owner-aligned proofs but only one binding anchor', async (t) => {
   const item = await fixture(t, { twoLegacyCredentials: true });
   const first = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
