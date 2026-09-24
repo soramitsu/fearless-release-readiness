@@ -1603,13 +1603,38 @@ asset mapping, runtime call and fee review, capped funded receipts and
 independent route approval remain required. The report does not authorize
 signing or submit a transfer.
 
-The latest pushed iOS source remains
+At that checkpoint, the pushed iOS source was
 `66523499dfbde61828677f39dfd04153fdfb8116` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its hosted
 `validate`, `release-contracts` and `ios-release-safety` jobs pass, while
 `build` has not passed yet. The iOS receive projection and both platform
 candidates remain non-shipping until their remaining recovery, security, device and
 distribution gates pass.
+
+## Mobile candidate update — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to pushed `1f5228513ded1ef42e18a33bd8ac881c688f09df`.
+The Asset Hub to Moonbeam USDt discovery drift test now uses portable `grep`
+instead of the runner-unavailable `rg`. Its local focused suite passes,
+including fail-closed drift cases. Exact-head hosted `validate` passes;
+`build-and-test` and IAS validation are in progress and have not passed.
+The prior `df22529...` CI failure remains historical evidence, not a pass for
+this source. The route remains discovery-only, unapproved for execution and
+`releaseEnabled=false`. Canonical asset mapping, reviewed runtime call and
+fees, capped funded receipts and independent route approval remain open.
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `f4189ad1e5794d2841fc638a9651c5cac4c0639d`.
+Its read-only Keychain projection now requires every recorded root entropy,
+seed and derivation-path export field to have a byte-matching original iOS
+source item. A native TON root must carry its mnemonic field and the matching
+phrase item; absence or conflict blocks projection. The exact-source iPhone
+15/iOS 17.2 focused suite passes 9/9, with targeted SwiftFormat, strict
+SwiftLint and diff checks passing. Exact-head hosted `validate` passes;
+`release-contracts` and `build` have not passed yet. The projection still
+does not install a cohort, prove all receiving export/signing behavior or
+establish replacement-device recovery. Independent review remains required.
 
 ## Completion record
 
