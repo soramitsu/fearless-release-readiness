@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { ECDH, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import {
@@ -287,6 +288,24 @@ test('secp256k1 wallet proof accepts both public-key encodings under one owner b
   const compact = verifyBootstrapWalletProof(pending, credential, { ...wallet, publicKey: compressed });
   assert.equal(full.walletBindingHash, compact.walletBindingHash);
   assert.equal(full.attestationNonce, compact.attestationNonce);
+});
+
+test('published Android Play Integrity request hashes match valid server wallet proofs', () => {
+  const vectors = JSON.parse(readFileSync(
+    new URL('./bootstrap-play-integrity-vectors.json', import.meta.url), 'utf8'));
+  const { ceremony: pending, credential } = vectors;
+  assert.equal(bootstrapWalletMessage(pending, credential).toString('base64url'),
+    vectors.walletMessage);
+  for (const { requestHash, ...wallet } of vectors.proofs) {
+    assert.equal(verifyBootstrapWalletProof(pending, credential, wallet).attestationNonce,
+      requestHash);
+  }
+  const secp = vectors.proofs.find((proof) => proof.scheme === 'secp256k1');
+  const compressed = ECDH.convertKey(Buffer.from(secp.publicKey, 'base64url'),
+    'secp256k1', undefined, undefined, 'compressed').toString('base64url');
+  assert.equal(verifyBootstrapWalletProof(pending, credential,
+    { scheme: secp.scheme, publicKey: compressed, signature: secp.signature }).attestationNonce,
+  secp.requestHash);
 });
 
 test('first-owner attestation result must match nonce, platform and configured app identity', async () => {

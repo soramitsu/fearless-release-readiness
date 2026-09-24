@@ -2374,6 +2374,14 @@ changed production source file (scan `1372c9ce-bf3d-4781-84d4-e875818fea0f`,
 report SHA-256 `28a8a3652fc7d41dc445e398d48abaec3df6e11744b46fb612db88efd478ef15`).
 Neither static scan is the required independent human approval.
 
+Public synthetic first-owner proof vectors now pin the server's exact
+`bootstrapWalletMessage` and Play Integrity `requestHash` for valid Ed25519
+and secp256k1 signatures, including secp256k1 public-key normalization.
+The owner suite passes **236/236** with these vectors. Android must consume the
+same vectors in its native request test before this binding can be considered
+cross-platform qualified. The vectors are protocol tests, not a live Google
+verdict or device attestation.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
