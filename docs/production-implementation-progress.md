@@ -2579,8 +2579,33 @@ Alchemy, Etherscan and KaiaScan values. The current shell has no App Store
 Connect API credential/session, and the current iOS GitHub repository exposes
 no configured Actions secret names or environments through this access.
 These are provisioning and distribution prerequisites, not values to replace
-with fixtures. The new iOS commit's hosted `validate` passed; its other
-exact-head hosted checks were running at this record.
+with fixtures. At this record, the new iOS commit's hosted `validate`,
+`release-contracts` and `ios-release-safety` checks passed; `build` was still
+running. Root `verify` and `verify-owner` passed on `ff91dbb`, while root
+`validate` and Android `build-and-test` were still running at their exact
+heads. No completed source check is a signed-distribution acceptance result.
+
+A read-only provisioning trace found the supported source path: Xcode's
+`Inject keys` phase reads an operator-provided ignored `fearless/env-vars.sh`
+or exported CI environment and generates the audited service configuration.
+Neither that file nor the private Google-key pod input is present on this
+host, and the required environment variables are absent. The archive script
+also pins build `2026.8.34`, while `docs/release-checklist.md` calls for
+`2026.9.6`; App Store Connect uniqueness and the intended successor must be
+reconciled before choosing the final build number. The archive script does
+not perform that read-only uniqueness check itself. No archive or upload was
+attempted.
+
+A scoped Codex Security diff scan of the exact iOS App Attest retry range
+`38c83b5a0c85272308acb9474f75880591fc9742..34c0caba7a1cefbc27ded57890a3920e87eb60e7`
+completed with full static coverage and zero reportable findings (scan
+`5a27bce2-0f18-45e9-bccd-03aa8d5f42ed`; report SHA-256
+`584359da19a91c63765eda45028d1be1e7b27c07e59b973c1373550d9fbb79b6`).
+The review noted that a duplicate Keychain-item update changes the journal
+value but does not establish the pre-existing item's protection class; no
+attacker insertion path or production caller was found. Final signed-app
+Keychain/App Attest identity and live-device owner ceremonies remain separate
+acceptance evidence, as does independent human security review.
 
 ## Completion record
 
