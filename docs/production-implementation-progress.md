@@ -25,11 +25,11 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `d54007148aec9cb92f993c4ecfc3be09ec708fde` and
-`1088b2ba7e2966b02291fda3f1950af059ef1846`, respectively. Both clean app
+candidates are `a74da1e0e78f1957fe4ee5f28240a3c92013a9f4` and
+`de3c8fbe7d22533e91b5a2e2c16802d6586d7cda`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
-320/320 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
-The exact iOS source-proof and Keychain readback suites passed 67/67 iOS 18.1
+322/322 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+The exact iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
@@ -38,11 +38,10 @@ recommendation was fixed before the current journal change.
 Protected qualification,
 independent human security approval and signed distribution acceptance remain
 outstanding. The latest Android source captures an app-owned, read-only
-V1/V2/V3 cohort after original-source proof and exact wallet-scoped secret
-inventory checks. It has no installed replacement-key proof or recovery
+V1/V2/V3 cohort after original-source proof and exact wallet-scoped and global
+secret-namespace checks. It has no installed replacement-key proof or recovery
 integration. Its exact pinned Utils and WebSocket source check passes; the
-new-head hosted CI has started, while the preceding head passed IAS validation
-and validate and still has build-and-test pending.
+new-head hosted IAS/build jobs and independent review remain pending.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2979,6 +2978,17 @@ strict SwiftLint, SwiftFormat, project syntax and diff checks passed. This
 proof does not perform Core Data/Keychain installation or establish
 original-key signing/export on a replacement device.
 
+The subsequent iOS source at `de3c8fbe7d22533e91b5a2e2c16802d6586d7cda`
+adds a read-only pre-stage vacancy proof. After deriving exact journal-bound
+destination items, it rejects wallet IDs already in the supplied complete
+Core Data ID inventory and checks every planned Keychain tag twice without
+reading secret values. An occupied tag or unavailable Keychain fails closed;
+it never writes. The exact iOS 18.1 arm64 Release simulator suites passed
+**70/70** tests with no failures or skips; strict SwiftLint, SwiftFormat and
+diff checks passed. A future installer must hold a writer boundary from this
+observation through Keychain staging and Core Data commit. This proof does not
+reserve destinations or create an atomic installer.
+
 Android source `d54007148aec9cb92f993c4ecfc3be09ec708fde` adds an
 application-owned verified semantic exporter behind an internal, unwired
 entry point. It captures the current Room wallet/chain cohort, requires one
@@ -2992,10 +3002,22 @@ blocks export instead of being silently lost. The final account suite passed
 WebSocket source check passed, and the exact committed release source tree
 passed in a clean detached checkout. The working checkout's direct source-tree
 check encounters a pre-existing ignored legacy-audit document, which was
-preserved. Globally orphaned secret namespaces, the compiled route/genesis
-policy, rejected preference mappings, transactional receive installation,
+preserved. The compiled route/genesis policy, rejected preference mappings,
+transactional receive installation,
 original-key signing/export on a replacement device, backup upload/promotion
 and device acceptance remain open. Recovery stays disabled.
+
+Android source `a74da1e0e78f1957fe4ee5f28240a3c92013a9f4` adds a bounded
+global encrypted-key-name inventory for known wallet-secret namespaces. It
+rejects V2/V3 ciphertext under a deleted Room wallet ID and any quarantine or
+public-identity recovery marker, while preserving exact current-wallet source
+checks and ignoring unrelated numeric preferences. The post-proof inventory
+recheck detects a namespace change before returning plaintext. The exact
+account JVM suite passed **322/322**; default and forced scoped Detekt, pinned
+Utils/WebSocket source verification and a clean detached exact-head release
+source-tree check passed. The in-place source-tree check still encounters an
+unrelated pre-existing ignored legacy-audit document, which was preserved.
+This adds no upload, backup-complete state or enabled recovery.
 
 The site association source remains on review-pending PR #49 and its preview check
 passed. A direct live verification of `https://fearlesswallet.io` still fails:
