@@ -2215,7 +2215,28 @@ production source files (scan `8858cdaf-0f88-46b1-888f-9369eba6a405`,
 report SHA-256 `eb66e3523a1a94326a22f40e3b3e17ff5a54c827fd464bd077caf9611852ac84`).
 This is scoped patch evidence, not independent human review, live service
 qualification or authorization to enable recovery. Root `verify` and
-`verify-owner` pass at that exact head; hosted `validate` remains in progress.
+`verify-owner` and `validate` passed at that exact head. Later documentation
+commits require their own exact-head hosted checks.
+
+## Live association and signing admission check — 2026-09-24
+
+A fresh read of `https://fearlesswallet.io/.well-known/` still found no Apple
+`webcredentials` entry and no Android `delegate_permission/common.get_login_creds`
+relation. The Android file contains only `handle_all_urls` for
+`jp.co.soramitsu.fearless` and fingerprint
+`CC:17:CB:D4:30:43:22:C5:8E:27:89:03:45:E6:00:9B:28:17:B7:7E:A2:3D:85:FF:DB:E3:33:8C:57:F3:62:C3`.
+The corrected [website PR #49](https://github.com/soramitsu/fearless-site-web/pull/49)
+is still open with review required; green source/preview checks do not publish
+those associations or prove the Play-distributed certificate identity.
+
+The Android release-tag signer file still contains its unconfigured sentinel.
+The current GitHub repository-variable listing shows only
+`IROHA_MOBILE_SDK_RELEASE_TAG`, and the environments listing shows only
+`android-play-testing`; the `android-release-signing` environment referenced
+by the release workflow is not visible through this access. The local process
+has no release-keystore inputs. These observations leave the real upload-key,
+tag-signer and protected-signing path unqualified; no production signing or
+Play publication was attempted.
 
 ## Completion record
 
