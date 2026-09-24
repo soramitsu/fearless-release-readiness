@@ -248,6 +248,59 @@ test('candidate HTTP bootstrap accepts the bounded iOS proof size and denies an 
   finally { db.close(); }
 });
 
+test('candidate HTTP backup head and commit require the exact owner session and one-use generation grant', async (t) => {
+  const { core, bootstrap } = setup(t);
+  const { owner } = await bootstrap();
+  const { owner: stranger } = await bootstrap(core, b64(71), b64(72));
+  const http = await openServer(t, core);
+  const headPath = route('owner/backup/head');
+  const operationPath = route('owner/backup/operation');
+  const grantPath = route('owner/backup/grant');
+  const commitPath = route('owner/backup/commit');
+  const first = { schemaVersion: 1, operationId: b64(73), generationId: b64(74),
+    backupNamespace: owner.namespace, expectedHeadRevision: '0', expectedHeadSha256: null,
+    bundleSha256: 'a'.repeat(64), keyEpoch: '1', driveFileId: 'drive-http-one',
+    storageAccountBinding: 'b'.repeat(64) };
+  assert.equal((await http.post(headPath, { schemaVersion: 1 })).status, 403);
+  const empty = await http.post(headPath, { schemaVersion: 1 }, { bearer: owner.sessionToken });
+  assert.equal(empty.status, 200);
+  assert.equal(empty.body.head, null);
+  assert.equal((await http.post(grantPath, { ...first, prfOutput: 'secret' },
+    { bearer: owner.sessionToken })).status, 400);
+  const issued = await http.post(grantPath, first, { bearer: owner.sessionToken });
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  const grant = issued.body.token;
+  assert.match(grant, /^grant\./u);
+  assert.equal((await http.post(commitPath, first, { bearer: grant })).status, 403);
+  assert.equal((await http.post(commitPath, first,
+    { bearer: grant, session: stranger.sessionToken })).status, 403);
+  assert.equal((await http.post(commitPath, { ...first, bundleSha256: 'c'.repeat(64) },
+    { bearer: grant, session: owner.sessionToken })).status, 403);
+  const committed = await http.post(commitPath, first,
+    { bearer: grant, session: owner.sessionToken });
+  assert.equal(committed.status, 200, JSON.stringify(committed.body));
+  assert.equal(committed.body.descriptor.keyEpoch, '1');
+  assert.equal((await http.post(commitPath, first,
+    { bearer: grant, session: owner.sessionToken })).status, 403);
+  const head = await http.post(headPath, { schemaVersion: 1 }, { bearer: owner.sessionToken });
+  assert.deepEqual(head.body.head, committed.body.descriptor);
+  assert.equal(head.body.previous, null);
+  const status = await http.post(operationPath, { schemaVersion: 1, operationId: first.operationId },
+    { bearer: owner.sessionToken });
+  assert.deepEqual(status.body, committed.body);
+  const next = { ...first, operationId: b64(75), generationId: b64(76),
+    bundleSha256: 'c'.repeat(64), driveFileId: 'drive-http-two' };
+  const nextGrant = await http.post(grantPath, next, { bearer: owner.sessionToken });
+  assert.equal(nextGrant.status, 200);
+  assert.equal((await http.post(commitPath, next,
+    { bearer: nextGrant.body.token, session: owner.sessionToken })).status, 409);
+  core.revokeSessions(owner.sessionToken);
+  assert.equal((await http.post(commitPath, next,
+    { bearer: nextGrant.body.token, session: owner.sessionToken })).status, 403);
+  assert.equal((await http.post(headPath, { schemaVersion: 1 },
+    { bearer: owner.sessionToken })).status, 403);
+});
+
 test('candidate transport rejects malformed paths, secret extensions and missing owner session', async (t) => {
   const { core, path, bootstrap } = setup(t, { verifier: testVerifier() });
   const { owner } = await bootstrap();

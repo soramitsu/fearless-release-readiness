@@ -8,6 +8,10 @@ const BOOTSTRAP_COMPLETE = `${PREFIX}/owner/bootstrap/complete`;
 const AUTH_CHALLENGE = `${PREFIX}/owner/authentication/challenge`;
 const AUTH_COMPLETE = `${PREFIX}/owner/authentication/complete`;
 const GRANT = `${PREFIX}/owner/grant`;
+const BACKUP_HEAD = `${PREFIX}/owner/backup/head`;
+const BACKUP_OPERATION = `${PREFIX}/owner/backup/operation`;
+const BACKUP_GRANT = `${PREFIX}/owner/backup/grant`;
+const BACKUP_COMMIT = `${PREFIX}/owner/backup/commit`;
 const HEALTH = `${PREFIX}/health`;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_BOOTSTRAP_BODY_BYTES = 128 * 1024;
@@ -26,7 +30,8 @@ const COMPLETION_ROUTES = new Set([
 ]);
 const ROUTES = new Set([
   BOOTSTRAP_CHALLENGE, BOOTSTRAP_COMPLETE,
-  AUTH_CHALLENGE, AUTH_COMPLETE, GRANT, HEALTH, ...Object.keys(SCOPES),
+  AUTH_CHALLENGE, AUTH_COMPLETE, GRANT, BACKUP_HEAD,
+  BACKUP_OPERATION, BACKUP_GRANT, BACKUP_COMMIT, HEALTH, ...Object.keys(SCOPES),
 ]);
 
 function deny(code = 'invalid_request') { throw new AuthorityError(code); }
@@ -61,6 +66,11 @@ function statusFor(error) {
     case 'credential_counter_replay': return 409;
     case 'credential_already_linked': return 409;
     case 'owner_already_exists': return 409;
+    case 'head_conflict': return 409;
+    case 'operation_conflict': return 409;
+    case 'generation_conflict': return 409;
+    case 'key_epoch_transition_required': return 409;
+    case 'storage_account_changed': return 409;
     case 'final_recovery_route_confirmation_required': return 409;
     case 'rate_limited': return 429;
     case 'capacity_exceeded': return 503;
@@ -173,6 +183,10 @@ export function createOwnerHttpServer({ authority, audience, enableCandidate = f
       typeof authority.commitChallengeCredentialMutation !== 'function' ||
       typeof authority.issueGrant !== 'function' ||
       typeof authority.completeAuthentication !== 'function' ||
+      typeof authority.readBackupHead !== 'function' ||
+      typeof authority.backupOperationStatus !== 'function' ||
+      typeof authority.issueGenerationGrant !== 'function' ||
+      typeof authority.commitGenerationMetadata !== 'function' ||
       typeof audience !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(audience)) {
     throw new Error('owner HTTP authority and audience are required');
   }
@@ -232,6 +246,27 @@ export function createOwnerHttpServer({ authority, audience, enableCandidate = f
         send(response, 200, authority.issueGrant(bearer(request, 'session.'), {
           ...body, audience,
         }));
+        return;
+      }
+      if (path === BACKUP_HEAD || path === BACKUP_OPERATION || path === BACKUP_GRANT) {
+        if (request.headers['x-passkey-owner-session']) deny();
+        const session = bearer(request, 'session.');
+        if (path === BACKUP_HEAD) {
+          exact(body, ['schemaVersion']);
+          if (body.schemaVersion !== 1) deny();
+          send(response, 200, authority.readBackupHead(session));
+        } else if (path === BACKUP_OPERATION) {
+          exact(body, ['schemaVersion', 'operationId']);
+          if (body.schemaVersion !== 1) deny();
+          send(response, 200, authority.backupOperationStatus(session, body.operationId));
+        } else {
+          send(response, 200, authority.issueGenerationGrant(session, body));
+        }
+        return;
+      }
+      if (path === BACKUP_COMMIT) {
+        send(response, 200, authority.commitGenerationMetadata(
+          bearer(request, 'grant.'), body, ownerSession(request)));
         return;
       }
       const grant = bearer(request, 'grant.');

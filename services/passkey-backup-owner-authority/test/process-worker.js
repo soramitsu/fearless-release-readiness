@@ -28,7 +28,7 @@ process.once('message', ({ path, audience, token, request, generationRequest, ac
       core.commitChallengeReadRoute(sessionToken, grantToken, request, Buffer.from(mutationBody, 'base64'));
     }
     else if (revoke) core.revokeAll(token, true);
-    else if (generationRequest) core.commitGenerationMetadata(token, generationRequest);
+    else if (generationRequest) core.commitGenerationMetadata(token, generationRequest, sessionToken);
     else core.consumeGrant(token, request);
     process.send({ accepted: true });
   } catch (error) {

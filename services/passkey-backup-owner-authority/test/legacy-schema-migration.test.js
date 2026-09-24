@@ -106,7 +106,7 @@ test('explicit v2-to-v5 migration preserves credentials, grants, counters and ba
     storageAccountBinding: 'b'.repeat(64),
   };
   const generationGrant = core.issueGenerationGrant(owner.sessionToken, generation);
-  core.commitGenerationMetadata(generationGrant.token, generation);
+  core.commitGenerationMetadata(generationGrant.token, generation, owner.sessionToken);
   const originalHead = core.readBackupHead(owner.sessionToken);
   core.close();
   downgradeStoreFixture(path, 2);

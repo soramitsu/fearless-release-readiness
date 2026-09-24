@@ -7,9 +7,9 @@ import {
 const CEREMONY_MS = 120_000;
 const SESSION_MS = 600_000;
 const GRANT_MS = 60_000;
-// Internal metadata mutation only. This is deliberately outside the seven
-// challenge-service routes and cannot be consumed by their introspection API.
-const GENERATION_COMMIT_PATH = '/internal/passkey-backup/v1/generations/commit';
+// Backup metadata mutation is deliberately outside the seven challenge-service
+// scopes and cannot be consumed by their introspection API.
+const GENERATION_COMMIT_PATH = '/api/passkey-backup/v1/owner/backup/commit';
 const GENERATION_COMMIT_SCOPE = 'passkey.backup.generation.commit';
 const MAX_BACKUP_GENERATIONS = 256;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
@@ -759,15 +759,17 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     },
     // Metadata CAS only. The caller must have uploaded, downloaded, unwrapped,
     // decrypted and checked the exact immutable bytes before invoking this.
-    // This core has no HTTP route and does not claim to verify that device work.
-    commitGenerationMetadata(grantToken, input) {
+    // The core cannot verify that device work.
+    commitGenerationMetadata(grantToken, input, sessionToken) {
       const request = generationRequest(input);
       const binding = generationBinding(request, audience);
       const requestHash = binding.bodySha256;
       return store.transaction((tx) => {
         const grantDigest = hash(opaque(grantToken, 'grant.'));
         const grant = tx.query('SELECT * FROM grants WHERE digest=?', grantDigest);
-        if (!grant || grant.expires <= tx.now || grant.audience !== binding.audience ||
+        if (!grant || grant.expires <= tx.now ||
+            grant.session !== hash(opaque(sessionToken, 'session.')) ||
+            grant.audience !== binding.audience ||
             grant.method !== binding.method || grant.path !== binding.path ||
             grant.body_hash !== binding.bodySha256 || grant.scope !== binding.scope) deny();
         const current = tx.query('SELECT * FROM sessions WHERE digest=?', grant.session);

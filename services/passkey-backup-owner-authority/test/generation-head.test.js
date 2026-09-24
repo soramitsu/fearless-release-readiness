@@ -15,7 +15,7 @@ function candidate(owner, overrides = {}) {
 }
 function commit(core, sessionToken, input) {
   const grant = core.issueGenerationGrant(sessionToken, input);
-  return core.commitGenerationMetadata(grant.token, input);
+  return core.commitGenerationMetadata(grant.token, input, sessionToken);
 }
 function worker(message) {
   return new Promise((resolve, reject) => {
@@ -74,14 +74,18 @@ test('head mutation needs its own exact single-use grant, never a session or sev
   const first = candidate(owner);
   const generationGrant = core.issueGenerationGrant(owner.sessionToken, first);
   const routeGrant = core.issueGrant(owner.sessionToken, request());
-  denies(() => core.commitGenerationMetadata(owner.sessionToken, first), 'authorization_failed');
-  denies(() => core.commitGenerationMetadata(routeGrant.token, first), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(owner.sessionToken, first, owner.sessionToken), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(routeGrant.token, first, owner.sessionToken), 'authorization_failed');
   denies(() => core.consumeGrant(generationGrant.token, request()), 'authorization_failed');
   denies(() => core.commitGenerationMetadata(generationGrant.token,
-    { ...first, bundleSha256: 'c'.repeat(64) }), 'authorization_failed');
-  assert.equal(core.readBackupHead(owner.sessionToken).head, null);
-  assert.equal(core.commitGenerationMetadata(generationGrant.token, first).descriptor.headRevision, '1');
+    { ...first, bundleSha256: 'c'.repeat(64) }, owner.sessionToken), 'authorization_failed');
   denies(() => core.commitGenerationMetadata(generationGrant.token, first), 'authorization_failed');
+  const { owner: stranger } = await bootstrap(core, b64(7), b64(10));
+  denies(() => core.commitGenerationMetadata(generationGrant.token, first, stranger.sessionToken),
+    'authorization_failed');
+  assert.equal(core.readBackupHead(owner.sessionToken).head, null);
+  assert.equal(core.commitGenerationMetadata(generationGrant.token, first, owner.sessionToken).descriptor.headRevision, '1');
+  denies(() => core.commitGenerationMetadata(generationGrant.token, first, owner.sessionToken), 'authorization_failed');
   assert.equal(core.consumeGrant(routeGrant.token, request()).active, true);
   assert.equal(commit(core, owner.sessionToken, first).descriptor.headRevision, '1');
 });
@@ -92,11 +96,11 @@ test('expired or revoked generation grants cannot change a head', async (t) => {
   const first = candidate(owner);
   const expired = core.issueGenerationGrant(owner.sessionToken, first);
   clock.mono += 61_000;
-  denies(() => core.commitGenerationMetadata(expired.token, first), 'authorization_failed');
-  denies(() => open().commitGenerationMetadata(expired.token, first), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(expired.token, first, owner.sessionToken), 'authorization_failed');
+  denies(() => open().commitGenerationMetadata(expired.token, first, owner.sessionToken), 'authorization_failed');
   const revoked = core.issueGenerationGrant(owner.sessionToken, first);
   core.revokeSessions(owner.sessionToken);
-  denies(() => core.commitGenerationMetadata(revoked.token, first), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(revoked.token, first, owner.sessionToken), 'authorization_failed');
   denies(() => core.readBackupHead(owner.sessionToken), 'authorization_failed');
 });
 
@@ -139,7 +143,7 @@ test('surviving credential can publish one-step key rotation after revocation wi
     bundleSha256: 'd'.repeat(64), keyEpoch: '2', driveFileId: 'drive-rotated' });
   const preRevokeGrant = core.issueGenerationGrant(enrolled.sessionToken, rotated);
   core.revokeCredential(enrolled.sessionToken, b64(2), true);
-  denies(() => core.commitGenerationMetadata(preRevokeGrant.token, rotated), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(preRevokeGrant.token, rotated, enrolled.sessionToken), 'authorization_failed');
   denies(() => core.readBackupHead(enrolled.sessionToken), 'authorization_failed');
   const restored = await core.completeAuthentication({ ceremonyId: core.beginAuthentication('ios').ceremonyId,
     credential: assertion(challenge.userHandle, b64(6)) });
@@ -166,6 +170,7 @@ test('two separate writers cannot both commit the same expected head', async (t)
   })];
   const results = await Promise.all(attempts.map((generationRequest) => worker({
     path, audience, token: core.issueGenerationGrant(owner.sessionToken, generationRequest).token,
+    sessionToken: owner.sessionToken,
     generationRequest, wall: clock.wall,
   })));
   assert.equal(results.every((result) => result.code === 0), true, JSON.stringify(results));
@@ -179,7 +184,8 @@ test('two separate processes racing the same generation grant commit only once',
   const generationRequest = candidate(owner);
   const grant = core.issueGenerationGrant(owner.sessionToken, generationRequest);
   const results = await Promise.all(Array.from({ length: 8 }, () => worker({
-    path, audience, token: grant.token, generationRequest, wall: clock.wall,
+    path, audience, token: grant.token, sessionToken: owner.sessionToken,
+    generationRequest, wall: clock.wall,
   })));
   assert.equal(results.every((result) => result.code === 0), true, JSON.stringify(results));
   assert.equal(results.filter((result) => result.result?.accepted).length, 1);
@@ -192,18 +198,20 @@ test('commit ambiguity is reconciled by operation ID after process crash', async
   const { owner } = await bootstrap();
   const before = candidate(owner);
   const beforeGrant = core.issueGenerationGrant(owner.sessionToken, before);
-  assert.equal((await worker({ path, audience, token: beforeGrant.token, generationRequest: before,
+  assert.equal((await worker({ path, audience, token: beforeGrant.token, sessionToken: owner.sessionToken,
+    generationRequest: before,
     wall: clock.wall, action: 'crash-before' })).code, 81);
   assert.equal(core.backupOperationStatus(owner.sessionToken, before.operationId).status, 'absent');
-  assert.equal(core.commitGenerationMetadata(beforeGrant.token, before).descriptor.headRevision, '1');
+  assert.equal(core.commitGenerationMetadata(beforeGrant.token, before, owner.sessionToken).descriptor.headRevision, '1');
   const after = candidate(owner, { operationId: b64(30), generationId: b64(31),
     bundleSha256: 'c'.repeat(64), driveFileId: 'drive-file-after' });
   const afterRequest = { ...after, expectedHeadRevision: '1', expectedHeadSha256: before.bundleSha256 };
   const afterGrant = core.issueGenerationGrant(owner.sessionToken, afterRequest);
-  assert.equal((await worker({ path, audience, token: afterGrant.token, generationRequest: afterRequest,
+  assert.equal((await worker({ path, audience, token: afterGrant.token, sessionToken: owner.sessionToken,
+    generationRequest: afterRequest,
     wall: clock.wall, action: 'crash-after' })).code, 82);
   assert.equal(open().backupOperationStatus(owner.sessionToken, after.operationId).descriptor.headRevision, '2');
-  denies(() => core.commitGenerationMetadata(afterGrant.token, afterRequest), 'authorization_failed');
+  denies(() => core.commitGenerationMetadata(afterGrant.token, afterRequest, owner.sessionToken), 'authorization_failed');
   assert.equal(core.readBackupHead(owner.sessionToken).head.driveFileId, 'drive-file-after');
 });
 

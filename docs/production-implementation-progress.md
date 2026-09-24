@@ -1836,8 +1836,21 @@ exact-source TON service suite passes 48/48, the focused regression 1/1 and
 the blocked TON audit fixtures 84/84. This does not establish a finalized-chain
 absence proof or an audited sender-release procedure. Live TonAPI fee parity,
 funded recipient/fee/finality evidence and final signed-build acceptance are
-still missing. The exact-head hosted build and release-contract checks are
-running, and independent review remains required.
+still missing. Exact-head validate, release-contracts and ios-release-safety
+pass; the hosted build is running, and independent review remains required.
+
+The owner authority's non-deployed HTTP candidate now exposes authenticated
+backup-head read, operation-status reconciliation, generation-grant issuance
+and metadata commit. Reads and grant issuance require the live owner session;
+commit requires both its exact-body one-use generation grant and the matching
+owner session in the same SQLite transaction. It cannot use a legacy
+challenge-route grant or accept a grant copied to another owner's session.
+The HTTP regression covers wrong/missing tokens, secret fields, altered
+requests, replay, stale parents and session revocation. All 158 owner tests
+and syntax checks pass. These metadata routes do not verify Drive bytes or
+client-side decryption, and the candidate still rejects production
+construction. Legacy JSON credential cutover, real attestation and native
+end-to-end recovery remain release gates.
 
 ## Completion record
 
