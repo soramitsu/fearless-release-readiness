@@ -1174,6 +1174,46 @@ V4R2 public key and address. The simulator test covers these representations
 using one fixture; a real Android-derived cross-platform vector and provider
 restoration remain open.
 
+## Forward-only Android custody and Android-origin TON wire proof — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+now points to pushed `33aa779eff73cdf6cbb139975e65cb9445e5d5a5`.
+Room v78 adds an explicit wallet custody marker. The migration does not mark
+any existing wallet: historical rows remain UNKNOWN because their public
+metadata cannot distinguish a true watch-only wallet from missing signing
+material. A separate, unwired enrollment path can atomically create a new
+public-only wallet and WATCH marker after checking the wallet's secret
+namespace and legacy V1 source inventory. Validated new signing-wallet
+creation records SIGNED; an EVM-key addition invalidates stale provenance.
+An unwired semantic capture emits role-8 watch slots only for a matching
+WATCH marker and otherwise requires the original signing material. Named
+universal public-chain watch identities still fail closed until each chain
+has an appropriate public-identity proof. Historical watch-only wallets
+remain an unresolved migration/recovery cohort; no existing record is
+silently promoted.
+
+On that Android source, focused migration/provenance/enrollment/preflight/
+transcoder/coordinator JVM suites pass 129/129, Android migration tests
+compile, and a forced Detekt scan of all 10 new Kotlin files has zero
+findings. The v77→v78 instrumentation test has not run on a device or
+emulator. A broader scan of all modified files reports 523 findings in
+existing legacy files, including some added-line style findings; this is
+not a clean changed-file Detekt result. Exact-head hosted CI and independent
+review are pending.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+now points to pushed `27418b24a745126eafcb4291fefff439f9d438a1`.
+An Android-produced 604-byte `FPWMSM01` payload from a valid native TON
+mnemonic is committed as an iOS test resource. Its SHA-256 is
+`e0d14e7109cc5d4cb7b187ea83e8e5279b775e85d18971b2763e35a6580db302`.
+iOS decodes and reencodes the exact bytes, matches the original native TON
+public identity and mnemonic-derived 32-byte private seed, and passes the
+read-only root-signing proof. The focused iPhone 15 simulator material and
+semantic-codec suites pass 46/46 at this pushed head; project-file lint and
+diff check pass. Exact-head hosted CI, native GPM/Drive ceremonies, both
+replacement-device directions and an installer with original-key export
+parity remain open. No feature was enabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
