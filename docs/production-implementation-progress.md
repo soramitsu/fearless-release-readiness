@@ -1295,10 +1295,22 @@ the remaining chain and legacy slots, complete export or a safe installer,
 so it is not iOS-to-replacement-Android recovery. No installer invokes the
 proof.
 
+The Android PR then advanced to pushed
+`1bb014a23016844811e2d44930dac1efd7f2d1a6`. A pure, unwired receiving
+plan copies and labels the full portable wallet cohort, verifies the proven
+roots, and records explicit blockers for unproven material and the missing
+transactional installer. It makes no storage write. Its focused JVM tests
+pass 5/5; forced scoped Detekt and diff checks pass. The existing mutation
+journal covers individual wallet roots, not a replayable multiwallet install
+across V1/V2/V3 stores, auxiliary originals and selection. That broader
+journal, key/export parity, exact-head hosted CI, and independent security
+review remain open. Cross-device recovery is still disabled.
+
 The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
-at `57e3bdc321c71752743970053f2f176b060f2df1` passed its `verify`,
-`verify-owner` and `validate` CI jobs. This supports that root commit only;
-the shipping source/artifact manifest and independent reviews remain open.
+at `3027b38c0efcc226f09e6ac4eac0a44025d96a76` passed its `verify`,
+`verify-owner` and `validate` CI jobs. This supports that prior root commit
+only; the shipping source/artifact manifest and independent reviews remain
+open.
 
 ## Completion record
 
