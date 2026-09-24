@@ -2006,6 +2006,17 @@ at `a10503d396db5ae9cf351186c35fa20580399dc3` has passing `validate`,
 in progress at this checkpoint. Both mobile PRs still require independent
 review.
 
+The final Android `215d5a64005b0d7156c6595a7680c29ad8684e44` migration
+compatibility script has since passed **40/40 on each of API 30, 31 and 36**,
+with zero failures, errors or skips. Each 31/36 archived core-db XML contains
+the exact reservation-trigger test; their log/XML SHA-256 digests are recorded
+in `fearless-Android-production-consolidated-20260731/build/reports/android-api31-36-migration-evidence-20260924.json`.
+These are local emulator migration/restart checks, not Play-signed in-place
+upgrades or 16 KiB native-device qualification. The iOS `a10503d` exact-head
+hosted build and merge check have now passed alongside its validate,
+release-contract and release-safety jobs. Independent review and enabled
+feature acceptance remain open on both platforms.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
