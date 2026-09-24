@@ -1752,12 +1752,54 @@ and test file. Fee-only activity presentation and funded fee reconciliation
 remain release gates; the exact-head hosted checks and independent review
 are still pending.
 
+## Android Kaia history and shipping-manifest hardening — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to clean, pushed `0cc66140b33b823caf772f22732652c95f60d124`.
+The bundled Kaia mainnet and Kairos history now uses chain-bound KaiaScan OAPI
+native-transaction and fungible-token feeds. The existing `KLAYTN` serialized
+history type, chain IDs, asset identities and wallet keys remain unchanged.
+The client attaches its Bearer key only to the exact approved KaiaScan host,
+validates the requested account and token contract, converts decimal amounts
+and native fees to exact smallest units, bounds pagination, excludes
+fee-payer-only rows from transfer amounts, and propagates malformed/provider
+failures to the existing retry path. Token fee stays unknown. A block-indexed
+token movement is mapped as completed by inference, not as proof of the
+transaction receipt. Focused tests pass 9/9, the full wallet module passes
+208/208 without skips, runtime tests pass 48 with ten existing skips, and
+`detektAll` passes but excludes the wallet module. A real KaiaScan key,
+authenticated multi-page/freshness checks, funded amount/fee/status parity,
+retry/explorer checks, signed build and device acceptance remain open. The
+earlier `9180bc535` unsigned AAB predates this migration.
+
+The clean `0cc66140` head then completed a local CI-mode, source-bound
+`:app:bundleRelease` build after a full Gradle clean, against pinned pristine
+Utils `1c80a2bf` and WebSocket `9714b30b`, Android SDK 36 and JDK 21. Release
+compilation, R8 and vital lint completed. The guarded output is an unsigned
+intermediate AAB with SHA-256
+`acdd6df31a1ab575802d48b4cb0a644ece06d5ddc6ed4ef5d4df0ca6f1a85aa3`;
+the structural verifier passed all 16 native libraries across four ABIs at
+16 KiB alignment. The artifact is retained locally under
+`build/reports/android-unsigned-aab-0cc66140/`. The hermetic release SDK
+verifier is Linux-only and could not run on this Mac. This build has public
+placeholder service configuration and no live KaiaScan key. It is not the
+Play-signed candidate, a real 16 KiB-device check, or upgrade acceptance.
+
+Root commit `b5bba657cd58692ad18b87f9252718affcab7d5c` extends the detached
+shipping-manifest validator's hidden Git index-flag check from dependencies
+to the root and every selected source checkout. `assume-unchanged` and
+`skip-worktree` can otherwise conceal modified tracked bytes from ordinary
+`git status`. All 27 manifest fixtures pass, including six new
+root/Android/iOS flag-rejection cases. This improves source identity checks;
+the final reviewed shipping manifest and distribution evidence are still
+absent.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
 
 ## Next active work
 
-- Finish Android independent review, green CI, full Release/R8/AAB, API36/16KiB, native-device and Play-upgrade qualification. Scoped key/sign/send implementation and phase4 verification are recorded above; these do not complete device or distribution acceptance.
+- Finish Android independent review, green protected CI, hermetic final Release/R8/AAB, API36/16KiB native-device and Play-upgrade qualification. The local unsigned intermediate does not complete device or distribution acceptance.
 - Obtain independent review and green CI for the published iOS key/sign/send boundary; qualify exact signed transaction bytes, fees, hashes, receipts, node changes and distribution artifacts. The 463-test development pass does not satisfy enabled-feature or store/device acceptance.
 - Generate and bind the full route inventory and shared shipping manifest, then finish portable native PRF/Drive recovery and owner/grant issuance. Existing credentials and wallet identities remain preserved.
