@@ -25,11 +25,11 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are identified below. Earlier Android and iOS test and CI results
-qualify only their respective older commits; exact-head hosted checks for the
-latest app sources must complete. Both app trees are on review branches, and
-independent security review, protected qualification and distribution
-acceptance remain outstanding.
+candidates are identified below. Earlier test and CI results qualify only
+their respective commits. The current iOS exact-head checks have passed;
+Android exact-head build and IAS checks are still pending. Both app trees are
+on review branches, and independent security review, protected qualification
+and distribution acceptance remain outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2016,6 +2016,19 @@ upgrades or 16 KiB native-device qualification. The iOS `a10503d` exact-head
 hosted build and merge check have now passed alongside its validate,
 release-contract and release-safety jobs. Independent review and enabled
 feature acceptance remain open on both platforms.
+
+A scoped Codex Security diff review of Android
+`5b326c63cf5150a4c8e557fad162a863b20e3246..215d5a64005b0d7156c6595a7680c29ad8684e44`
+reviewed all ten changed source/test/gate files, the three additional changed
+documentation/test files, and supporting journal, allocator and Room paths.
+Its sealed local report (scan `47913ab8-2094-4f77-b024-043947afbebc`,
+SHA-256 `038b760ba1500ff06949a2071cbbaca65e9719c329358af8898c89867e4a38de`)
+records zero findings and complete coverage for that exact diff. This is a
+patch-level review, not an independent release approval or a claim that the
+unwired recovery path, cross-device flow or signed distribution builds are
+secure or accepted. As of this checkpoint, Android `validate` passes while
+`build-and-test` and IAS remain pending; root `verify` and `verify-owner` pass
+while root `validate` remains pending.
 
 ## Completion record
 
