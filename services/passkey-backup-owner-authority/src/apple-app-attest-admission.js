@@ -1,7 +1,10 @@
 import { createHash, timingSafeEqual, X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { decodeCBOR, decodePartialCBOR } from '@levischuck/tiny-cbor';
-import { X509Certificate as ParsedCertificate } from '@peculiar/x509';
+import {
+  ExtendedKeyUsageExtension, KeyUsageFlags, KeyUsagesExtension,
+  X509Certificate as ParsedCertificate,
+} from '@peculiar/x509';
 import { appAttestation, deny } from './validation.js';
 
 const APP_ATTEST_ROOT = new X509Certificate(readFileSync(
@@ -34,11 +37,19 @@ function verifyCertificateChain(x5c, nowMillis) {
   const [leafBytes, intermediateBytes] = x5c.map((value) => bytes(value, 256, 8192));
   const leaf = new X509Certificate(leafBytes);
   const intermediate = new X509Certificate(intermediateBytes);
+  const parsedLeaf = new ParsedCertificate(leafBytes);
+  const parsedIntermediate = new ParsedCertificate(intermediateBytes);
+  const leafUsage = parsedLeaf.getExtension(KeyUsagesExtension)?.usages;
+  const intermediateUsage = parsedIntermediate.getExtension(KeyUsagesExtension)?.usages;
+  const leafPurpose = parsedLeaf.getExtension(ExtendedKeyUsageExtension)?.usages;
   const now = new Date(nowMillis);
   for (const cert of [leaf, intermediate, APP_ATTEST_ROOT]) {
     if (now < cert.validFromDate || now > cert.validToDate) deny('verification_failed');
   }
   if (leaf.ca || !intermediate.ca || !APP_ATTEST_ROOT.ca ||
+      (leafUsage & KeyUsageFlags.digitalSignature) === 0 ||
+      (intermediateUsage & KeyUsageFlags.keyCertSign) === 0 ||
+      !leafPurpose?.includes('1.2.840.113635.100.4.24') ||
       !leaf.checkIssued(intermediate) || !leaf.verify(intermediate.publicKey) ||
       !intermediate.checkIssued(APP_ATTEST_ROOT) ||
       !intermediate.verify(APP_ATTEST_ROOT.publicKey)) deny('verification_failed');
@@ -71,7 +82,7 @@ function publicPoint(leaf) {
 
 function verifyAuthenticatorData(authData, keyId, point, appId, allowedBundleVersions) {
   if (authData.length < 87 || !equal(authData.subarray(0, 32), hash(Buffer.from(appId, 'utf8'))) ||
-      (authData[32] & 0x40) !== 0x40 || authData.readUInt32BE(33) !== 0 ||
+      ![0x40, 0xc0].includes(authData[32]) || authData.readUInt32BE(33) !== 0 ||
       !equal(authData.subarray(37, 53), PRODUCTION_AAGUID) ||
       authData.readUInt16BE(53) !== 32 || !equal(authData.subarray(55, 87), keyId)) {
     deny('verification_failed');
