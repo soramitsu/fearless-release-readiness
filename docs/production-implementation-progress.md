@@ -25,10 +25,14 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `41b4c91e8` and `798da45a3`, respectively. Both clean app
-trees are on review branches. Exact-source local recovery-component tests
-and an independent static diff review passed as recorded below; hosted checks
-for the new heads remain to be confirmed. Protected qualification,
+candidates are `38173660d0e43d0f40db7dfb38124ec3d8a4fd81` and
+`f78b44d7eb9d5ab50c0c0806be51d14a0bb14898`, respectively. Both clean app
+trees are on review branches. Android's final-source backup JVM suite passed
+292/292 and Detekt; iOS's focused native first-owner PRF suite passed 17/17
+with lint and project validation. Hosted checks remain in progress. The
+internal diff review of the preceding iOS and current Android heads found no
+reportable finding; its iOS callback-binding recommendation is now fixed.
+Protected qualification,
 independent human security approval and signed distribution acceptance remain
 outstanding.
 
@@ -2791,7 +2795,7 @@ review found no remaining issue in the ingress change. This does not enable
 production startup or migrate legacy
 credentials.
 
-The current pushed iOS candidate at `60b1d73e2e1906e994298249a289fa69a502b4ca` on
+The preceding pushed iOS candidate at `60b1d73e2e1906e994298249a289fa69a502b4ca` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) adds a
 disabled, unwired first-owner bootstrap HTTP/proof boundary. It commits the
 exact public registration into a wallet-signed server challenge and binds an
@@ -2828,7 +2832,7 @@ caller or real app-owned plaintext-wallet verifier, and recovery remains
 disabled. The intervening documentation-only commit corrected `AGENTS.md`
 setup guidance to the immutable reviewed shared-features pin.
 
-The current pushed Android candidate at `68a4c3fb295763541c8883554443bfd419ca3552`
+The preceding pushed Android candidate at `68a4c3fb295763541c8883554443bfd419ca3552`
 on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 adds a disabled first-owner bootstrap client, verified-generation promoter,
 and existing-head candidate checker. Bootstrap requires locally authorized
@@ -2859,6 +2863,53 @@ and 107 adversarial cases on the direct parent. Hosted checks for this newly
 pushed head are pending. Application-owned original-key authorization, the
 first-generation wrapper and verified backup, the deployed owner service,
 and cross-device acceptance remain open, and recovery stays compiled off.
+
+## Candidate update — 2026-09-25
+
+The current pushed Android candidate at
+`38173660d0e43d0f40db7dfb38124ec3d8a4fd81` on
+[PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+adds disabled first-generation preparation. The bootstrap result now carries
+the locally authorized original-wallet identity so another wallet cannot be
+substituted before encryption. A server-verified, credential-matched PRF
+assertion and fresh empty owner head lead to an application-owned complete
+inventory exporter. The builder generates a random 32-byte DEK, encrypts the
+existing envelope, wraps the key for the verified credential, independently
+unwraps/decrypts and checks original-key evidence, and erases temporary
+plaintext, key and PRF buffers. The preparer rechecks the selected Drive
+account and empty head, then persists the exact encrypted candidate in the
+append-only journal without uploading. The journal atomically rejects a
+second genesis candidate for the same owner/namespace, including after an
+uncertain outcome. The final-source backup module passes **292/292** JVM
+tests with zero failures/errors/skips plus `detektAll`, using JDK 21 and the
+pristine pinned Utils checkout. The source is clean and pushed. No production
+exporter/verifier implementation, app flow, real provider recovery or upload
+acceptance is claimed; recovery stays compiled off.
+
+The current pushed iOS candidate at
+`f78b44d7eb9d5ab50c0c0806be51d14a0bb14898` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+adds a disabled iOS 18+ native first-owner passkey PRF registration adapter.
+The request uses the owner challenge and discoverable user handle with
+required user verification and a local 32-byte PRF salt. The typed result
+separates the public WebAuthn registration from the local one-use PRF key;
+the local output becomes available only after the exact registration,
+wallet-signed proof and App Attest completion returns an owner session.
+Ambiguous completion and cancellation consume the ceremony. Focused exact-source
+iOS 18.1 arm64 simulator tests pass **17/17**, with SwiftLint, SwiftFormat,
+project and diff validation clean. The latest commit rechecks the exact
+challenge and PRF salt on the native callback, discarding mismatched local key
+material before returning it to the bootstrap completion path. This adapter has no production app-flow
+caller; concrete original-wallet signing/export, Google Password Manager
+device interoperability and replacement-device recovery remain open.
+
+Neither mobile candidate has a production feature enabled. CI checks for the
+new heads, independent human security review, deployed one-writer authority, Drive/OAuth
+provisioning, signed upgrades and cross-platform device acceptance remain
+release gates. The Android app-owned exporter must eventually return a fresh,
+caller-owned buffer because first-generation preparation erases the exported
+plaintext after encryption; no production exporter exists yet. Iroha remains
+entirely with its owner on `optimizations`.
 
 ## Completion record
 
