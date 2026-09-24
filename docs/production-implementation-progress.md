@@ -25,10 +25,10 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `fb2600d9a1af20c9b1062a12814c432c490f4170` and
+candidates are `d6efdde1c5670c05e97940343e1523153a05fec6` and
 `d2782d2324b6a3e454b3e6d15cded11bf493615c`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
-309/309 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+314/314 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
 The exact iOS journal source passed 11/11 iOS 18.1 arm64 simulator tests;
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new heads remain in progress. An internal diff review of the preceding
@@ -2925,6 +2925,18 @@ suite passes **309/309** with default and forced scoped Detekt. V1/V2, iOS,
 watch, auxiliary metadata, full-cohort export and installed-key readback are
 not proved by this component, so the app-owned first-generation exporter and
 recovery enablement remain absent.
+
+The following Android source at `d6efdde1c5670c05e97940343e1523153a05fec6`
+adds a separate read-only historical V1 proof over the typed key, address,
+mnemonic/entropy, seed and path fields. It reconstructs each of the five
+released V1 source variants and invokes the production original-key and
+recovery validator. A mixed V1/V2 test exercises this alongside the existing
+exact-SCALE V2 proof. The final-source account JVM suite passes **314/314**
+with zero failures/skips; forced scoped Detekt and Android instrumentation APK
+compilation pass. The SR25519 instrumentation test has **not** run on a device.
+FPWMSM01 retains V1 typed fields rather than opaque preference bytes. V1/V2/V3
+component proofs do not yet establish a complete iOS/Android cohort, installed
+key export or transactional replacement-device restore; recovery stays off.
 
 Neither mobile candidate has a production feature enabled. CI checks for the
 new heads, independent human security review, deployed one-writer authority, Drive/OAuth
