@@ -1581,6 +1581,31 @@ edit. The new exact-head hosted Android run is pending, so the CI gate remains
 open. These test corrections do not qualify API 36, 16 KiB native binaries,
 release signing or distribution upgrades.
 
+## Android Asset Hub to Moonbeam USDt discovery inventory — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to pushed `df22529b75d078d378bbf1bbcb06c1fee9700e67`.
+A read-only, source-digested report now binds the bundled chain registry,
+frozen discovery-only gap, approved and required route lists, and production
+evidence for Polkadot Asset Hub to Moonbeam USDt. It records the advertised
+USDt route, the origin Asset Hub asset with six decimal places, and Moonbeam
+`xcusdt` as a possible destination asset without treating that mapping as
+verified. The focused drift test and local registry/production-evidence gates
+pass; the exact-head hosted `validate` job passes. Hosted `build-and-test` and
+IAS validation are still running. This route remains discovery-only,
+unapproved for execution and `releaseEnabled=false`. Canonical chain-state
+asset mapping, runtime call and fee review, capped funded receipts and
+independent route approval remain required. The report does not authorize
+signing or submit a transfer.
+
+The latest pushed iOS source remains
+`66523499dfbde61828677f39dfd04153fdfb8116` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its hosted
+`validate` job passes, while `release-contracts` and `build` are still
+running. The iOS receive projection and both platform candidates remain
+non-shipping until their remaining recovery, security, device and
+distribution gates pass.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
