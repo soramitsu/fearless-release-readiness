@@ -2268,6 +2268,30 @@ source/test files, plus two contextual documentation files (scan
 `81ed72b52d81c9a48118f88dc6beabf72344e0c1d61c959ffed5cd3e00f39304`).
 The scan is not independent human review or provider/device qualification.
 
+## Android Play Integrity bootstrap adapter — 2026-09-24
+
+The non-deployed owner-authority source now contains an opt-in, server-owned
+Google Play Integrity standard-token adapter. It uses the fixed Google decode
+endpoint and the canonical REST `integrityToken` field, then verifies the
+wallet-proof-bound request hash, exact package and Play signing certificate,
+allowlisted release version, token freshness, Play-recognized/licensed app,
+certified device and absence of a testing override. An Android bootstrap
+composition test runs the wallet signature, simulated Google decode and real
+WebAuthn registration together. The full owner suite passed 230/230 before
+the final canonical-field and testing-override corrections; the affected
+adapter/WebAuthn suite passed 36/36 afterward. Syntax and diff checks passed.
+The adapter is included in source-publication and release-bundle inventories.
+
+No service-account token provider, actual Play app-signing certificate or
+released version list has been provisioned here; there is no live Google
+decode, native token request, Apple App Attest verifier, admitted production
+listener, or device acceptance. The production HTTP factory continues to
+reject construction and recovery remains disabled. The exact source also
+needs scoped independent security review and protected-branch CI. Google's
+[REST discovery schema](https://playintegrity.googleapis.com/$discovery/rest?version=v1)
+and [verdict documentation](https://developer.android.com/google/play/integrity/verdicts)
+define the checked fields.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

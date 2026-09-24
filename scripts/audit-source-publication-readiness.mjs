@@ -67,6 +67,7 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-owner-authority/src/legacy-cutover-verifier.js',
   'services/passkey-backup-owner-authority/src/legacy-quarantine.js',
   'services/passkey-backup-owner-authority/src/legacy-reconciliation.js',
+  'services/passkey-backup-owner-authority/src/play-integrity-admission.js',
   'services/passkey-backup-owner-authority/src/store.js',
   'services/passkey-backup-owner-authority/src/validation.js',
   'services/passkey-backup-owner-authority/src/verifier-contract.d.ts',
@@ -82,6 +83,7 @@ const REQUIRED_WORKSPACE_FILES = [
   'services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js',
   'services/passkey-backup-owner-authority/test/legacy-schema-migration.test.js',
   'services/passkey-backup-owner-authority/test/fixtures.js',
+  'services/passkey-backup-owner-authority/test/play-integrity-admission.test.js',
   'services/passkey-backup-owner-authority/test/process-worker.js',
   'services/passkey-backup-owner-authority/test/webauthn-verifier.test.js',
 ];

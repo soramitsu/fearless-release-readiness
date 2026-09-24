@@ -7,6 +7,7 @@ import {
 } from '../../passkey-backup-challenge-service/test/webauthn-fixture.js';
 import { AuthorityError, hash } from '../src/validation.js';
 import { bootstrapWalletMessage, verifyBootstrapWalletProof } from '../src/bootstrap-proof.js';
+import { createPlayIntegrityBootstrapVerifier } from '../src/play-integrity-admission.js';
 import { createWebAuthnVerifier } from '../src/webauthn-verifier.js';
 import { appAttestation, audience, b64, proof, register, setup, verifier as fakeVerifier } from './fixtures.js';
 
@@ -219,6 +220,38 @@ test('first owner commits only after signed local wallet, bound app attestation 
   await assert.rejects(core.completeBootstrap({ ceremonyId: duplicate.ceremonyId, credential: newCredential,
     walletProof: signedWalletProof(duplicate, newCredential), appAttestation: appAttestation('ios') }),
   (error) => error.code === 'credential_already_linked');
+});
+
+test('Android first-owner ceremony composes wallet proof, Google verdict and WebAuthn', async () => {
+  const pending = ceremony('bootstrap', 'android');
+  const credential = publicRegistration(registrationCredential(pending.challenge,
+    createAuthenticator('play-bootstrap'), { origin: androidOrigin }));
+  const walletProof = signedWalletProof(pending, credential);
+  const boundNonce = verifyBootstrapWalletProof(pending, credential, walletProof).attestationNonce;
+  const now = 1_797_000_000_000;
+  const play = createPlayIntegrityBootstrapVerifier({
+    packageName: 'io.soramitsu.fearless', signingCertificateSha256: 'a5'.repeat(32),
+    allowedVersionCodes: ['420'], getAccessToken: async () => 'ya29.test_access_token',
+    now: () => now,
+    fetchImpl: async () => Response.json({ tokenPayloadExternal: {
+      requestDetails: { requestPackageName: 'io.soramitsu.fearless', requestHash: boundNonce,
+        timestampMillis: String(now) },
+      appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED',
+        packageName: 'io.soramitsu.fearless',
+        certificateSha256Digest: [Buffer.alloc(32, 0xa5).toString('base64url')], versionCode: '420' },
+      accountDetails: { appLicensingVerdict: 'LICENSED' },
+      deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY'] },
+    } }),
+  });
+  const admitted = createWebAuthnVerifier({
+    allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+    bootstrapAdmission: bootstrapAdmission(play),
+  });
+  const result = await admitted.bootstrap({ ceremony: pending, credential, walletProof,
+    appAttestation: appAttestation('android') });
+  assert.equal(result.walletBindingHash,
+    verifyBootstrapWalletProof(pending, credential, walletProof).walletBindingHash);
+  assert.equal(result.credential.userHandle, pending.userHandle);
 });
 
 test('wallet bootstrap message binds owner, namespace, nonce and every public registration field', () => {
