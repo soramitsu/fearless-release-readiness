@@ -1,13 +1,51 @@
 import { appAttestation, deny } from './validation.js';
+import { GoogleAuth } from 'google-auth-library';
 
 const PACKAGE_NAME = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/u;
 const SHA256_HEX = /^[a-f0-9]{64}$/u;
 const VERSION_CODE = /^[1-9][0-9]{0,18}$/u;
 const OAUTH_TOKEN = /^[A-Za-z0-9._~-]{16,4096}$/u;
+const SERVICE_ACCOUNT_EMAIL = /^[a-z0-9][a-z0-9._-]{1,127}@[a-z0-9][a-z0-9.-]+\.gserviceaccount\.com$/u;
+const PLAY_INTEGRITY_SCOPE = 'https://www.googleapis.com/auth/playintegrity';
 const MAX_VERDICT_BYTES = 64 * 1024;
 const MAX_TOKEN_AGE_MS = 120_000;
 const MAX_FUTURE_SKEW_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 5_000;
+
+/**
+ * Server-only ADC provider. The operator pins the service-account identity;
+ * a developer's local user ADC or a substituted workload identity is refused.
+ * GoogleAuth owns refresh and caches credentials; the token is never returned
+ * to a mobile caller or persisted by the owner authority.
+ */
+export function createPlayIntegrityAdcAccessTokenProvider({ expectedServiceAccountEmail,
+  authFactory = () => new GoogleAuth({ scopes: PLAY_INTEGRITY_SCOPE }) } = {}) {
+  if (typeof expectedServiceAccountEmail !== 'string' ||
+      !SERVICE_ACCOUNT_EMAIL.test(expectedServiceAccountEmail) ||
+      typeof authFactory !== 'function') deny('invalid_configuration');
+  const auth = authFactory();
+  if (!auth || typeof auth.getCredentials !== 'function' ||
+      typeof auth.getAccessToken !== 'function') deny('invalid_configuration');
+  return async function getAccessToken({ scope, signal } = {}) {
+    if (scope !== PLAY_INTEGRITY_SCOPE || !(signal instanceof AbortSignal) || signal.aborted) {
+      deny('verification_failed');
+    }
+    try {
+      const credentials = await auth.getCredentials();
+      if (signal.aborted || credentials?.client_email !== expectedServiceAccountEmail ||
+          (credentials.universe_domain !== undefined &&
+            credentials.universe_domain !== 'googleapis.com')) deny('verification_failed');
+      const token = await auth.getAccessToken();
+      if (signal.aborted || typeof token !== 'string' || !OAUTH_TOKEN.test(token)) {
+        deny('verification_failed');
+      }
+      return token;
+    } catch {
+      // Google auth failures and credentials may contain sensitive details.
+      deny('verification_failed');
+    }
+  };
+}
 
 function object(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -109,7 +147,7 @@ export function createPlayIntegrityBootstrapVerifier({ packageName, signingCerti
     });
     try {
       const accessToken = await Promise.race([
-        getAccessToken({ scope: 'https://www.googleapis.com/auth/playintegrity',
+        getAccessToken({ scope: PLAY_INTEGRITY_SCOPE,
           signal: controller.signal }), aborted,
       ]);
       if (typeof accessToken !== 'string' || !OAUTH_TOKEN.test(accessToken)) deny('verification_failed');

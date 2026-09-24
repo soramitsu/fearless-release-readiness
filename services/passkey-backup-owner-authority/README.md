@@ -1,6 +1,6 @@
 # Passkey backup owner authority — metadata core candidate
 
-This is a bounded, non-deployed metadata core with an explicitly test-admitted HTTP composition candidate in `src/http.js`. It has no executable production listener, complete cross-platform attestation verifier, ciphertext store, deployment configuration or feature-enable flag. The HTTP factory rejects production construction and has no deployable entrypoint. Authentication is unavailable by default. The optional `src/webauthn-verifier.js` adapter cryptographically verifies existing-owner assertions and new-credential registration against a configured exact platform origin. First-owner bootstrap is unavailable by default. With an explicitly injected, server-owned app-attestation verifier, it additionally verifies an Ed25519 or secp256k1 wallet proof, exact app identity/nonce evidence and a fresh WebAuthn registration. `src/play-integrity-admission.js` supplies a Google Play standard-token server adapter for that hook, but it has no provisioned service-account token provider, confirmed Play signing certificate/version list, mobile token request, live Google verdict or production composition. Apple App Attest and SR25519 verification remain unavailable. The positive authority-core fixtures under `test/` are deliberately noncryptographic; the Google adapter's tests use a simulated Google response and are not production evidence.
+This is a bounded, non-deployed metadata core with an explicitly test-admitted HTTP composition candidate in `src/http.js`. It has no executable production listener, complete cross-platform attestation verifier, ciphertext store, deployment configuration or feature-enable flag. The HTTP factory rejects production construction and has no deployable entrypoint. Authentication is unavailable by default. The optional `src/webauthn-verifier.js` adapter cryptographically verifies existing-owner assertions and new-credential registration against a configured exact platform origin. First-owner bootstrap is unavailable by default. With an explicitly injected, server-owned app-attestation verifier, it additionally verifies an Ed25519 or secp256k1 wallet proof, exact app identity/nonce evidence and a fresh WebAuthn registration. `src/play-integrity-admission.js` supplies a Google Play standard-token server adapter and a scoped, service-account-bound Application Default Credentials callback for that hook. Neither is provisioned or wired into a production composition; the actual Play signing certificate/version list, native token request and live Google verdict are missing. Apple App Attest and SR25519 verification remain unavailable. The positive authority-core fixtures under `test/` are deliberately noncryptographic; the Google adapter's tests use a simulated Google response and are not production evidence.
 
 ## Implemented boundary
 
@@ -32,6 +32,19 @@ candidate refuses production construction and does not verify a Drive upload
 or local decryption; mobile recovery remains disabled.
 
 ## Bootstrap, discovery and enrollment contract
+
+The optional Android Google adapter obtains a Play Integrity OAuth token only
+through Google Auth Library with the exact `playintegrity` scope. Its ADC callback
+requires an operator-configured service-account email and checks the resolved
+workload identity on every use; local user ADC and identity substitution fail
+closed. Prefer an attached service account or workload identity federation so
+there is no long-lived key file in the app or repository. The backend uses the
+token only for Google's fixed decode endpoint. The operator must verify the
+linked Play/Cloud project, the Play-distributed certificate and allowed release
+versions, provision the identity, and run live verdict/device checks before
+connecting it to a deployed listener. No such credentials or live evidence are
+included here. See [Google's standard request flow](https://developer.android.com/google/play/integrity/standard)
+and [ADC guidance](https://docs.cloud.google.com/docs/authentication/application-default-credentials).
 
 The server-only [typed verifier contract](src/verifier-contract.d.ts) is the trust boundary. Adapters are constructor-injected functions reviewed with server composition, never client objects or environment-selected permissive fallbacks. They receive a strict public credential response: extensions are empty or `credProps.rk`; PRF, largeBlob and other data are rejected before invoking an adapter. Native clients must remove local extension secrets before serialization, because server rejection cannot undo transmission. There is no request or proof logging in this core.
 

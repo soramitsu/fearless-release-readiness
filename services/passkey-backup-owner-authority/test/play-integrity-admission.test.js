@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPlayIntegrityBootstrapVerifier } from '../src/play-integrity-admission.js';
+import { createPlayIntegrityAdcAccessTokenProvider,
+  createPlayIntegrityBootstrapVerifier } from '../src/play-integrity-admission.js';
 import { AuthorityError } from '../src/validation.js';
 
 const packageName = 'io.fearless.wallet';
@@ -9,6 +10,7 @@ const application = `android:${packageName}:${signingCertificateSha256}`;
 const nonce = Buffer.alloc(32, 0xc4).toString('base64url');
 const attestationToken = 'A'.repeat(128);
 const at = 1_797_000_000_000;
+const serviceAccountEmail = 'fearless-owner@production-id.iam.gserviceaccount.com';
 const input = Object.freeze({ platform: 'android', expectedNonce: nonce,
   expectedApplication: application,
   attestation: Object.freeze({ kind: 'play-integrity', token: attestationToken }) });
@@ -114,4 +116,64 @@ test('configuration requires a concrete Play identity and release version allowl
     signingCertificateSha256, allowedVersionCodes: ['420'],
     getAccessToken: async () => 'ya29.test_access_token', ...override }),
   (error) => error instanceof AuthorityError && error.code === 'invalid_configuration');
+});
+
+test('ADC provider binds the configured service account before Google decode', async () => {
+  let credentialReads = 0;
+  let tokenReads = 0;
+  const getAccessToken = createPlayIntegrityAdcAccessTokenProvider({
+    expectedServiceAccountEmail: serviceAccountEmail,
+    authFactory: () => ({
+      async getCredentials() { credentialReads += 1; return {
+        client_email: serviceAccountEmail, universe_domain: 'googleapis.com' }; },
+      async getAccessToken() { tokenReads += 1; return 'ya29.test_access_token'; },
+    }),
+  });
+  const verify = makeVerifier({ getAccessToken });
+  assert.deepEqual(await verify(input), { platform: 'android', nonce, application });
+  assert.equal(credentialReads, 1);
+  assert.equal(tokenReads, 1);
+});
+
+test('ADC provider refuses another identity, universe, scope, abort and malformed tokens', async () => {
+  for (const credentials of [
+    { client_email: 'developer@example.com' },
+    { client_email: 'other@production-id.iam.gserviceaccount.com' },
+    { client_email: serviceAccountEmail, universe_domain: 'attacker.example' },
+  ]) {
+    let tokenReads = 0;
+    const provider = createPlayIntegrityAdcAccessTokenProvider({
+      expectedServiceAccountEmail: serviceAccountEmail,
+      authFactory: () => ({ getCredentials: async () => credentials,
+        getAccessToken: async () => { tokenReads += 1; return 'ya29.test_access_token'; } }),
+    });
+    await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
+    assert.equal(tokenReads, 0);
+  }
+  const provider = createPlayIntegrityAdcAccessTokenProvider({
+    expectedServiceAccountEmail: serviceAccountEmail,
+    authFactory: () => ({ getCredentials: async () => ({ client_email: serviceAccountEmail }),
+      getAccessToken: async () => 'short' }),
+  });
+  await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(provider({ scope: 'https://www.googleapis.com/auth/playintegrity',
+    signal: controller.signal }), denied);
+  await assert.rejects(provider({ scope: 'https://www.googleapis.com/auth/cloud-platform',
+    signal: new AbortController().signal }), denied);
+});
+
+test('ADC provider never reflects credential or token acquisition failures', async () => {
+  const provider = createPlayIntegrityAdcAccessTokenProvider({
+    expectedServiceAccountEmail: serviceAccountEmail,
+    authFactory: () => ({ getCredentials: async () => { throw Error('private key details'); },
+      getAccessToken: async () => 'ya29.test_access_token' }),
+  });
+  await assert.rejects(makeVerifier({ getAccessToken: provider })(input), denied);
+  for (const value of ['missing', 'developer@example.com']) {
+    assert.throws(() => createPlayIntegrityAdcAccessTokenProvider({
+      expectedServiceAccountEmail: value }),
+    (error) => error instanceof AuthorityError && error.code === 'invalid_configuration');
+  }
 });

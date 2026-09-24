@@ -2322,8 +2322,9 @@ completed with zero reportable findings across the eight changed source files
 source candidate; they are not a live Google verdict or independent human
 release approval.
 
-No service-account token provider, actual Play app-signing certificate or
-released version list has been provisioned here; there is no live Google
+At that source checkpoint there was no service-account token provider; the
+actual Play app-signing certificate and released version list remain
+unprovisioned here. There is no live Google
 decode, native token request, Apple App Attest verifier, admitted production
 listener, or device acceptance. The production HTTP factory continues to
 reject construction and recovery remains disabled. The exact source also
@@ -2331,6 +2332,26 @@ needs independent human security review and protected-branch CI. Google's
 [REST discovery schema](https://playintegrity.googleapis.com/$discovery/rest?version=v1)
 and [verdict documentation](https://developer.android.com/google/play/integrity/verdicts)
 define the checked fields.
+
+## Server-owned Play Integrity OAuth identity — 2026-09-24
+
+The owner authority now has an opt-in Application Default Credentials callback
+for the Android Play Integrity verifier. It uses pinned Google Auth Library
+`11.1.0`, requests only the `playintegrity` OAuth scope, checks the resolved
+service-account email against an operator-supplied exact identity on every
+request, and rejects a changed universe, user ADC, wrong scope, cancellation
+or malformed token. Google auth failures are returned without credential or
+token details. An attached service account or workload identity can be used;
+no private key or actual operator identity has been added to source.
+
+The complete owner-authority suite passed **234/234** with no failures or
+skips, including simulated server identity and decode tests; syntax and diff
+checks passed. The callback is still unwired from a production listener. The
+Play/Cloud linkage, exact Play certificate and release versions, live OAuth
+credential, native request, real Google decode and device tests remain
+prerequisites. Google's [ADC guidance](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
+and [standard Play Integrity flow](https://developer.android.com/google/play/integrity/standard)
+describe the external provisioning and token exchange.
 
 ## Completion record
 
