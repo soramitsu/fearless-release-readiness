@@ -1551,6 +1551,22 @@ installed wallet's signing/export behavior. The transactional installer,
 Android-source mapping, replacement-device recovery and independent review
 remain open.
 
+## Android API 34 current-schema instrumentation — 2026-09-24
+
+The Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to pushed `4e812d5849cc97c30fb22dc4e442840347b0c87a`.
+The preceding hosted `build-and-test` job failed 60 core-db and five account
+API 34 instrumentation cases because current-version assertions expected
+schema 77 after the candidate advanced to schema 78. The affected tests now
+use the current database-version constant or schema 78 target as appropriate;
+one named current-version startup fixture now creates the current schema.
+Pinned Utils/WebSocket source checks and Android test-source compilation pass.
+The local API 34 connected run passes core-db 301/301 and
+feature-account-impl 12/12, with a focused 1/1 rerun after the final fixture
+edit. The new exact-head hosted Android run is pending, so the CI gate remains
+open. These test corrections do not qualify API 36, 16 KiB native binaries,
+release signing or distribution upgrades.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
