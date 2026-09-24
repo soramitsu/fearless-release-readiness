@@ -71,6 +71,14 @@ Use this checklist for every production release of
   pinned port, durable volume, production origins, and strict healthcheck.
 - Confirm the deployment mounts durable storage at `/data/passkey-backup` and
   uses `PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials.json`.
+- Before starting the new image, stop and drain the previous writer; verify the
+  exact mounted `/data/passkey-backup` volume is owned by the image's `node`
+  UID/GID and mode `0700`. Verify the adjacent
+  `.credentials.json.writer-lease` is absent after clean shutdown; if it remains,
+  follow the [operator recovery procedure](production-deployment.md) with a
+  preserved, hashed credential snapshot and confirmed old-process exit before
+  removing the exact stale lease. Exercise second-writer rejection and
+  SIGTERM drain before accepting the rollout.
 - Confirm a production preflight with `PASSKEY_CREDENTIAL_STORE_FILE` omitted
   fails before listening; production must never fall back to an in-memory
   credential store.

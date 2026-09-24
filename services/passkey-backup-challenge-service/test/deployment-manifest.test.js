@@ -74,6 +74,8 @@ function validateDeploymentManifest(root = process.cwd(), workspaceRoot = join(r
     /mkdir\s+-p\s+\/data\/passkey-backup[\s\S]+chown\s+-R\s+node:node\s+\/data\/passkey-backup/i,
     'Dockerfile must create the durable data directory for the node user.',
   );
+  assert.match(dockerfile, /chmod\s+0700\s+\/data\/passkey-backup/i,
+    'Dockerfile must make the credential volume private for its writer lease.');
   assert.match(dockerfile, /CMD\s+\[\s*"node"\s*,\s*"src\/server\.js"\s*\]/, 'Dockerfile must start src/server.js.');
 
   for (const [key, value] of requiredEnv) {
@@ -366,6 +368,7 @@ function validateDeploymentManifest(root = process.cwd(), workspaceRoot = join(r
     'docker compose -f docker-compose.production.yml pull',
     'docker compose -f docker-compose.production.yml up -d --no-build',
     'PASSKEY_CREDENTIAL_STORE_FILE=/data/passkey-backup/credentials.json',
+    '.credentials.json.writer-lease',
     'PASSKEY_ANDROID_ALLOWED_ORIGIN',
     'android:apk-key-hash:',
     'PASSKEY_AUTHORIZATION_INTROSPECTION_URL',
@@ -491,6 +494,20 @@ test('deployment manifest rejects adversarial production contract drift', () => 
       [DOCKERFILE]: actualFiles[DOCKERFILE].replace('USER node', 'USER root'),
     },
     /Dockerfile must run as the bundled non-root node user/,
+  );
+  assertRejectsFixture(
+    {
+      ...actualFiles,
+      [DOCKERFILE]: actualFiles[DOCKERFILE].replace('chmod 0700 /data/passkey-backup', 'chmod 0755 /data/passkey-backup'),
+    },
+    /Dockerfile must make the credential volume private/,
+  );
+  assertRejectsFixture(
+    {
+      ...actualFiles,
+      [RELEASE_CHECKLIST]: actualFiles[RELEASE_CHECKLIST].replace('.credentials.json.writer-lease', 'unfenced-store'),
+    },
+    /Release checklist must mention \.credentials\.json\.writer-lease/,
   );
   assertRejectsFixture(
     {

@@ -3,7 +3,6 @@ import { dirname } from 'node:path';
 import {
   closeSync,
   constants as fsConstants,
-  existsSync,
   fstatSync,
   fsyncSync,
   lstatSync,
@@ -16,6 +15,7 @@ import {
 } from 'node:fs';
 import { base64UrlDecode, base64UrlEncode } from './base64url.js';
 import { serviceError } from './errors.js';
+import { acquireCredentialWriterLease } from './writer-lease.js';
 
 const CREDENTIAL_STORE_SCHEMA_VERSION = 4;
 const MIGRATABLE_CREDENTIAL_STORE_SCHEMA_VERSION = 3;
@@ -44,6 +44,18 @@ function credentialStoreInvalid(message = 'Credential store file is invalid') {
 
 function credentialStoreUnavailable(message = 'Credential store file cannot be written') {
   return serviceError(500, 'credential_store_unavailable', message);
+}
+
+function credentialStoreChanged() {
+  const error = credentialStoreUnavailable('Credential store changed during writer startup');
+  error.writerLeaseNeedsReview = true;
+  return error;
+}
+
+function sameSnapshotIdentity(left, right) {
+  return left && right && left.dev === right.dev && left.ino === right.ino &&
+    left.size === right.size && left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
 }
 
 function assertPlainObject(value, description) {
@@ -388,13 +400,14 @@ function normalizeOwnerSubjectHash(value) {
   return value;
 }
 
-function readBoundedRegularFile(filePath) {
+function readBoundedRegularFile(filePath, expectedIdentity) {
   let fileDescriptor;
   try {
     // O_NOFOLLOW closes the lstat/open race: replacing the checked path with a
     // symlink must fail instead of redirecting the subsequent read.
     fileDescriptor = openSync(filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     const initialStat = fstatSync(fileDescriptor);
+    if (!sameSnapshotIdentity(initialStat, expectedIdentity)) throw credentialStoreChanged();
     if (!initialStat.isFile() || initialStat.size > MAX_CREDENTIAL_STORE_BYTES) {
       throw credentialStoreInvalid('Credential store path must be a bounded regular file');
     }
@@ -412,6 +425,8 @@ function readBoundedRegularFile(filePath) {
     if (offset > MAX_CREDENTIAL_STORE_BYTES || finalStat.size > MAX_CREDENTIAL_STORE_BYTES) {
       throw credentialStoreInvalid('Credential store path must be a bounded regular file');
     }
+    if (!sameSnapshotIdentity(initialStat, finalStat) ||
+        !sameSnapshotIdentity(finalStat, lstatSync(filePath))) throw credentialStoreChanged();
     return buffer.subarray(0, offset).toString('utf8');
   } finally {
     if (fileDescriptor !== undefined) closeSync(fileDescriptor);
@@ -428,7 +443,7 @@ export function parseCredentialStoreSnapshotBytes(bytes) {
   return deserializeCredentials(bytes.toString('utf8'));
 }
 
-export function readCredentialStoreSnapshot(filePath) {
+export function readCredentialStoreSnapshot(filePath, expectedIdentity) {
   if (typeof filePath !== 'string' || filePath.trim() === '') {
     throw credentialStoreUnavailable('Credential store file path is required');
   }
@@ -437,9 +452,15 @@ export function readCredentialStoreSnapshot(filePath) {
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CREDENTIAL_STORE_BYTES) {
       throw credentialStoreInvalid('Credential store path must be a bounded regular file');
     }
-    return deserializeCredentials(readBoundedRegularFile(filePath));
+    if (expectedIdentity !== undefined && !sameSnapshotIdentity(stat, expectedIdentity)) {
+      throw credentialStoreChanged();
+    }
+    return deserializeCredentials(readBoundedRegularFile(filePath,
+      expectedIdentity === undefined ? stat : expectedIdentity));
   } catch (error) {
     if (error.code === 'credential_store_invalid') throw error;
+    if (error.writerLeaseNeedsReview === true) throw error;
+    if (expectedIdentity !== undefined) throw credentialStoreChanged();
     throw credentialStoreUnavailable('Credential store file cannot be read');
   }
 }
@@ -859,7 +880,7 @@ export class InMemoryPasskeyChallengeStore {
 }
 
 export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeStore {
-  constructor({ credentialStoreFile, fileOperations = {}, ...options } = {}) {
+  constructor({ credentialStoreFile, fileOperations = {}, productionMode = false, ...options } = {}) {
     super(options);
     if (typeof credentialStoreFile !== 'string' || credentialStoreFile.trim() === '') {
       throw credentialStoreUnavailable('PASSKEY_CREDENTIAL_STORE_FILE must be a non-empty file path');
@@ -869,14 +890,59 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
     if (Object.values(this.fileOperations).some((operation) => typeof operation !== 'function')) {
       throw credentialStoreUnavailable('Credential store file operations are invalid');
     }
-    const loaded = this.loadCredentials();
-    // Persist the complete v4 replacement before accepting requests. Existing
-    // public keys, handles, counters, metadata and empty owner tombstones are
-    // retained unchanged. A failed migration never opens a partially usable store.
-    if (loaded.needsMigration) {
-      this.persistCredentials(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
+    this.closed = false;
+    this.poisoned = false;
+    this.writerLease = productionMode ? acquireCredentialWriterLease(credentialStoreFile) : undefined;
+    if (this.writerLease) this.credentialStoreFile = this.writerLease.canonicalFile;
+    this.initializing = true;
+    try {
+      const loaded = this.loadCredentials();
+      // Persist the complete v4 replacement before accepting requests. Existing
+      // public keys, handles, counters, metadata and empty owner tombstones are
+      // retained unchanged. A failed migration never opens a partially usable store.
+      if (loaded.needsMigration) {
+        this.persistCredentials(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
+      } else if (this.writerLease?.initialFileIdentity) {
+        this.writerLease.assertInitialFile();
+      }
+      super.commitState(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
+      this.initializing = false;
+    } catch (error) {
+      this.closed = true;
+      // A visible replacement with uncertain directory durability, or loss of
+      // the writer identity, needs operator review before any other writer
+      // starts. An ordinary pre-replacement validation failure releases only
+      // this constructor's own lease.
+      if (error?.[STORE_FILE_REPLACED] === true || error?.writerLeaseNeedsReview === true ||
+          this.poisoned) throw error;
+      try { this.writerLease?.release(); }
+      catch { throw credentialStoreUnavailable('Credential store writer lease needs operator review'); }
+      throw error;
     }
-    super.commitState(loaded.credentialsByStorageKey, loaded.ownersByStorageKey);
+  }
+
+  close() {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.poisoned) throw credentialStoreUnavailable('Credential store writer needs operator review');
+    this.writerLease?.release();
+  }
+
+  assertWriterLease() {
+    if (!this.writerLease) return;
+    try { this.writerLease.assertOwned(); }
+    catch {
+      this.poisoned = true;
+      throw credentialStoreUnavailable('Credential store writer lease changed');
+    }
+  }
+
+  assertHealthy() {
+    if (this.closed || this.poisoned) {
+      throw serviceError(503, 'credential_store_unavailable', 'Credential store writer needs operator review');
+    }
+    try { this.assertWriterLease(); }
+    catch { throw serviceError(503, 'credential_store_unavailable', 'Credential store writer needs operator review'); }
   }
 
   commitState(nextCredentials, nextOwners) {
@@ -895,15 +961,25 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
   }
 
   loadCredentials() {
-    if (!existsSync(this.credentialStoreFile)) {
+    this.writerLease?.assertInitialFile();
+    let present;
+    try { present = lstatSync(this.credentialStoreFile); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw credentialStoreUnavailable();
+    }
+    if (!present) {
+      if (this.writerLease?.initialFileIdentity) throw credentialStoreChanged();
       this.persistCredentials(new Map(), new Map());
       return { credentialsByStorageKey: new Map(), ownersByStorageKey: new Map() };
     }
-
-    return readCredentialStoreSnapshot(this.credentialStoreFile);
+    if (this.writerLease && !this.writerLease.initialFileIdentity) throw credentialStoreChanged();
+    return readCredentialStoreSnapshot(this.credentialStoreFile, this.writerLease?.initialFileIdentity);
   }
 
   persistCredentials(credentialsByStorageKey, ownersByStorageKey) {
+    if (this.closed) throw credentialStoreUnavailable('Credential store is closed');
+    if (this.poisoned) throw credentialStoreUnavailable('Credential store writer needs operator review');
+    this.assertWriterLease();
     const credentialStoreDirectory = dirname(this.credentialStoreFile);
     const temporaryFile = `${this.credentialStoreFile}.${randomUUID()}.tmp`;
     const payload = `${JSON.stringify(serializeCredentials(credentialsByStorageKey, ownersByStorageKey), null, 2)}\n`;
@@ -930,6 +1006,10 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
       syncFileSync(fileDescriptor);
       closeFileSync(fileDescriptor);
       fileDescriptor = undefined;
+      // Recheck at the last point before publication. An operator who removed
+      // or replaced this process's lease must not leave it able to write.
+      this.assertWriterLease();
+      if (this.initializing) this.writerLease?.assertInitialFile();
       renameFileSync(temporaryFile, this.credentialStoreFile);
       storeFileReplaced = true;
       directoryDescriptor = openFileSync(credentialStoreDirectory, 'r');
@@ -946,6 +1026,9 @@ export class FileBackedPasskeyChallengeStore extends InMemoryPasskeyChallengeSto
       try { removeFileSync(temporaryFile, { force: true }); } catch (cleanupError) { /* best effort */ }
       const unavailable = credentialStoreUnavailable();
       if (storeFileReplaced) unavailable[STORE_FILE_REPLACED] = true;
+      if (error?.writerLeaseNeedsReview === true) unavailable.writerLeaseNeedsReview = true;
+      if (storeFileReplaced && this.writerLease) this.poisoned = true;
+      if (error?.writerLeaseNeedsReview === true) this.poisoned = true;
       throw unavailable;
     }
   }
@@ -979,5 +1062,5 @@ export function createPasskeyChallengeStore({
     }
     return new InMemoryPasskeyChallengeStore(options);
   }
-  return new FileBackedPasskeyChallengeStore({ ...options, credentialStoreFile });
+  return new FileBackedPasskeyChallengeStore({ ...options, credentialStoreFile, productionMode });
 }

@@ -109,6 +109,47 @@ Run exactly one writer process for each mounted credential-store file. Multiple
 replicas require an external transactional credential database; they must not
 share this JSON file over a network filesystem.
 
+The production JSON writer now takes an exclusive adjacent lease at
+`/data/passkey-backup/.credentials.json.writer-lease/owner.json` before it
+loads or migrates the store. The mounted directory must be owned by the `node`
+process and mode `0700`; the lease directory and owner record use `0700` and
+`0600`. A second process, a changed lease, or a stale lease left by a crash
+prevents startup. The owner record contains only the canonical file path, PID,
+and random lease token. Every credential-file replacement rechecks that exact
+lease. On `SIGTERM` or `SIGINT`, the HTTP listener stops accepting requests,
+drains in-flight requests, then releases its own token-checked lease. The
+Compose 15-second stop grace must cover the bounded request timeout and drain;
+if the process is killed, retain the lease for review.
+If an atomic credential-file rename succeeds but the directory fsync fails,
+the production writer poisons itself and retains the lease. Later requests
+cannot write over the uncertain counter or revocation result. Treat this as
+an interrupted-write incident and reconcile the exact file before restart.
+
+The image creates a private directory for a new volume, but Docker may mount
+an existing named volume whose root is still `0755` or has the wrong owner.
+Before starting this image against an existing volume, stop the old writer,
+identify the exact mounted volume and file, preserve a durable credential
+snapshot, then set that volume root to the UID/GID of `node` in the reviewed
+image and mode `0700`. Check the actual mounted directory mode and owner before
+restart. Do not loosen the lease check or discard the credential file to make
+startup succeed.
+
+After an unclean exit, do **not** let another writer start by deleting the
+lease immediately. First stop and verify every old container/process is gone
+and no host has the volume mounted for writing. Record the canonical volume
+path and file identity, the lease-directory and owner-file identities, and
+the owner record's PID/path without copying its token into shared logs.
+Preserve and hash an immutable snapshot of `credentials.json`, including the
+latest counters, credential IDs and owner tombstones; investigate any
+temporary file or interrupted write and validate the snapshot. Only after an
+operator has confirmed that no writer survives and the exact store can be
+reopened without losing revocations may the operator remove **that**
+`owner.json` and its now-empty lease directory. Never use recursive deletion,
+automatic PID-based stale-lock cleanup, a database downgrade or an older
+snapshot to bypass this fence. Restart one instance and verify credential
+state before restoring traffic. This lease protects a local single-writer
+deployment; it does not authorize the separate owner SQLite cutover.
+
 ## Immutable Image Publication and Container Contract
 
 Production images are published only by

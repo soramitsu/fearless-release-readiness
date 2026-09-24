@@ -115,6 +115,7 @@ export function createPasskeyBackupChallengeService({
   if (typeof now !== 'function') throw new Error('now must be a function');
   return {
     health() {
+      store.assertHealthy?.();
       return {
         ok: true,
         service: SERVICE_ID,

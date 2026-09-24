@@ -2030,6 +2030,21 @@ secure or accepted. As of this checkpoint, Android `validate` passes while
 `build-and-test` and IAS remain pending; root `verify` and `verify-owner` pass
 while root `validate` remains pending.
 
+The legacy JSON passkey challenge service now has a production-only exclusive
+writer lease for its credential file. A second process cannot load or replace
+the same file; startup binds the initial file identity, and each mutation
+rechecks lease ownership before publication. An uncertain post-rename commit
+or changed lease poisons the writer, retains its lease for operator review and
+returns an unhealthy 503 response. Graceful SIGTERM/SIGINT drains requests
+before token-checked lease release. The Docker volume must be private, and the
+release checklist documents reviewed recovery of a stale lease after a crash.
+Challenge-service tests pass 125/125, owner-authority regressions pass
+162/162, syntax lint and both challenge-service root/adversarial audits pass.
+This fences one local legacy JSON writer; it does not migrate historical
+credentials into the SQLite owner authority, integrate real attestation or
+enable cross-device recovery. The deployed service and candidate authority
+remain separate, and their cutover still requires a verified single writer.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

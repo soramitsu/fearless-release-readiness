@@ -14,7 +14,7 @@ ENV PASSKEY_RECOVERY_ENABLED=false
 
 EXPOSE 8789
 
-RUN mkdir -p /data/passkey-backup && chown -R node:node /data/passkey-backup && chown -R node:node /app
+RUN mkdir -p /data/passkey-backup && chown -R node:node /data/passkey-backup && chmod 0700 /data/passkey-backup && chown -R node:node /app
 
 VOLUME ["/data/passkey-backup"]
 

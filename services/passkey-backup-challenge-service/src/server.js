@@ -505,25 +505,45 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     'PASSKEY_GLOBAL_RATE_LIMIT_MAX_REQUESTS',
     { minimum: 1, maximum: 1_000_000 },
   );
-  const service = createPasskeyBackupChallengeService({
-    store: createPasskeyChallengeStore({
-      ttlMillis,
-      maxCeremonies,
-      credentialStoreFile: process.env.PASSKEY_CREDENTIAL_STORE_FILE,
-      requireDurable: nodeEnvironment === 'production',
-    }),
+  const store = createPasskeyChallengeStore({
+    ttlMillis,
+    maxCeremonies,
+    credentialStoreFile: process.env.PASSKEY_CREDENTIAL_STORE_FILE,
+    requireDurable: nodeEnvironment === 'production',
   });
-
-  const requestAuthorizer = createRequestAuthorizerFromEnvironment();
-  createServer({
-    service,
-    requestAuthorizer,
-    trustedProxyHops,
-    trustedProxyCidrs,
-    rateLimitWindowMillis,
-    rateLimitMaxRequests,
-    globalRateLimitMaxRequests,
-  }).listen(port, host, () => {
-    console.log(`${SERVICE_ID} listening on ${host}:${port}`);
-  });
+  try {
+    const service = createPasskeyBackupChallengeService({ store });
+    const requestAuthorizer = createRequestAuthorizerFromEnvironment();
+    const server = createServer({
+      service,
+      requestAuthorizer,
+      trustedProxyHops,
+      trustedProxyCidrs,
+      rateLimitWindowMillis,
+      rateLimitMaxRequests,
+      globalRateLimitMaxRequests,
+    });
+    let closing = false;
+    const closeAfterDrain = () => {
+      if (closing) return;
+      closing = true;
+      server.close((error) => {
+        try { store.close?.(); }
+        catch { process.exitCode = 1; }
+        if (error) process.exitCode = 1;
+      });
+    };
+    process.once('SIGTERM', closeAfterDrain);
+    process.once('SIGINT', closeAfterDrain);
+    server.once('error', () => {
+      process.exitCode = 1;
+      closeAfterDrain();
+    });
+    server.listen(port, host, () => {
+      console.log(`${SERVICE_ID} listening on ${host}:${port}`);
+    });
+  } catch (error) {
+    store.close?.();
+    throw error;
+  }
 }
