@@ -2485,7 +2485,9 @@ six explicit source-publication and release-bundle inventories at root
 `1b991bcfb55c57a530aa260748f1974be36c7b32`. Source-publication's
 negative fixtures cover removal of each path. This makes omission from an
 exported release candidate a gate failure; the release-source fixture suites
-are being rerun on the exact inventory change.
+passed on the exact inventory change: source-publication covered 92 negative
+cases, and the release-bundle exporter, command-contract and verifier suites
+all passed.
 
 ## Completion record
 
