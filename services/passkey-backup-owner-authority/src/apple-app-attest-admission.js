@@ -7,8 +7,13 @@ import {
 } from '@peculiar/x509';
 import { appAttestation, deny } from './validation.js';
 
-const APP_ATTEST_ROOT = new X509Certificate(readFileSync(
-  new URL('./apple-app-attestation-root-ca.pem', import.meta.url)));
+const APP_ATTEST_ROOT_PEM = readFileSync(
+  new URL('./apple-app-attestation-root-ca.pem', import.meta.url));
+const APP_ATTEST_ROOT_PEM_SHA256 =
+  'c778d09ac341f7fd9f8f3b19e2b815af6aed4ad4490e1e92c05cb355212a5013';
+if (createHash('sha256').update(APP_ATTEST_ROOT_PEM).digest('hex') !==
+    APP_ATTEST_ROOT_PEM_SHA256) throw new Error('Apple App Attest root pin mismatch');
+const APP_ATTEST_ROOT = new X509Certificate(APP_ATTEST_ROOT_PEM);
 const NONCE_EXTENSION = '1.2.840.113635.100.8.2';
 const PRODUCTION_AAGUID = Buffer.from('appattest\0\0\0\0\0\0\0', 'binary');
 const TEAM_ID = /^[A-Z0-9]{10}$/u;
