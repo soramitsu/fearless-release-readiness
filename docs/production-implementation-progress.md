@@ -1954,6 +1954,27 @@ This does not project Android source into released iOS storage, install a
 wallet cohort, prove export after installation, or establish live
 replacement-device recovery; recovery remains disabled.
 
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is now clean and pushed at `5b326c63cf5150a4c8e557fad162a863b20e3246`.
+Schema v79 adds a Room ID-reservation table and insert trigger that fences
+both explicit and automatically assigned wallet IDs. Fresh-install staging
+stores the encrypted journal and Room reservation under the wallet mutation
+mutex, without publishing a wallet row or target signing secret. These are
+separate durability domains: if Room commits fail after preferences commit,
+the exact-journal replay can recreate reservations only while the wallet DB
+and destination secret namespaces remain empty. Mismatched or orphaned
+reservations fail closed; abandonment cannot silently free an ID after a
+failed Room transaction. The account JVM suite passes 295/295; core-db
+passes 29 tests with four pre-existing skips. Both Android-test APKs compile;
+the migration verifier passes two positive and 34 adversarial fixtures,
+evidence packaging passes 49/49, and default plus forced scoped Detekt pass.
+Host SQLite exercised the trigger for explicit and automatically assigned
+IDs, but the v78→79 instrumentation and production-open upgrade matrix still
+need Android device execution. Backup-state/custody mapping, original-key
+signing/export after install, full cohort cutover and both real replacement
+device directions remain blocked. Exact-head hosted checks and independent
+review are pending; recovery remains disabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
