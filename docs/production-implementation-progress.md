@@ -1577,8 +1577,9 @@ one named current-version startup fixture now creates the current schema.
 Pinned Utils/WebSocket source checks and Android test-source compilation pass.
 The local API 34 connected run passes core-db 301/301 and
 feature-account-impl 12/12, with a focused 1/1 rerun after the final fixture
-edit. The new exact-head hosted Android run is pending, so the CI gate remains
-open. These test corrections do not qualify API 36, 16 KiB native binaries,
+edit. The later hosted Android head fails for a separate discovery-test
+portability issue, recorded below, so the CI gate remains open. These test
+corrections do not qualify API 36, 16 KiB native binaries,
 release signing or distribution upgrades.
 
 ## Android Asset Hub to Moonbeam USDt discovery inventory — 2026-09-24
@@ -1591,8 +1592,12 @@ evidence for Polkadot Asset Hub to Moonbeam USDt. It records the advertised
 USDt route, the origin Asset Hub asset with six decimal places, and Moonbeam
 `xcusdt` as a possible destination asset without treating that mapping as
 verified. The focused drift test and local registry/production-evidence gates
-pass; the exact-head hosted `validate` job passes. Hosted `build-and-test` and
-IAS validation are still running. This route remains discovery-only,
+pass locally; the exact-head hosted `validate` job passes. Hosted
+`build-and-test` fails because the new discovery test invokes `rg`, which is
+not installed on that runner. Later migration-evidence steps also report
+missing markers after the early failure; they do not establish completed
+instrumentation. IAS validation has not passed. This route remains
+discovery-only,
 unapproved for execution and `releaseEnabled=false`. Canonical chain-state
 asset mapping, runtime call and fee review, capped funded receipts and
 independent route approval remain required. The report does not authorize
@@ -1601,9 +1606,9 @@ signing or submit a transfer.
 The latest pushed iOS source remains
 `66523499dfbde61828677f39dfd04153fdfb8116` on
 [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). Its hosted
-`validate` job passes, while `release-contracts` and `build` are still
-running. The iOS receive projection and both platform candidates remain
-non-shipping until their remaining recovery, security, device and
+`validate`, `release-contracts` and `ios-release-safety` jobs pass, while
+`build` has not passed yet. The iOS receive projection and both platform
+candidates remain non-shipping until their remaining recovery, security, device and
 distribution gates pass.
 
 ## Completion record
