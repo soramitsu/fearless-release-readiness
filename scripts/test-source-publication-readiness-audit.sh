@@ -159,6 +159,8 @@ for file in \
   services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs \
   services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentials.mjs \
   services/passkey-backup-owner-authority/scripts/verify-sealed-legacy-cutover.mjs \
+  services/passkey-backup-owner-authority/src/apple-app-attest-admission.js \
+  services/passkey-backup-owner-authority/src/apple-app-attestation-root-ca.pem \
   services/passkey-backup-owner-authority/src/authority.js \
   services/passkey-backup-owner-authority/src/bootstrap-proof.js \
   services/passkey-backup-owner-authority/src/http.js \
@@ -170,6 +172,8 @@ for file in \
   services/passkey-backup-owner-authority/src/validation.js \
   services/passkey-backup-owner-authority/src/verifier-contract.d.ts \
   services/passkey-backup-owner-authority/src/webauthn-verifier.js \
+  services/passkey-backup-owner-authority/test/apple-app-attest-admission.test.js \
+  services/passkey-backup-owner-authority/test/apple-app-attest-sample.json \
   services/passkey-backup-owner-authority/test/authority.test.js \
   services/passkey-backup-owner-authority/test/challenge-credential-mutation.test.js \
   services/passkey-backup-owner-authority/test/generation-head.test.js \
@@ -698,7 +702,14 @@ mv "$ROOT/.git.saved" "$ROOT/.git"
 expect_failure untracked-required 'required production source is not Git-tracked: FEARLESS_PROJECT_PLAN.md' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
 "$REAL_GIT" -C "$ROOT" reset -q FEARLESS_PROJECT_PLAN.md
 
-for required_file in services/passkey-backup-owner-authority/src/authority.js services/passkey-backup-owner-authority/src/webauthn-verifier.js scripts/audit-plan-readiness.sh; do
+for required_file in \
+  services/passkey-backup-owner-authority/src/apple-app-attest-admission.js \
+  services/passkey-backup-owner-authority/src/apple-app-attestation-root-ca.pem \
+  services/passkey-backup-owner-authority/test/apple-app-attest-admission.test.js \
+  services/passkey-backup-owner-authority/test/apple-app-attest-sample.json \
+  services/passkey-backup-owner-authority/src/authority.js \
+  services/passkey-backup-owner-authority/src/webauthn-verifier.js \
+  scripts/audit-plan-readiness.sh; do
   "$REAL_GIT" -C "$ROOT" rm -q --cached "$required_file"
   expect_failure "untracked-required-source-$required_file" "required production source is not Git-tracked: $required_file" "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
   "$REAL_GIT" -C "$ROOT" reset -q "$required_file"
