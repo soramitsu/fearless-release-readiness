@@ -1437,6 +1437,21 @@ later collision. This journal installs no secret or Room row and does not
 remove the transactional-installer blocker. Hosted CI, formal independent
 security review and replacement-device recovery remain open.
 
+## Read-only iOS metadata receiver — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `f12d3dd72d86924b7b564ebb2c672896714e3a1d`.
+The receiving plan now projects all nine shared semantic display-metadata
+fields without changing the source snapshot. It preserves absent versus
+explicitly empty ordered lists, decodes visibility and boolean values, and
+rejects filter options that cannot fit the current Core Data model. A
+missing or unrepresentable projection never clears the metadata or
+transactional-installer blockers. The exact-source iPhone 15/iOS 17.2
+receiving preflight and new metadata suites pass 53/53; targeted SwiftFormat
+and strict SwiftLint, project syntax and diff checks pass. Hosted CI and
+formal independent security review remain outstanding. There is still no
+Core Data/Keychain cohort installer or replacement-device recovery proof.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
