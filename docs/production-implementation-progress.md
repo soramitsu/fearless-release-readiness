@@ -25,14 +25,12 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are identified below. Earlier test and CI results qualify only
-their respective commits. Android's exact-head build, tests and IAS candidate
-validation have passed; the IAS artifact handoff was skipped. The preceding
-iOS `7fbd883a` candidate passed all its hosted checks; the latest
-`36003258` candidate has passed `validate`, release-contracts and release
-safety, with its hosted build still running. Both app trees are on review branches,
-and independent security review, protected qualification and distribution
-acceptance remain outstanding.
+candidates are `4aeec8568d46b7aa53e3b6edfb01dcb23b23d051` and
+`686ae183c7592a5b3ca127f1f805602557a273b7`, respectively. Both clean
+app trees are on review branches. Exact-head local recovery-component tests
+and an independent static diff review passed as recorded below; their new
+hosted checks are still running. Protected qualification, independent human
+security approval and signed distribution acceptance remain outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2661,6 +2659,48 @@ static component review, not production security or device approval. Exact-head
 hosted Android `validate` passed; `build-and-test` and IAS context checks are
 pending. API 30/31/36 matrix, Play-signed upgrade and actual cohort secret
 installation/signing/export remain open. Portable recovery stays disabled.
+
+## Current source checkpoint — 2026-09-25
+
+The pushed iOS source now ends at `686ae183c7592a5b3ca127f1f805602557a273b7`
+on [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304). The
+preceding `41ea408c47875ca3a5937f94e63601c1aebc9b1b` added a separate,
+disabled iOS 18+ discoverable native passkey authentication flow and strict
+owner-session HTTP adapter. It requests user verification with no credential
+hint or PRF extension, sends only public WebAuthn assertion fields, and accepts
+a bounded server-issued owner session. Independent review found a delayed
+cancellation that could terminate the next native ceremony; the final commit
+binds every callback/cancellation to its exact attempt ID. Signed iOS 18.1
+arm64 simulator owner-authentication plus Drive/head tests passed **44/44**;
+SwiftFormat, strict SwiftLint, project syntax and diff checks pass. The
+independent reviewer checked the final fix and found no remaining actionable
+issue, while explicitly noting the test simulates the attempt gate rather than
+Apple's UI controller. A formal security diff scan of the pre-fix owner-auth
+commit reported no security finding (scan
+`2098034c-6f70-4943-9999-10bcb26d6cfa`, report SHA-256
+`f2cdb594c602ef8f6d2157670c51f4470821457a3d0b010ad23ac670c8870370`).
+It does not cover the final fix or substitute for human/device acceptance. On
+the final head, hosted `validate` passes; release-contracts and build are
+pending. Owner recovery remains compiled off, unwired and undeployed.
+
+The pushed Android source now ends at `4aeec8568d46b7aa53e3b6edfb01dcb23b23d051`
+on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260).
+The version-2 encrypted cohort journal atomically stages a separate bounded
+encrypted original-source sidecar with exact auxiliary-source fields and
+ordered wallet/operation/after-image commitments. Those opaque fields may
+themselves contain wallet secrets; normalized target-root slots remain in the
+pending journal. An exact-token CAS upgrades v1 journals during replay;
+missing, changed and rogue sidecars fail closed. The full account-module JVM
+suite passed **305/305** without skips, including 49 focused cohort tests;
+API 34 real Room replay passed **2/2**, `compileDebugKotlin`, `detektAll` and
+diff checks pass against pinned Utils `1c80a2bf`. Independent source review
+found no actionable issue. The formal diff scan captured the functional
+working tree before wording-only edits and reported zero security findings
+(scan `b9b24151-d850-4335-8348-cba32e33b2cd`, report SHA-256
+`64b8ebdcba8229f36504c23142c32fa62cb249988ff5e225293bc5479428d762`).
+Hosted `validate` passes on the final head; build/test and IAS candidate
+checks are pending. No target secret or wallet row has been installed, and
+neither journal retirement nor portable recovery is enabled.
 
 ## Completion record
 
