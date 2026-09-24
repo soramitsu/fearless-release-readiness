@@ -3,11 +3,14 @@ import { createServer } from 'node:http';
 import { AuthorityError, RP_ID, SCOPES, exact, hash, platform } from './validation.js';
 
 const PREFIX = '/api/passkey-backup/v1';
+const BOOTSTRAP_CHALLENGE = `${PREFIX}/owner/bootstrap/challenge`;
+const BOOTSTRAP_COMPLETE = `${PREFIX}/owner/bootstrap/complete`;
 const AUTH_CHALLENGE = `${PREFIX}/owner/authentication/challenge`;
 const AUTH_COMPLETE = `${PREFIX}/owner/authentication/complete`;
 const GRANT = `${PREFIX}/owner/grant`;
 const HEALTH = `${PREFIX}/health`;
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BOOTSTRAP_BODY_BYTES = 128 * 1024;
 const SENSITIVE_HEADERS = new Set([
   'authorization', 'x-passkey-owner-session', 'content-type', 'content-length',
   'transfer-encoding', 'host', 'x-forwarded-for', 'forwarded',
@@ -21,7 +24,10 @@ const COMPLETION_ROUTES = new Set([
   `${PREFIX}/registration/complete`,
   `${PREFIX}/assertion/complete`,
 ]);
-const ROUTES = new Set([AUTH_CHALLENGE, AUTH_COMPLETE, GRANT, HEALTH, ...Object.keys(SCOPES)]);
+const ROUTES = new Set([
+  BOOTSTRAP_CHALLENGE, BOOTSTRAP_COMPLETE,
+  AUTH_CHALLENGE, AUTH_COMPLETE, GRANT, HEALTH, ...Object.keys(SCOPES),
+]);
 
 function deny(code = 'invalid_request') { throw new AuthorityError(code); }
 
@@ -54,6 +60,7 @@ function statusFor(error) {
     case 'verification_failed': return 403;
     case 'credential_counter_replay': return 409;
     case 'credential_already_linked': return 409;
+    case 'owner_already_exists': return 409;
     case 'final_recovery_route_confirmation_required': return 409;
     case 'rate_limited': return 429;
     case 'capacity_exceeded': return 503;
@@ -96,19 +103,19 @@ function ownerSession(request) {
   return value;
 }
 
-async function readBody(request) {
+async function readBody(request, maximum = MAX_BODY_BYTES) {
   const type = request.headers['content-type'];
   if (typeof type !== 'string' || type.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
     deny('unsupported_media_type');
   }
   if (request.headers['content-length'] !== undefined &&
       (!/^(0|[1-9][0-9]*)$/.test(request.headers['content-length']) ||
-       Number(request.headers['content-length']) > MAX_BODY_BYTES)) deny('payload_too_large');
+       Number(request.headers['content-length']) > maximum)) deny('payload_too_large');
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) deny('payload_too_large');
+    if (size > maximum) deny('payload_too_large');
     chunks.push(chunk);
   }
   if (size === 0) deny();
@@ -158,7 +165,9 @@ export function createOwnerHttpServer({ authority, audience, enableCandidate = f
   if (process.env.NODE_ENV === 'production' || enableCandidate !== true) {
     throw new Error('owner HTTP cutover is not admitted for production');
   }
-  if (!authority || typeof authority.beginAuthentication !== 'function' ||
+  if (!authority || typeof authority.beginBootstrap !== 'function' ||
+      typeof authority.completeBootstrap !== 'function' ||
+      typeof authority.beginAuthentication !== 'function' ||
       typeof authority.commitChallengeReadRoute !== 'function' ||
       typeof authority.verifyAndCommitChallengeCredentialMutation !== 'function' ||
       typeof authority.commitChallengeCredentialMutation !== 'function' ||
@@ -182,7 +191,25 @@ export function createOwnerHttpServer({ authority, audience, enableCandidate = f
       }
       if (request.method !== 'POST') deny('method_not_allowed');
       limit(request.socket.remoteAddress ?? 'unknown');
-      const { body, raw } = await readBody(request);
+      const { body, raw } = await readBody(request,
+        path === BOOTSTRAP_COMPLETE ? MAX_BOOTSTRAP_BODY_BYTES : MAX_BODY_BYTES);
+      if (path === BOOTSTRAP_CHALLENGE) {
+        if (request.headers.authorization || request.headers['x-passkey-owner-session']) deny();
+        exact(body, ['schemaVersion', 'platform']);
+        if (body.schemaVersion !== 1) deny();
+        send(response, 200, authority.beginBootstrap(platform(body.platform)));
+        return;
+      }
+      if (path === BOOTSTRAP_COMPLETE) {
+        if (request.headers.authorization || request.headers['x-passkey-owner-session']) deny();
+        exact(body, ['schemaVersion', 'ceremonyId', 'credential', 'walletProof', 'appAttestation']);
+        if (body.schemaVersion !== 1) deny();
+        send(response, 200, await authority.completeBootstrap({
+          ceremonyId: body.ceremonyId, credential: body.credential,
+          walletProof: body.walletProof, appAttestation: body.appAttestation,
+        }));
+        return;
+      }
       if (path === AUTH_CHALLENGE) {
         if (request.headers.authorization || request.headers['x-passkey-owner-session']) deny();
         exact(body, ['schemaVersion', 'platform']);

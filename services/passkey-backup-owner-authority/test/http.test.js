@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { createOwnerHttpServer } from '../src/http.js';
 import { hash, SCOPES } from '../src/validation.js';
-import { assertion, audience, b64, register, setup, verifier } from './fixtures.js';
+import { appAttestation, assertion, audience, b64, proof, register, setup, verifier } from './fixtures.js';
 
 const prefix = '/api/passkey-backup/v1';
 const route = (suffix) => `${prefix}/${suffix}`;
@@ -180,6 +180,72 @@ test('candidate HTTP cannot be constructed for production or without an explicit
     if (prior === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = prior;
   }
+});
+
+test('candidate HTTP bootstrap requires the server verifier, rejects local PRF output, and burns replay', async (t) => {
+  const { core, path } = setup(t, { verifier: testVerifier() });
+  const http = await openServer(t, core);
+  const challenge = await http.post(route('owner/bootstrap/challenge'),
+    { schemaVersion: 1, platform: 'android' });
+  assert.equal(challenge.status, 200);
+  assert.equal(challenge.body.kind, 'bootstrap');
+  assert.match(challenge.body.subject, /^owner:/u);
+  const body = { schemaVersion: 1, ceremonyId: challenge.body.ceremonyId,
+    credential: register(b64(50)), walletProof: proof, appAttestation: appAttestation() };
+  const leaked = await http.post(route('owner/bootstrap/complete'), {
+    ...body, credential: { ...body.credential, clientExtensionResults: { prf: { results: {} } } },
+  });
+  assert.equal(leaked.status, 400);
+  const completed = await http.post(route('owner/bootstrap/complete'), body);
+  assert.equal(completed.status, 200, JSON.stringify(completed.body));
+  assert.match(completed.body.sessionToken, /^session\./u);
+  assert.equal(completed.body.subject, challenge.body.subject);
+  assert.equal(completed.body.namespace, challenge.body.namespace);
+  assert.equal((await http.post(route('owner/bootstrap/complete'), body)).status, 403);
+  assert.equal((await http.post(route('owner/bootstrap/challenge'),
+    { schemaVersion: 1, platform: 'android' }, { session: completed.body.sessionToken })).status, 400);
+
+  const duplicateChallenge = await http.post(route('owner/bootstrap/challenge'),
+    { schemaVersion: 1, platform: 'android' });
+  const duplicate = await http.post(route('owner/bootstrap/complete'), {
+    ...body, ceremonyId: duplicateChallenge.body.ceremonyId, credential: register(b64(51)),
+  });
+  assert.equal(duplicate.status, 409);
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { assert.equal(db.prepare('SELECT count(*) AS n FROM owners').get().n, 1); }
+  finally { db.close(); }
+});
+
+test('candidate HTTP bootstrap accepts the bounded iOS proof size and denies an unavailable verifier', async (t) => {
+  const { core, open, path } = setup(t, { verifier: testVerifier() });
+  const http = await openServer(t, core);
+  const challenge = await http.post(route('owner/bootstrap/challenge'),
+    { schemaVersion: 1, platform: 'ios' });
+  const baseCredential = register(b64(60));
+  const body = { schemaVersion: 1, ceremonyId: challenge.body.ceremonyId,
+    credential: { ...baseCredential, response: {
+      ...baseCredential.response, attestationObject: b64(61, 16_384),
+    } },
+    walletProof: proof,
+    appAttestation: { ...appAttestation('ios'), attestationObject: b64(62, 32_768) },
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(body)) > 64 * 1024);
+  assert.equal((await http.post(route('owner/bootstrap/complete'), body)).status, 200);
+
+  const unavailable = open({ verifier: undefined });
+  const denied = await openServer(t, unavailable);
+  const deniedChallenge = await denied.post(route('owner/bootstrap/challenge'),
+    { schemaVersion: 1, platform: 'android' });
+  const deniedCompletion = await denied.post(route('owner/bootstrap/complete'), {
+    schemaVersion: 1, ceremonyId: deniedChallenge.body.ceremonyId,
+    credential: register(b64(63)),
+    walletProof: { ...proof, publicKey: b64(64) },
+    appAttestation: appAttestation(),
+  });
+  assert.equal(deniedCompletion.status, 503);
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { assert.equal(db.prepare('SELECT count(*) AS n FROM owners').get().n, 1); }
+  finally { db.close(); }
 });
 
 test('candidate transport rejects malformed paths, secret extensions and missing owner session', async (t) => {

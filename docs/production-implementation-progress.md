@@ -1794,6 +1794,25 @@ root/Android/iOS flag-rejection cases. This improves source identity checks;
 the final reviewed shipping manifest and distribution evidence are still
 absent.
 
+## Owner bootstrap HTTP candidate — 2026-09-24
+
+The metadata-only owner authority's explicitly test-admitted, non-deployed
+HTTP composition now exposes separate first-owner bootstrap challenge and
+completion routes. The completion route requires the typed public WebAuthn
+registration, local-wallet proof and platform app-attestation payload and
+hands them to the server-owned verifier; a missing verifier denies issuance.
+It rejects local PRF extensions before verification, denies ceremony replay
+and duplicate wallet binding, and bounds the combined iOS attestation body at
+128 KiB while retaining the 64 KiB limit on other routes. Its default and
+production construction fences remain in place. The focused HTTP suite passes
+6/6; the full owner suite passes 156/156 and syntax checks pass. Positive HTTP
+bootstrap tests use deliberately noncryptographic fixture adapters; the
+separate core verifier suite checks real WebAuthn and wallet signatures.
+No Apple/Google production attestation verifier is provisioned, no historical
+owner cohort is admitted, no live route is converted, and neither owner
+bootstrap nor credential authentication proves an encrypted backup can be
+restored on a replacement device.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
