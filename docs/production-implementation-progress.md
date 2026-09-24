@@ -1636,6 +1636,70 @@ SwiftLint and diff checks passing. Exact-head hosted `validate` passes;
 does not install a cohort, prove all receiving export/signing behavior or
 establish replacement-device recovery. Independent review remains required.
 
+## Android Etherscan V2 history — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to clean, pushed `bbd9f34f4fc137444ce01defe45d5ba57e5b766c`.
+Bundled Ethereum, BNB Smart Chain, Sepolia and Polygon Etherscan-family
+history now uses the V2 endpoint with an explicit chain ID and one unified
+key. Goerli and Mumbai are rejected as retired provider chains. Independently
+configured HTTPS Etherscan-compatible explorers remain available for known
+and other chains without receiving the unified key. Official host matching
+normalizes case and a trailing DNS dot before enforcing chain binding.
+Provider errors, malformed data, missing keys and transport failures now
+propagate to the history retry path without replacing cached operations or
+cursor state with an empty result. Exact-source focused tests pass 11/11 and
+`detektAll` passes; the branch and PR identify this head. Hosted `validate`
+passes, while `build-and-test` and IAS validation have not passed at this
+checkpoint. Real Etherscan V2 account/key provisioning, live BNB/ETH/Polygon
+history and failure/retry checks, and Play-signed acceptance remain open.
+
+## iOS Etherscan V2 history and Drive account consent — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to clean, pushed `27dada4d641fca02b94fb20a38fc49534c761635`.
+The preceding `185698b8035afab40cbf58b258e13e978f1c5c41` added a mandatory
+selected-Google-account confirmation callback to native Drive consent, then
+rechecks the current account, OAuth client, scope and token. The focused
+iPhone 15/iOS 17.2 Drive suite passed 28/28. No enabled screen invokes that
+callback, and same-project OAuth/provider interoperability remains unproved.
+
+At the current head, known Etherscan-family history hosts, including BNB
+mainnet, use `https://api.etherscan.io/v2/api` with a host-bound chain ID and
+the unified Etherscan key. Independent Etherscan-compatible explorers keep
+their own endpoint and receive no unified key. Non-2xx responses and provider
+errors no longer become successful empty histories; only an explicit
+no-transactions response does. The Release service audit now treats the
+retired chain-specific explorer keys as optional. A provider failure now
+shows the existing localized service-unavailable state when no history is
+cached; later refresh failures retain cached transactions and retry. The
+preceding `889a6162681ce55a0e42764497e5530023aaf979` iPhone 15/iOS 17.2
+suite passed 8/8, while the V2-only head passed 7/7. The synthetic Release
+configuration audit passed 33/33 before the latest provider-only edit.
+SwiftFormat, project syntax and diff checks pass; the new Etherscan/Kaia
+provider files pass strict SwiftLint, while modified historical UI/OKLink and
+test files retain existing lint findings. The preceding `9253552` head passed
+hosted `validate`, `release-contracts` and iOS release-safety; its `build` job
+has not passed. Exact-head `validate` passes for `27dada4`, while its
+`release-contracts` and `build` jobs are pending. Live API-key/provider
+qualification, device history/retry behavior and independent review remain
+open. The historical Goerli and Mumbai aliases may require provider
+replacement if V2 rejects those retired testnets; no such live evidence has
+been claimed. The
+preceding JSON-only follow-up corrects the X Layer mainnet and testnet explorer
+fallback templates to their respective OKX routes; JSON parsing and exact
+route assertions pass. The historical X Layer testnet row still identifies
+chain `195`, while current OKX documentation identifies testnet `1952`.
+Changing that wallet chain identity needs a migration review, so the mismatch
+remains a gate. The latest source also rejects non-2xx HTTP responses and
+provider-declared failures from Kaia and OKLink history instead of treating
+them as empty pages. Its exact-source iPhone 15/iOS 17.2 history suite passes
+10/10. A separate read-only review found no definite compile defect but
+confirmed that these model fixtures do not prove live HTTP-to-UI/cache
+recovery. The old Kaia Scope endpoint needs migration to KaiaScan OAPI and
+real provider-response qualification; current OKX authentication and X Layer
+history still need live checks. Neither provider is claimed production-ready.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
