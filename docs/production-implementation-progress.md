@@ -1940,6 +1940,20 @@ installed replacement device, and both cross-platform device directions are
 still blocked. Exact-head hosted validate passes; build-and-test and IAS
 validation remain pending.
 
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) is now
+clean and pushed at `a10503d396db5ae9cf351186c35fa20580399dc3`.
+Its read-only receiving plan now verifies Android V1 source, V2 chain and V3
+root SCALE sidecars against the portable private/public keys and optional
+nonce, entropy, seed, mnemonic and derivation path. The bounded parser rejects
+noncanonical compact lengths, invalid options, wrong chain/account binding,
+invalid UTF-8, mismatches, truncation and trailing bytes. The new proof and
+existing receiving preflight passed 53/53 focused tests on an iOS 26.5
+simulator; strict SwiftLint, SwiftFormat, project-file validation and diff
+checks pass. Exact-head hosted checks and independent review are pending.
+This does not project Android source into released iOS storage, install a
+wallet cohort, prove export after installation, or establish live
+replacement-device recovery; recovery remains disabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
