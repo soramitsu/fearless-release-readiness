@@ -276,7 +276,11 @@ test('candidate HTTP backup head and commit require the exact owner session and 
     { bearer: grant, session: stranger.sessionToken })).status, 403);
   assert.equal((await http.post(commitPath, { ...first, bundleSha256: 'c'.repeat(64) },
     { bearer: grant, session: owner.sessionToken })).status, 403);
-  const committed = await http.post(commitPath, first,
+  // iOS serializes the same closed request with sorted keys. Grant binding is
+  // over validated metadata, so this must interoperate with Android's order.
+  const iosOrderedFirst = Object.fromEntries(Object.entries(first).sort(([a], [b]) => a.localeCompare(b)));
+  assert.notEqual(JSON.stringify(iosOrderedFirst), JSON.stringify(first));
+  const committed = await http.post(commitPath, iosOrderedFirst,
     { bearer: grant, session: owner.sessionToken });
   assert.equal(committed.status, 200, JSON.stringify(committed.body));
   assert.equal(committed.body.descriptor.keyEpoch, '1');

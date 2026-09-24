@@ -25,7 +25,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `41b4c91e8` and `d80ec7af7`, respectively. Both clean app
+candidates are `41b4c91e8` and `798da45a3`, respectively. Both clean app
 trees are on review branches. Exact-source local recovery-component tests
 and an independent static diff review passed as recorded below; hosted checks
 for the new heads remain to be confirmed. Protected qualification,
@@ -2755,6 +2755,20 @@ SwiftLint, diff checks and independent read-only review found no remaining
 issue in this change. Native provider and signed distribution acceptance
 remain open; recovery stays disabled and unwired.
 
+The current iOS source at `798da45a3` on the same PR adds an unwired,
+default-disabled owner-generation metadata client for the authority's grant,
+commit and operation-status routes. It binds the exact candidate to an
+authenticated owner head, current session and selected Google subject;
+rechecks the account and session after asynchronous calls; and accepts only
+bounded, closed, duplicate-rejecting public responses. The authority never
+receives the Drive token, PRF output or wallet plaintext. Focused iOS 18.1
+arm64 simulator tests passed **45/45** with no failures/skips, including
+account changes, expired sessions, malformed grants, descriptor substitution
+and grant-body changes. The new source passed SwiftFormat and strict SwiftLint;
+project syntax and diff checks passed. A separate read-only source review
+found no actionable issue. A metadata commit does not mark backup complete;
+the adapter has no production caller, and hosted/device qualification is open.
+
 The read-only sealed-credential cutover comparison now requires an imported
 historical credential to carry its verified post-assertion signature counter,
 rather than the older counter in the sealed JSON image. A regression proves
@@ -2768,9 +2782,14 @@ and the report still denies migration and production startup.
 The owner-authority HTTP candidate now rejects duplicate JSON object members,
 including escaped-name aliases and nested duplicates, before `JSON.parse` can
 silently retain one value. The bounded body still follows the existing closed
-route schemas. Its full local suite passed **255/255**, syntax and diff checks
-passed, and an independent read-only review found no remaining issue in this
-change. This does not enable production startup or migrate legacy credentials.
+route schemas. A transport regression also commits the same validated
+generation metadata in iOS sorted-key order after a grant issued for Android's
+field order; the canonical metadata binding accepts both without weakening
+the exact-value check. Its updated full local suite passed **255/255** with no
+failures or skips. Syntax and diff checks passed, and an independent read-only
+review found no remaining issue in the ingress change. This does not enable
+production startup or migrate legacy
+credentials.
 
 ## Completion record
 
