@@ -105,7 +105,8 @@ aliasing. It remains read-only and always denies migration, including when
 cutover can establish ownership and safe production admission.
 
 Schema v7 also exposes internal `issueLegacyCutoverChallenge`,
-`claimLegacyCutoverChallenge` and `consumeLegacyCutoverClaim` methods for a
+`claimLegacyCutoverChallenge`, `consumeLegacyCutoverClaim` and
+`verifyAndConsumeLegacyCutoverClaim` methods for a
 two-assertion cutover preparation. Issuance binds one sealed source digest and
 public credential cohort to a live random-owner session, credential counter,
 RP, platform, nonce and two distinct challenges. Claim is a single-use SQLite
@@ -113,10 +114,14 @@ transition before asynchronous verification; consumption rechecks the exact
 claimed response hashes, sealed source, session, generation and owner counter
 under the writer lock. Rows are capped at 128 globally and eight per owner,
 expire within two minutes, and remain replay tombstones until expiry even if
-the session is revoked. The table holds metadata and response hashes only. No
-method verifies either assertion's signature, imports a credential or returns
-proof of ownership: each result explicitly says `migrationPermitted: false`.
-These methods have no production HTTP route and cannot authorize cutover.
+the session is revoked. The table holds metadata and response hashes only.
+The server-owned WebAuthn adapter now verifies both signed assertions against
+the SHA-pinned historical public key and current SQLite owner public key before
+the verified path rechecks and burns the claim. The database does not distinguish
+that burn from the older unverified burn, so it is not durable ownership proof.
+No method imports a credential or returns migration authority: each result
+explicitly says `migrationPermitted: false`. These methods have no production
+HTTP route and cannot authorize cutover.
 
 ## Concrete integration gates (not implemented)
 

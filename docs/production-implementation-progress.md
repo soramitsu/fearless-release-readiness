@@ -2113,6 +2113,37 @@ export and verification adversarial fixtures pass with exact route-key and
 source-byte identity checks. Their negative cases include same-count route
 substitution and evidence-template order changes, which now fail validation.
 
+The next owner-authority change adds a server-owned verification path for both
+signed legacy-cutover assertions. The verifier checks distinct challenges,
+the configured platform origin, RP, signatures, UV/UP, credential identity and
+counters against public keys read from the SHA-pinned legacy image and current
+SQLite owner row. A final writer transaction rechecks the sealed bytes,
+response commitments, live session, generation, revocation and current
+credential state before consuming the claim. The full owner-service suite now
+passes 205/205, including real signed and adversarial cutover fixtures; syntax
+lint passes. The new test is included in source-publication and release-bundle
+required-file inventories. Schema v7 still cannot distinguish a verified burn
+from the prior unverified one and does not advance either authenticator
+counter. It is therefore not durable import proof, has no production route,
+and continues to return `migrationPermitted:false` without linking owners or
+importing credentials.
+
+A scoped Codex Security diff scan of the earlier immutable root range
+`d40543560a53b12ca45854917b7a29bdf34dae59..a8ffb7aed2e0c824970b26fcd10c99b0d3210f32`
+completed with zero reportable findings across the changed root source and
+release-control paths (scan `9d323b97-c738-4b95-b945-84a75583a1a2`, report
+SHA-256 `3c998e8792765d7cc7f8a0d4a180788a8039645b08f8372a564ab0326176954a`).
+It does not cover the subsequent dual-assertion patch, deployed behavior,
+mobile apps or the required independent human security review.
+
+An iOS caller audit found that the existing Backup Wallet Google action is
+still the legacy password-based flow. The native Drive composition is
+compiled-disabled and its default recovery-key provider is intentionally
+unavailable. Exposing Drive consent in that UI before owner-authorized PRF
+enrollment and upload/download/decrypt readback would misleadingly imply a
+recoverable backup; no iOS UI change was made. That integration remains an
+enabled-feature prerequisite.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

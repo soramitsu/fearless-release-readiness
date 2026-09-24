@@ -34,7 +34,7 @@ export interface PublicCredentialResponse {
     readonly transports?: readonly ('ble' | 'cable' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb')[];
     readonly authenticatorData?: string;
     readonly signature?: string;
-    readonly userHandle?: string;
+    readonly userHandle?: string | null;
   };
 }
 export interface ClaimedCredentialChallenge {
@@ -59,6 +59,15 @@ export interface RegistrationMutationEvidence {
 export interface AssertionMutationEvidence {
   readonly challengeNonce: string;
   readonly platform: Platform;
+  readonly expectedCounter: number;
+  readonly newCounter: number;
+  readonly deviceType: 'singleDevice' | 'multiDevice';
+  readonly backedUp: boolean;
+}
+export interface LegacyCutoverAssertionEvidence {
+  readonly role: 'LEGACY' | 'OWNER';
+  readonly challenge: string;
+  readonly credentialId: string;
   readonly expectedCounter: number;
   readonly newCounter: number;
   readonly deviceType: 'singleDevice' | 'multiDevice';
@@ -135,4 +144,13 @@ export interface CryptographicVerifier {
     readonly ceremony: ClaimedCredentialChallenge;
     readonly credential: PublicCredentialResponse;
   }): Promise<AssertionMutationEvidence>;
+  /** Verify one role of a claimed v7 cutover pair against server-read public material. */
+  legacyCutoverAssertion?(input: {
+    readonly role: 'LEGACY' | 'OWNER';
+    readonly challenge: string;
+    readonly rpId: 'fearlesswallet.io';
+    readonly platform: Platform;
+    readonly credential: PublicCredentialResponse;
+    readonly registeredCredential: CredentialRecord;
+  }): Promise<LegacyCutoverAssertionEvidence>;
 }

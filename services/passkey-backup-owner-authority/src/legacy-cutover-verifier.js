@@ -42,9 +42,14 @@ export function readSealedLegacyCredential({ legacySnapshotPath, expectedSourceS
     storageKey,
     legacyOwnerHash: source.ownersByStorageKey.get(storageKey),
     legacyCredentialId: credential.id,
+    // Internal verification material from the exact digest-pinned bytes. Never
+    // include this value in a cutover report or a public challenge response.
+    legacyPublicKey: credential.publicKey,
     legacyPublicKeySha256: createHash('sha256').update(Buffer.from(credential.publicKey, 'base64url')).digest('hex'),
     legacyCounter: credential.counter,
     legacyUserHandle: credential.userId,
+    legacyDeviceType: credential.deviceType,
+    legacyBackedUp: credential.backedUp,
     legacyScope: 'storage',
     legacyRegistrationPlatform: credential.registrationPlatform,
   });

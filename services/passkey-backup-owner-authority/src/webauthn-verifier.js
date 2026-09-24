@@ -217,6 +217,48 @@ export function createWebAuthnVerifier({ allowedOrigins, bootstrapAdmission } = 
         return Object.freeze(evidence);
       } catch { deny('verification_failed'); }
     },
+    // Used only by the internal v7 cutover claim. The caller supplies public
+    // credential material read from the sealed source or current SQLite row;
+    // neither a response nor the cutover row can supply its own public key.
+    async legacyCutoverAssertion(input) {
+      exact(input, ['role', 'challenge', 'rpId', 'platform', 'credential', 'registeredCredential']);
+      if (!['LEGACY', 'OWNER'].includes(input.role) || input.rpId !== RP_ID ||
+          !['android', 'ios'].includes(input.platform)) deny('verification_failed');
+      base64(input.challenge, 32, 32);
+      const response = credentialResponse(input.credential, 'authentication', { allowNullUserHandle: true });
+      const registered = credentialRecord(input.registeredCredential, response.id,
+        input.registeredCredential?.userHandle);
+      if (response.response.userHandle !== null &&
+          response.response.userHandle !== registered.userHandle) deny('verification_failed');
+      const authenticatorData = Buffer.from(response.response.authenticatorData, 'base64url');
+      if ((authenticatorData[32] & 0x05) !== 0x05) deny('verification_failed');
+      try {
+        const result = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: input.challenge,
+          expectedOrigin: origins[input.platform],
+          expectedRPID: RP_ID,
+          credential: {
+            id: registered.id,
+            publicKey: Buffer.from(registered.publicKey, 'base64url'),
+            counter: registered.counter,
+          },
+          requireUserVerification: true,
+        });
+        const info = result?.authenticationInfo;
+        if (!result?.verified || !info || info.credentialID !== registered.id ||
+            info.rpID !== RP_ID || !info.userVerified ||
+            info.credentialDeviceType !== registered.deviceType ||
+            ((registered.counter !== 0 || info.newCounter !== 0) &&
+              info.newCounter <= registered.counter)) deny('verification_failed');
+        counter(info.newCounter);
+        backupFlags({ deviceType: info.credentialDeviceType, backedUp: info.credentialBackedUp });
+        return Object.freeze({ role: input.role, challenge: input.challenge,
+          credentialId: registered.id, expectedCounter: registered.counter,
+          newCounter: info.newCounter, deviceType: info.credentialDeviceType,
+          backedUp: info.credentialBackedUp });
+      } catch { deny('verification_failed'); }
+    },
     async enrollment(input) {
       const ceremony = ceremonyFor(input, 'enrollment');
       const response = credentialResponse(input.credential, 'registration');

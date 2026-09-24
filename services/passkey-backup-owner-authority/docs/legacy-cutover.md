@@ -52,9 +52,23 @@ migration. Pending claims for a storage key and historical owner must use the
 same sealed source digest and random owner; a commit that crosses expiry cannot
 return successful claim or consume authority. An ID-directed assertion may omit
 its user handle, but any supplied handle must match the stored credential.
-The future proof validator must independently verify both fresh
-assertions against their exact stored public keys and challenges before a
-reviewed import transaction can use this state.
+
+The internal `verifyAndConsumeLegacyCutoverClaim` path now claims both exact
+public responses before asynchronous work, reads the historical COSE key,
+handle and counter from the independently SHA-pinned sealed JSON bytes, and
+reads the current owner credential from SQLite. The server-owned
+`createWebAuthnVerifier` adapter verifies both distinct challenges, response
+IDs, RP, configured qualified platform origin, UV/UP, signatures and counters
+with `@simplewebauthn/server`. After verification, the core reopens the sealed
+source and rechecks the response commitments, live session and generation,
+revocation, credential public key, handle and counter under the SQLite writer
+lock before burning the row. A failed signature leaves a claimed replay
+tombstone until expiry. The method returns `migrationPermitted: false` and
+changes no owner link, credential or source file. Schema v7 records the same
+consumed state for this path and the older unverified burn method, so the row
+cannot serve as a durable verified proof or authorize an import. A future
+reviewed schema and importer must persist a distinguished proof commitment
+atomically with the owner link and historical credential cohort.
 
 ## Cutover transaction and admission
 

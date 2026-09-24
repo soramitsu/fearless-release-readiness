@@ -174,6 +174,7 @@ for file in \
   services/passkey-backup-owner-authority/test/generation-head.test.js \
   services/passkey-backup-owner-authority/test/http.test.js \
   services/passkey-backup-owner-authority/test/legacy-cutover-challenge.test.js \
+  services/passkey-backup-owner-authority/test/legacy-cutover-webauthn.test.js \
   services/passkey-backup-owner-authority/test/legacy-cutover-verifier.test.js \
   services/passkey-backup-owner-authority/test/legacy-quarantine.test.js \
   services/passkey-backup-owner-authority/test/legacy-reconciliation.test.js \
