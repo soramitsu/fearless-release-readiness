@@ -1388,6 +1388,55 @@ diff checks pass. This write mode is not wired to the portable receive plan,
 has no cross-store transaction journal, and does not establish replacement-
 device recovery. Hosted build CI and formal security review remain open.
 
+The iOS PR then advanced through pushed
+`1ced02e90c35f56fe49f2507a97713724686fc2b` and
+`a9cb8c74f1321d9875a3d08d6e06f0d1275d6f9c`, then pushed
+`1506552651b81cfa5cd6a879726501612c47b6b6`. It now has an unwired,
+versioned receiving-journal record for one canonical `FPWMSM01` cohort. The
+record binds the exact semantic bytes, ordered portable identities, candidate
+version-4 destination wallet IDs and scoped Keychain tag digests. Its replay
+classifier quarantines locked or unavailable stores, partial or mismatched keys and
+database state, and committed rows that cannot be fully verified. A
+staging-only cleanup result is explicitly a candidate that needs proof its
+tags did not exist before staging. This is not a Keychain/Core Data writer,
+and no restore path invokes it. The exact-source iPhone 15/iOS 17.2 journal
+suite passes 7/7; targeted SwiftFormat and strict SwiftLint have zero
+findings, and project syntax and diff checks pass. Hosted CI and formal
+independent security review remain outstanding; portable recovery stays off.
+The final head accepts Foundation's canonical uppercase UUIDv4 strings with
+`A` or `B` variant digits while rejecting a duplicate destination UUID in
+opposite casing. Earlier journal commits accepted only some uppercase UUIDs
+or allowed that case-variant collision. A supplemental scoped read-only
+review found the duplicate issue, which was fixed before this final head;
+it does not replace independent security review.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced through pushed `38b3e0a4a7e451ee068cc505fa0f4a49cb42c832`
+to `a1e75462820fb5ac83b3a8cc4b0b369ce5f22d92`. The first commit
+corrects the hosted migration-evidence verifier's stale schema-77 test
+identities: it now requires all seven exact schema-78 upgrades and checks the
+checked-in database version, matrix method and parameter label. The prior
+hosted `build-and-test` reached and passed API 30 instrumentation, then
+failed on that stale verifier; the new head must rerun hosted CI. Local
+verifier fixtures pass two positive and 34 adversarial cases, and evidence
+packaging passes 49/49.
+
+The Android candidate now has an internal versioned, encrypted `FPWCJ001`
+journal for one exact `FPWCAI01` multiwallet after-image. It durably stages
+and revalidates the blocked cohort across restart, refuses known occupied
+V1/V2/V3 namespaces and active mutation journals, and binds known target
+keys plus the TON Connect and legacy journals to compare-and-swap on staging
+and exact-token abandonment. A supplemental scoped read-only review found
+that abandonment initially failed to bind those target keys to its atomic
+comparison; the final source fixes that race and tests it. The exact-source
+JVM suite passes 14/14 against clean pinned Utils
+`1c80a2bf3fa1f996cf1328873e09f282ee29b69e`; forced scoped Detekt on
+both new Kotlin files passes, as do syntax and diff checks. Prefix-based
+namespace checks cannot reserve a wallet ID atomically; replay rejects a
+later collision. This journal installs no secret or Room row and does not
+remove the transactional-installer blocker. Hosted CI, formal independent
+security review and replacement-device recovery remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
