@@ -1975,6 +1975,37 @@ signing/export after install, full cohort cutover and both real replacement
 device directions remain blocked. Exact-head hosted checks and independent
 review are pending; recovery remains disabled.
 
+Independent internal review of that candidate found an abandonment crash
+window: encrypted-journal deletion could commit before Room released reserved
+IDs, leaving an orphan that neither staging nor reconciliation could clear.
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is now clean and pushed at `215d5a64005b0d7156c6595a7680c29ad8684e44`.
+Candidate schema v79 retains the exact reserved ID set as permanent Room
+`ABANDONED` tombstones before the encrypted journal is removed. Its sorted-ID
+commitment, 8,192-row quota, replay path and SQLite INSERT/ID-changing UPDATE
+fences keep those IDs occupied across either commit failure. Unknown pending
+rows and mismatched commitments remain quarantined. The release evidence
+verifier now requires the v78→79 trigger test by exact identity in the full
+and API 30/31/36 profiles. The final account suite passes 299/299 and core-db
+passes 29 with four existing skips; scoped Detekt, both Android-test APK builds,
+2 positive/36 adversarial result-verifier cases, 1 positive/106 adversarial
+CI-gate cases and 49 evidence-packaging tests pass. The final source passes
+the targeted API 30 migration trigger test 1/1; the 40/40 API 30 compatibility
+run passed before the final UPDATE-trigger addition, which was separately
+retested. API 31/36 and a final full matrix, protected CI, independent review
+and signed in-place upgrades remain open. Recovery remains disabled and no
+wallet row or target signing secret is installed.
+
+Root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
+at `278c3a7ddc5e610ed79d13206348ee5a49df18ab` passed its three exact-head
+hosted jobs (`validate`, `verify`, `verify-owner`). These exercise blocked-state
+and source contracts; they do not qualify a production deployment or enabled
+portable recovery. iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+at `a10503d396db5ae9cf351186c35fa20580399dc3` has passing `validate`,
+`release-contracts` and `ios-release-safety` jobs; its simulator build remains
+in progress at this checkpoint. Both mobile PRs still require independent
+review.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
