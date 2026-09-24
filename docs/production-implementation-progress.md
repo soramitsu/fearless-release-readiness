@@ -2420,6 +2420,31 @@ reviewed and zero reportable findings (scan
 This static diff review is not an independent human approval or real provider
 qualification.
 
+## Apple App Attest server-admission candidate — 2026-09-24
+
+The non-deployed owner authority now has a server-owned iOS App Attest
+verification candidate. It pins the Apple App Attestation root PEM (SHA-256
+`c778d09ac341f7fd9f8f3b19e2b815af6aed4ad4490e1e92c05cb355212a5013`),
+checks the leaf/intermediate certificate signatures and current validity,
+the attestation nonce extension, P-256 public key and key ID, exact Team ID
+plus bundle ID, zero counter, production AAGUID, approved bundle version and
+application validation category. The adapter re-hashes the 32-byte
+wallet-proof attestation nonce in the same way as the disabled native iOS
+ceremony. Its factory requires a separate server-owned fraud-receipt verifier;
+there is no permissive default and no production listener wiring.
+
+Apple's published example attestation passes the pinned-root parser at the
+example certificate's historical valid time, and swapped key/challenge/app,
+version, expiry, tampered certificate/authenticator/extensions and invalid
+ceremony inputs fail. The example feeds raw challenge bytes to App Attest,
+unlike the SHA-256 client-data hash required by our native ceremony, so it
+cannot establish native interoperability. The owner suite passed **241/241**
+with zero failures/skips and syntax/diff checks passed. Live receipt
+verification, exact Apple-delivered identity/version, key persistence/retry,
+real device→server interoperability and independent review are still open.
+The old JSON service remains the only live credential writer; no recovery
+feature was enabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
