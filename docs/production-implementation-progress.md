@@ -2382,6 +2382,12 @@ same vectors in its native request test before this binding can be considered
 cross-platform qualified. The vectors are protocol tests, not a live Google
 verdict or device attestation.
 
+The iOS App Attest request boundary now accepts only a canonical base64url
+32-byte key identifier, matching Apple's key-ID/credential-ID length. The
+owner suite passes **237/237** including short, long and padded-key rejection.
+This transport constraint is not an Apple certificate-chain verifier or a
+provisioned native ceremony.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

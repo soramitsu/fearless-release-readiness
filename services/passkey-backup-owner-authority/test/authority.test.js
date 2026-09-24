@@ -45,6 +45,15 @@ test('bootstrap requires platform-specific attestation evidence and never persis
     walletProof: proof, appAttestation: { kind: 'play-integrity', token } });
   assert.equal(readFileSync(path).includes(Buffer.from(token)), false);
 });
+test('iOS App Attest transport requires an exact canonical 32-byte key ID', async (t) => {
+  const { core } = setup(t);
+  for (const keyId of [b64(42, 16), b64(42, 33), `${b64(42)}=`, 'A'.repeat(44)]) {
+    const challenge = core.beginBootstrap('ios');
+    await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId,
+      credential: register(), walletProof: proof,
+      appAttestation: { ...appAttestation('ios'), keyId } }), 'invalid_request');
+  }
+});
 test('discoverable owner authentication still requires a concrete credential user handle', async (t) => {
   const { core, bootstrap } = setup(t);
   await bootstrap();

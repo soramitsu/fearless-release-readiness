@@ -117,7 +117,9 @@ export function appAttestation(value, verifiedPlatform) {
   } else if (verifiedPlatform === 'ios') {
     exact(value, ['kind', 'keyId', 'attestationObject']);
     if (value.kind !== 'app-attest') deny('invalid_request');
-    base64(value.keyId, 16, 256);
+    // DCAppAttestService returns the SHA-256 identifier of its attested key.
+    // A variable-length value cannot match Apple's 32-byte credential ID.
+    base64(value.keyId, 32, 32);
     base64(value.attestationObject, 32, 32768);
   } else deny('invalid_request');
   return { ...value };

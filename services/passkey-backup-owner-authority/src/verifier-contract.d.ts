@@ -80,7 +80,8 @@ export interface WalletProof {
 }
 export type AppAttestation =
   | { readonly kind: 'play-integrity'; readonly token: string }
-  | { readonly kind: 'app-attest'; readonly keyId: string; readonly attestationObject: string };
+  | { readonly kind: 'app-attest'; readonly keyId: string; // Canonical base64url of Apple's 32-byte key ID.
+      readonly attestationObject: string };
 export interface BootstrapAdmission {
   readonly android: {
     readonly packageName: string;
