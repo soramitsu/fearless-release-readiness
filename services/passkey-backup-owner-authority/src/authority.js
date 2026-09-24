@@ -787,7 +787,17 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         if (Number(state.head?.headRevision ?? 0) !== expectedRevision) deny('head_conflict');
         if ((state.head?.bundleSha256 ?? null) !== request.expectedHeadSha256) deny('head_conflict');
         const epoch = decimal(request.keyEpoch, 1);
-        if (epoch !== (state.head === null ? 1 : Number(state.head.keyEpoch))) deny('key_epoch_transition_required');
+        const priorEpoch = state.head === null ? 0 : Number(state.head.keyEpoch);
+        // A new key can advance only one epoch at the exact accepted head.
+        // This is a metadata fence, not proof that a client generated, uploaded
+        // and successfully decrypted a replacement with surviving credentials.
+        if (state.head === null ? epoch !== 1 : epoch !== priorEpoch && epoch !== priorEpoch + 1) {
+          deny('key_epoch_transition_required');
+        }
+        // An immutable FPBKGEN1 generation commits its own ID and parent in
+        // the bytes. Reusing any earlier digest cannot represent a new child.
+        if (tx.query('SELECT 1 FROM backup_operations WHERE owner=? AND bundle_sha256=? LIMIT 1',
+          owner.subject, request.bundleSha256)) deny('generation_conflict');
         if (state.head && state.head.storageAccountBinding !== request.storageAccountBinding) deny('storage_account_changed');
         const revision = expectedRevision + 1;
         if (!Number.isSafeInteger(revision) ||

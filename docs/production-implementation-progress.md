@@ -1813,6 +1813,32 @@ owner cohort is admitted, no live route is converted, and neither owner
 bootstrap nor credential authentication proves an encrypted backup can be
 restored on a replacement device.
 
+## Backup-key epoch transition and iOS TON recovery — 2026-09-24
+
+The non-deployed owner authority now accepts a metadata head in the current
+backup-key epoch or its immediate successor, starting at epoch 1. It rejects
+rollback, skipped epochs and a repeated bundle digest while keeping prior
+generation descriptors addressable. A focused revocation path verifies that a
+grant issued before credential removal cannot commit afterward; the surviving
+credential must authenticate again to commit the next epoch. The full owner
+suite passes 157/157 and syntax checks pass. This core does not verify that the
+client generated a new random backup key, wrapped it for every surviving
+credential, downloaded/decrypted the new Drive generation or safely retired
+the old copy. Those steps remain mandatory before recovery can be enabled.
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) advanced to
+clean, pushed `9b94c9e9396bbd24fdfb91c4a77b5cb717d75495`. When an expired
+signed TON intent enters retry and its persisted reviewed endpoint fails the
+identity check, the coordinator now restores the durable pending bearer before
+returning an unknown outcome. New intents remain blocked; same-process
+reconciliation can continue after endpoint repair without rebroadcast. The
+exact-source TON service suite passes 48/48, the focused regression 1/1 and
+the blocked TON audit fixtures 84/84. This does not establish a finalized-chain
+absence proof or an audited sender-release procedure. Live TonAPI fee parity,
+funded recipient/fee/finality evidence and final signed-build acceptance are
+still missing. The exact-head hosted build and release-contract checks are
+running, and independent review remains required.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

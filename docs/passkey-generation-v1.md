@@ -60,6 +60,17 @@ digest-matching generation cannot itself prove that the wallet can be
 decrypted, that Drive accounts interoperate, or that a synced passkey works on
 a replacement device. Those are separate acceptance tests.
 
+The owner metadata commit starts at key epoch 1 and permits a successor
+generation to retain that epoch or advance it by exactly one. A rollback,
+skipped epoch or repeated bundle digest is rejected. After credential
+removal, a surviving credential must establish a new owner session before a
+new head can commit. The client must create a fresh random backup key, wrap it
+for each surviving recovery credential, and verify the replacement generation
+through Drive download and decryption before committing the new epoch. The
+metadata service cannot perform or attest those local cryptographic checks;
+old generations remain addressable until safe retirement is independently
+qualified.
+
 The synthetic cross-platform vector has 785 encoded bytes and SHA-256
 `1c92b544dc25c687c202317d0e5747b5690a1056cf72e61d1dfab84c07c057a4`.
 It uses parent revision `6`, parent digest `aa` repeated 32 times, key epoch

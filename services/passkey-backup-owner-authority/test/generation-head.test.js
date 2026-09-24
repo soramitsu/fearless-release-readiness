@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { b64, audience, downgradeStoreFixture, request, setup } from './fixtures.js';
+import { assertion, b64, audience, downgradeStoreFixture, register, request, setup } from './fixtures.js';
 
 const denies = (action, code) => assert.throws(action, (error) => error.code === code);
 function candidate(owner, overrides = {}) {
@@ -48,6 +48,11 @@ test('authenticated metadata CAS retains the previous accepted descriptor and su
     expectedHeadSha256: first.bundleSha256, bundleSha256: 'c'.repeat(64), driveFileId: 'drive-file-two',
   });
   commit(core, owner.sessionToken, second);
+  denies(() => commit(core, owner.sessionToken, candidate(owner, {
+    operationId: b64(29), generationId: b64(30), expectedHeadRevision: '2',
+    expectedHeadSha256: second.bundleSha256, bundleSha256: first.bundleSha256,
+    driveFileId: 'drive-file-three',
+  })), 'generation_conflict');
   const current = core.readBackupHead(owner.sessionToken);
   assert.equal(current.head.generationId, second.generationId);
   assert.equal(current.head.parentHeadRevision, '1');
@@ -95,7 +100,7 @@ test('expired or revoked generation grants cannot change a head', async (t) => {
   denies(() => core.readBackupHead(owner.sessionToken), 'authorization_failed');
 });
 
-test('stale parent, changed operation, epoch increase and Drive-account switch cannot change the head', async (t) => {
+test('stale parent, changed operation, skipped epoch and Drive-account switch cannot change the head', async (t) => {
   const { core, bootstrap } = setup(t);
   const { owner } = await bootstrap();
   const first = candidate(owner);
@@ -108,7 +113,9 @@ test('stale parent, changed operation, epoch increase and Drive-account switch c
     operationId: b64(25), generationId: b64(26), expectedHeadRevision: '1',
     expectedHeadSha256: first.bundleSha256, bundleSha256: 'd'.repeat(64), driveFileId: 'different-file',
   });
-  denies(() => commit(core, owner.sessionToken, { ...next, keyEpoch: '2' }), 'key_epoch_transition_required');
+  denies(() => commit(core, owner.sessionToken, { ...next, keyEpoch: '3' }), 'key_epoch_transition_required');
+  denies(() => commit(core, owner.sessionToken,
+    { ...next, bundleSha256: first.bundleSha256 }), 'generation_conflict');
   denies(() => commit(core, owner.sessionToken,
     { ...next, storageAccountBinding: 'e'.repeat(64) }), 'storage_account_changed');
   denies(() => commit(core, owner.sessionToken,
@@ -116,6 +123,39 @@ test('stale parent, changed operation, epoch increase and Drive-account switch c
   denies(() => commit(core, owner.sessionToken,
     { ...next, driveFileId: first.driveFileId }), 'generation_conflict');
   assert.equal(core.readBackupHead(owner.sessionToken).head.generationId, first.generationId);
+});
+
+test('surviving credential can publish one-step key rotation after revocation without losing prior head', async (t) => {
+  const { core, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const first = candidate(owner);
+  denies(() => commit(core, owner.sessionToken, { ...first, keyEpoch: '2' }), 'key_epoch_transition_required');
+  const firstDescriptor = commit(core, owner.sessionToken, first).descriptor;
+  const enrollment = core.beginEnrollment(owner.sessionToken);
+  const enrolled = await core.completeEnrollment({ ceremonyId: enrollment.ceremonyId,
+    sessionToken: owner.sessionToken, credential: register(b64(6)) });
+  const rotated = candidate(owner, { operationId: b64(33), generationId: b64(34),
+    expectedHeadRevision: '1', expectedHeadSha256: first.bundleSha256,
+    bundleSha256: 'd'.repeat(64), keyEpoch: '2', driveFileId: 'drive-rotated' });
+  const preRevokeGrant = core.issueGenerationGrant(enrolled.sessionToken, rotated);
+  core.revokeCredential(enrolled.sessionToken, b64(2), true);
+  denies(() => core.commitGenerationMetadata(preRevokeGrant.token, rotated), 'authorization_failed');
+  denies(() => core.readBackupHead(enrolled.sessionToken), 'authorization_failed');
+  const restored = await core.completeAuthentication({ ceremonyId: core.beginAuthentication('ios').ceremonyId,
+    credential: assertion(challenge.userHandle, b64(6)) });
+  assert.equal(restored.subject, owner.subject);
+  const result = commit(core, restored.sessionToken, rotated);
+  assert.equal(result.descriptor.keyEpoch, '2');
+  const head = core.readBackupHead(restored.sessionToken);
+  assert.deepEqual(head.head, result.descriptor);
+  assert.deepEqual(head.previous, firstDescriptor);
+  assert.equal(core.backupOperationStatus(restored.sessionToken, first.operationId).descriptor.keyEpoch, '1');
+  const next = candidate(owner, { operationId: b64(35), generationId: b64(36),
+    expectedHeadRevision: '2', expectedHeadSha256: rotated.bundleSha256,
+    bundleSha256: 'e'.repeat(64), driveFileId: 'drive-after-rotation' });
+  denies(() => commit(core, restored.sessionToken, { ...next, keyEpoch: '1' }), 'key_epoch_transition_required');
+  denies(() => commit(core, restored.sessionToken, { ...next, keyEpoch: '4' }), 'key_epoch_transition_required');
+  assert.equal(commit(core, restored.sessionToken, { ...next, keyEpoch: '2' }).descriptor.keyEpoch, '2');
 });
 
 test('two separate writers cannot both commit the same expected head', async (t) => {
@@ -156,7 +196,8 @@ test('commit ambiguity is reconciled by operation ID after process crash', async
     wall: clock.wall, action: 'crash-before' })).code, 81);
   assert.equal(core.backupOperationStatus(owner.sessionToken, before.operationId).status, 'absent');
   assert.equal(core.commitGenerationMetadata(beforeGrant.token, before).descriptor.headRevision, '1');
-  const after = candidate(owner, { operationId: b64(30), generationId: b64(31), driveFileId: 'drive-file-after' });
+  const after = candidate(owner, { operationId: b64(30), generationId: b64(31),
+    bundleSha256: 'c'.repeat(64), driveFileId: 'drive-file-after' });
   const afterRequest = { ...after, expectedHeadRevision: '1', expectedHeadSha256: before.bundleSha256 };
   const afterGrant = core.issueGenerationGrant(owner.sessionToken, afterRequest);
   assert.equal((await worker({ path, audience, token: afterGrant.token, generationRequest: afterRequest,
