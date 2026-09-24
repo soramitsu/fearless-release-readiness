@@ -1483,6 +1483,40 @@ the order regression. The modified existing files retain their prior lint
 baseline; the source diff check passes. This mode still requires a verified
 receiving cohort and transactional Keychain/Core Data installer before use.
 
+## iOS cohort-order allocation — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `c3bd41f547eef1cb3fce83073b0cc3383ab76dda`.
+The portable semantic record sequence is authoritative while historical
+`sourcePosition` values may tie or exceed the Core Data signed-order range.
+The read-only receive plan now allocates fresh positive, unique orders after
+the observed existing maximum, rejecting invalid existing values and
+overflow. Exact new-wallet writes reject orders beyond `Int32.max`; ordinary
+new-wallet saves keep append behavior. The future installer must read and
+recheck existing orders inside its writer/transaction boundary. Exact-source
+iPhone 15/iOS 17.2 mapper, metadata and receive-preflight suites pass 70/70;
+targeted new-file lint and diff checks pass. The source still has no cohort
+Keychain/Core Data installer or replacement-device recovery proof.
+
+## Sealed historical credential cutover comparison — 2026-09-24
+
+The non-deployed owner authority now has an offline read-only verifier for a
+private, digest-named schema-3/4 JSON challenge-store image against schema-5
+SQLite. It parses the exact bytes whose SHA-256 was checked and compares all
+historical storage keys, empty tombstones, public credential bytes, user
+handles, counters, backup/revocation flags, metadata, wallet-key scopes and
+source commitments. It reports extra or missing rows and split or merged
+owner aliases without emitting credentials or raw owner subjects. The
+verifier always returns `migrationPermitted: false`: representation equality
+cannot prove the historical hash-to-random-owner link, drain the live JSON
+writer or authorize recovery. Its CLI exits blocked on a valid report.
+The source reader rejects shadowed JSON members, and the SQLite reader pins a
+private descriptor so pathname replacement cannot substitute target rows.
+Local owner-authority tests pass 150/150 and the challenge-service suite
+passes 112/112; syntax and diff checks pass. Fresh legacy-credential
+assertion plus random-owner proof, reviewed one-writer cutover and production
+admission still remain required.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

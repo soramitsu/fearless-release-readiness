@@ -52,6 +52,13 @@ function sourceBytes(path) {
   }
 }
 
+/** Bounded, private, no-follow read for offline sealed-snapshot verification. */
+export function readPrivateLegacySnapshotBytes(path) {
+  if (typeof path !== 'string' || !isAbsolute(path)) deny('quarantine_invalid_request');
+  privateStat(dirname(path), true);
+  return sourceBytes(path);
+}
+
 function writeDurable(fd, bytes) {
   let written = 0;
   while (written < bytes.length) {

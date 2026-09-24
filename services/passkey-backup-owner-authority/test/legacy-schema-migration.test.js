@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { readOwnerCredentialSnapshot } from '../src/store.js';
@@ -9,6 +12,55 @@ import { b64, downgradeStoreFixture, request, setup } from './fixtures.js';
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const denied = (action, code = 'store_unavailable') =>
   assert.throws(action, (error) => error?.code === code);
+
+function withSnapshotOpenSwap(path, swap, action) {
+  const originalOpen = fs.openSync;
+  fs.openSync = function openWithSwap(target, ...args) {
+    if (target === path) return swap(originalOpen, target, args);
+    return originalOpen(target, ...args);
+  };
+  syncBuiltinESMExports();
+  try { action(); }
+  finally {
+    fs.openSync = originalOpen;
+    syncBuiltinESMExports();
+  }
+}
+
+test('snapshot rejects a symlink substituted after its private-file check', (t) => {
+  const { core, path, dir } = setup(t);
+  core.close();
+  const publicCopy = join(dir, 'public-copy.sqlite');
+  fs.copyFileSync(path, publicCopy);
+  fs.chmodSync(publicCopy, 0o644);
+  withSnapshotOpenSwap(path, (open, target, args) => {
+    fs.renameSync(path, join(dir, 'original.sqlite'));
+    fs.symlinkSync(publicCopy, path);
+    return open(target, ...args);
+  }, () => denied(() => readOwnerCredentialSnapshot(path)));
+});
+
+test('snapshot rejects a regular replacement at open and a path swap after open', async (t) => {
+  for (const afterOpen of [false, true]) {
+    await t.test(afterOpen ? 'after open' : 'at open', (subtest) => {
+      const { core, path, dir } = setup(subtest);
+      core.close();
+      const alternate = join(dir, 'alternate.sqlite');
+      fs.copyFileSync(path, alternate);
+      withSnapshotOpenSwap(path, (open, target, args) => {
+        if (!afterOpen) {
+          fs.renameSync(path, join(dir, 'original.sqlite'));
+          fs.renameSync(alternate, path);
+          return open(target, ...args);
+        }
+        const fd = open(target, ...args);
+        fs.renameSync(path, join(dir, 'original.sqlite'));
+        fs.renameSync(alternate, path);
+        return fd;
+      }, () => denied(() => readOwnerCredentialSnapshot(path)));
+    });
+  }
+});
 
 test('explicit v2-to-v5 migration preserves credentials, grants, counters and backup head', async (t) => {
   const { core, open, path, bootstrap } = setup(t);

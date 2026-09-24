@@ -65,6 +65,28 @@ for one storage key must not authorize another, even if account names match.
    cannot import or activate a credential. Its file remains an operator-held
    snapshot; future admission must verify its digest again against a durable
    cutover manifest and collect the two fresh ownership proofs above.
+
+   The offline `verify-sealed-legacy-cutover.mjs` command now checks a private
+   `legacy-<sha256>.json` image against its independently supplied digest and
+   compares **every** source storage key, empty tombstone, credential ID,
+   COSE public key, historical user handle, counter, device/backup/revocation
+   state, AAGUID, transports, platform and wallet-key scope with schema-v5
+   SQLite. It checks each binding's exact source digest and historical owner
+   hash, rejects missing/extra target rows and flags split historical hashes
+   or merged random-owner aliases. Its report gives only aggregate counts and
+   entry positions, the sealed source digest, and a SHA-256 commitment to the
+   specific target public rows it compared. `publicRepresentationExact: true` means the currently
+   represented public fields match that sealed image; it is **not** an owner
+   proof. The tool does not verify the commitment behind `proof_sha256`, prove
+   the JSON writer has stopped, import anything, or allow production startup.
+   It always reports `migrationPermitted: false` and exits `3` on a valid
+   read-only report. A changed/unsafe image or invalid SQLite store exits `1`.
+   Example after an operator-controlled quarantine capture:
+
+   ```sh
+   node services/passkey-backup-owner-authority/scripts/verify-sealed-legacy-cutover.mjs \
+     /private/quarantine/legacy-<sha256>.json /private/authority.sqlite <sha256>
+   ```
 3. The local HTTP composition candidate must use that same SQLite database as the **sole**
    credential and grant writer for all seven protected routes. The exact raw
    request-body grant and registration/counter/revocation change must commit

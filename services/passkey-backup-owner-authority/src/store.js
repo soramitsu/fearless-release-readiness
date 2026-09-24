@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { constants, closeSync, fsyncSync, lstatSync, openSync } from 'node:fs';
+import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, base64, deny, hash, opaque } from './validation.js';
 
@@ -273,11 +273,33 @@ function validatePendingChallengeSchema(db) {
   }
 }
 
-function privateFile(path, directory = false) {
-  const st = lstatSync(path);
+function assertPrivateFileStat(st, directory = false) {
   if (st.isSymbolicLink() || (directory ? !st.isDirectory() : !st.isFile()) ||
       (st.mode & 0o077) !== 0 || (!directory && st.nlink !== 1) ||
       (process.getuid && st.uid !== process.getuid())) deny('store_unavailable');
+  return st;
+}
+
+function privateFile(path, directory = false) {
+  return assertPrivateFileStat(lstatSync(path), directory);
+}
+
+function sameFileIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode &&
+    left.uid === right.uid && left.nlink === right.nlink;
+}
+
+function sameFileImage(left, right) {
+  return sameFileIdentity(left, right) && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+
+function pinnedSqlitePath(fd) {
+  // DatabaseSync accepts a pathname, not an existing descriptor. The OS fd
+  // namespace makes its SQLite open refer to the already checked inode.
+  if (process.platform === 'darwin') return `/dev/fd/${fd}`;
+  if (process.platform === 'linux') return `/proc/self/fd/${fd}`;
+  deny('store_unavailable');
 }
 
 /** Local durable filesystem only; no network filesystem, silent init, or memory fallback. */
@@ -414,12 +436,18 @@ export class AuthorityStore {
 export function readOwnerCredentialSnapshot(path) {
   if (!isAbsolute(path)) deny('store_unavailable');
   let db;
+  let fd;
   try {
-    privateFile(dirname(path), true);
-    privateFile(path);
-    db = new DatabaseSync(path, { readOnly: true });
+    const directoryBefore = privateFile(dirname(path), true);
+    const fileBefore = privateFile(path);
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    if (!sameFileImage(fileBefore, assertPrivateFileStat(fstatSync(fd)))) deny('store_unavailable');
+    db = new DatabaseSync(pinnedSqlitePath(fd), { readOnly: true });
     db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF;');
     db.exec('BEGIN');
+    // The authority writer always uses DELETE journaling. A WAL database read
+    // through an fd alias might otherwise omit an uncheckpointed sidecar.
+    if (db.prepare('PRAGMA journal_mode').get().journal_mode !== 'delete') deny('store_invalid');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
     if (![2, 3, 4, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
@@ -442,6 +470,9 @@ export function readOwnerCredentialSnapshot(path) {
       ? db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
+    if (!sameFileImage(fileBefore, assertPrivateFileStat(fstatSync(fd))) ||
+        !sameFileImage(fileBefore, privateFile(path)) ||
+        !sameFileIdentity(directoryBefore, privateFile(dirname(path), true))) deny('store_unavailable');
     return Object.freeze({ schemaVersion,
       owners: Object.freeze(owners), credentials: Object.freeze(credentials),
       storageBindings: Object.freeze(storageBindings),
@@ -451,6 +482,7 @@ export function readOwnerCredentialSnapshot(path) {
     try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
     deny('store_unavailable');
   } finally {
-    db?.close();
+    try { db?.close(); }
+    finally { if (fd !== undefined) closeSync(fd); }
   }
 }

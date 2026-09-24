@@ -239,11 +239,79 @@ function serializeCredentials(credentialsByStorageKey, ownersByStorageKey) {
   };
 }
 
+// JSON.parse keeps the last value of a repeated object member. For a sealed
+// historical image that would silently discard a wallet or tombstone while a
+// later read-only comparison claimed to cover the complete source. Scan every
+// object level before parsing; the subsequent JSON.parse remains the syntax
+// authority. The store schema is shallow, so excessive nesting fails closed.
+function rejectDuplicateJsonMembers(raw) {
+  let position = 0;
+  const whitespace = () => {
+    while (/\s/.test(raw[position] ?? '') && position < raw.length) position += 1;
+  };
+  const string = () => {
+    const start = position;
+    if (raw[position++] !== '"') throw credentialStoreInvalid();
+    while (position < raw.length) {
+      const character = raw[position++];
+      if (character === '"') return JSON.parse(raw.slice(start, position));
+      if (character === '\\') position += 1;
+    }
+    throw credentialStoreInvalid();
+  };
+  const value = (depth) => {
+    if (depth > 32) throw credentialStoreInvalid('Credential store nesting is excessive');
+    whitespace();
+    if (raw[position] === '{') {
+      position += 1;
+      const seen = new Set();
+      whitespace();
+      if (raw[position] === '}') { position += 1; return; }
+      while (position < raw.length) {
+        const member = string();
+        if (seen.has(member)) throw credentialStoreInvalid('Credential store contains duplicate JSON members');
+        seen.add(member);
+        whitespace();
+        if (raw[position++] !== ':') throw credentialStoreInvalid();
+        value(depth + 1);
+        whitespace();
+        const separator = raw[position++];
+        if (separator === '}') return;
+        if (separator !== ',') throw credentialStoreInvalid();
+        whitespace();
+      }
+      throw credentialStoreInvalid();
+    }
+    if (raw[position] === '[') {
+      position += 1;
+      whitespace();
+      if (raw[position] === ']') { position += 1; return; }
+      while (position < raw.length) {
+        value(depth + 1);
+        whitespace();
+        const separator = raw[position++];
+        if (separator === ']') return;
+        if (separator !== ',') throw credentialStoreInvalid();
+      }
+      throw credentialStoreInvalid();
+    }
+    if (raw[position] === '"') { string(); return; }
+    const start = position;
+    while (position < raw.length && !/[\s,}\]]/.test(raw[position])) position += 1;
+    if (position === start) throw credentialStoreInvalid();
+  };
+  value(0);
+  whitespace();
+  if (position !== raw.length) throw credentialStoreInvalid();
+}
+
 function deserializeCredentials(raw) {
   let parsed;
   try {
+    rejectDuplicateJsonMembers(raw);
     parsed = JSON.parse(raw);
   } catch (error) {
+    if (error?.code === 'credential_store_invalid') throw error;
     throw credentialStoreInvalid();
   }
 
@@ -353,6 +421,13 @@ function readBoundedRegularFile(filePath) {
 // Operator reconciliation must inspect v3/v4 records without invoking the
 // writable FileBacked constructor: opening a v3 file there replaces it with v4.
 // This snapshot validates the complete file but never migrates or creates it.
+export function parseCredentialStoreSnapshotBytes(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > MAX_CREDENTIAL_STORE_BYTES) {
+    throw credentialStoreInvalid('Credential store bytes must be a bounded buffer');
+  }
+  return deserializeCredentials(bytes.toString('utf8'));
+}
+
 export function readCredentialStoreSnapshot(filePath) {
   if (typeof filePath !== 'string' || filePath.trim() === '') {
     throw credentialStoreUnavailable('Credential store file path is required');

@@ -79,6 +79,14 @@ node services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentia
   /absolute/private/quarantine EXPECTED_LOWERCASE_SHA256_HEX
 ```
 
+The additional [sealed cutover verifier](docs/legacy-cutover.md) compares the
+quarantined image with schema-v5 public credential rows, exact counters and
+historical user handles, metadata, wallet-key scopes, and empty tombstones. It
+flags conflicting source digests, missing/extra rows and ambiguous owner
+aliasing. It remains read-only and always denies migration, including when
+`publicRepresentationExact` is true: only fresh proofs and a drained one-writer
+cutover can establish ownership and safe production admission.
+
 ## Concrete integration gates (not implemented)
 
 - Independently review the cryptographic verifier: the optional WebAuthn adapter verifies existing-owner assertions, enrollment, and internal v5 claimed registration/assertion with exact challenge, RP, configured platform origin, UV/UP, stored COSE key, counter and backup flags. Its first-owner path is opt-in and checks Ed25519/secp256k1 wallet proof plus the app-attestation verifier result; no real Apple/Google verifier, SR25519 implementation, native wallet-signature vector, or admitted production HTTP composition exists. Independently qualify native iOS18+ GPM and Android PRF without raising existing app OS minima.

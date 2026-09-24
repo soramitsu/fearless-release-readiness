@@ -915,6 +915,8 @@ test('file-backed store rejects corrupted, legacy, unsupported, duplicate, and s
   const ownerSubjectHash = base64UrlEncode(Buffer.alloc(32, 4));
   const fixtures = [
     ['invalid-json', '{not-json'],
+    ['duplicate-json-top-level', '{"schemaVersion":3,"credentialsByStorageKey":[{"storageKey":"storage:old-key","ownerSubjectHash":"' + ownerSubjectHash + '","credentials":[]}],"credentialsByStorageKey":[]}'],
+    ['duplicate-json-nested', '{"schemaVersion":3,"credentialsByStorageKey":[{"storageKey":"storage:valid-key","ownerSubjectHash":"' + ownerSubjectHash + '","credentials":[{"id":"hidden"}],"credentials":[]}]}'],
     ['legacy-schema', JSON.stringify({ schemaVersion: 2, credentialsByStorageKey: [] })],
     ['unknown-field', JSON.stringify({ schemaVersion: 3, credentialsByStorageKey: [], secret: true })],
     ['bad-public-key', JSON.stringify({
