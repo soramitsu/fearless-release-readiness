@@ -5,6 +5,7 @@ import {
   ExtendedKeyUsageExtension, KeyUsageFlags, KeyUsagesExtension,
   X509Certificate as ParsedCertificate,
 } from '@peculiar/x509';
+import { createAppleAppAttestReceiptVerifier } from './apple-app-attest-receipt.js';
 import { appAttestation, deny } from './validation.js';
 
 const APP_ATTEST_ROOT_PEM = readFileSync(
@@ -136,16 +137,18 @@ export function verifyAppleAppAttestObject({ attestationObject, keyId, clientDat
     if (!equal(hash(point), id)) deny('verification_failed');
     verifyAuthenticatorData(authData, id, point, `${teamId}.${bundleId}`,
       allowedBundleVersions);
-    return Object.freeze({ receipt, keyId: id.toString('base64url') });
+    return Object.freeze({ receipt, keyId: id.toString('base64url'),
+      attestationCertificateSha256: hash(leafBytes).toString('hex') });
   } catch { deny('verification_failed'); }
 }
 
 /**
- * Server-owned, production-environment App Attest admission. It has no default
- * receipt verifier and is not composed with a deployable HTTP listener.
+ * Server-owned, production-environment App Attest admission. Its pinned-root
+ * receipt verifier cannot be replaced by a caller-supplied success callback.
+ * This is not composed with a deployable HTTP listener.
  */
 export function createAppleAppAttestBootstrapVerifier({ teamId, bundleId,
-  allowedBundleVersions, verifyReceipt, now = Date.now } = {}) {
+  allowedBundleVersions, now = Date.now, ...unsupported } = {}) {
   if (typeof teamId !== 'string' || !TEAM_ID.test(teamId) ||
       typeof bundleId !== 'string' || !BUNDLE_ID.test(bundleId) ||
       !Array.isArray(allowedBundleVersions) || allowedBundleVersions.length === 0 ||
@@ -153,11 +156,12 @@ export function createAppleAppAttestBootstrapVerifier({ teamId, bundleId,
       allowedBundleVersions.some((version) => typeof version !== 'string' ||
         !BUNDLE_VERSION.test(version)) ||
       new Set(allowedBundleVersions).size !== allowedBundleVersions.length ||
-      typeof verifyReceipt !== 'function' || typeof now !== 'function') {
+      typeof now !== 'function' || Object.keys(unsupported).length !== 0) {
     deny('invalid_configuration');
   }
   const application = `ios:${teamId}:${bundleId}`;
   const versions = new Set(allowedBundleVersions);
+  const verifyReceipt = createAppleAppAttestReceiptVerifier({ now });
   return async function verifyAppAttestation(input) {
     try {
       if (!input || input.platform !== 'ios' ||
@@ -168,13 +172,16 @@ export function createAppleAppAttestBootstrapVerifier({ teamId, bundleId,
       if (challengeBytes.length !== 32 ||
           challengeBytes.toString('base64url') !== input.expectedNonce) deny('verification_failed');
       const attestation = appAttestation(input.attestation, 'ios');
+      const clientDataHash = hash(challengeBytes);
       const verified = verifyAppleAppAttestObject({
         attestationObject: Buffer.from(attestation.attestationObject, 'base64url'),
-        keyId: Buffer.from(attestation.keyId, 'base64url'), clientDataHash: hash(challengeBytes),
+        keyId: Buffer.from(attestation.keyId, 'base64url'), clientDataHash,
         teamId, bundleId, allowedBundleVersions: versions, nowMillis: now(),
       });
       if (await verifyReceipt(Object.freeze({ receipt: verified.receipt,
-        keyId: verified.keyId, application })) !== true) deny('verification_failed');
+        keyId: verified.keyId, application,
+        attestationCertificateSha256: verified.attestationCertificateSha256,
+        clientDataHash })) !== true) deny('verification_failed');
       return Object.freeze({ platform: 'ios', nonce: input.expectedNonce, application });
     } catch { deny('verification_failed'); }
   };

@@ -63,15 +63,14 @@ test('Apple App Attest rejects tampered certificate, authenticator and extension
   denied(() => verifyAppleAppAttestObject({ ...args(), attestationObject: badExtension }));
 });
 
-test('Apple adapter requires a server-owned receipt verifier and refuses invalid ceremonies', async () => {
+test('Apple adapter hardwires receipt verification and refuses invalid ceremonies', async () => {
   assert.throws(() => createAppleAppAttestBootstrapVerifier({
     teamId: 'ABCDE12345', bundleId: 'io.soramitsu.fearless',
-    allowedBundleVersions: ['1'],
+    allowedBundleVersions: ['1'], verifyReceipt: async () => true,
   }), (error) => error.code === 'invalid_configuration');
-  let receiptCalls = 0;
   const verify = createAppleAppAttestBootstrapVerifier({
     teamId: 'ABCDE12345', bundleId: 'io.soramitsu.fearless',
-    allowedBundleVersions: ['1'], verifyReceipt: async () => { receiptCalls++; return true; },
+    allowedBundleVersions: ['1'],
   });
   for (const input of [
     { platform: 'android', expectedApplication: 'ios:ABCDE12345:io.soramitsu.fearless',
@@ -88,5 +87,4 @@ test('Apple adapter requires a server-owned receipt verifier and refuses invalid
     await assert.rejects(verify(input), (error) => error.code === 'verification_failed' &&
       error.message === 'verification_failed');
   }
-  assert.equal(receiptCalls, 0);
 });

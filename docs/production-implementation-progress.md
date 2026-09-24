@@ -2489,6 +2489,38 @@ passed on the exact inventory change: source-publication covered 92 negative
 cases, and the release-bundle exporter, command-contract and verifier suites
 all passed.
 
+## Android one-use PRF readback — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is clean and pushed at `137046ba075cc91c695e24a1c06fd3345fcde069`.
+The disabled readback path now verifies the public credential, PRF presence,
+server assertion and unchanged owner head before making local PRF bytes
+available to the unwrap callback. Native PRF consumption is synchronized,
+single-use and cleared after callback or failure. Server rejection and replay
+tests cover the ordering. On this head the backup module passes **238/238**,
+focused recovery tests **19/19**, Detekt and pinned Utils/WebSocket source
+checks pass. The preceding `a1338aa8` full JVM `runTest` passed 1,691 cases;
+the new exact-head full build and hosted acceptance remain pending. Recovery
+is still disabled; no replacement-device, Play-signed or Iroha claim follows.
+
+## Apple fraud-receipt verification candidate — 2026-09-24
+
+The owner authority's App Attest adapter now hardwires a server-owned verifier
+for the fraud receipt embedded in an iOS App Attest object; a caller-supplied
+success callback is rejected. It checks the CMS signature and
+chain to Apple's SHA-pinned Root CA - G3, the receipt signer purpose, signed
+production app ID, original attestation certificate and key ID, the exact
+client-data hash, `ATTEST` receipt type and five-minute freshness. It takes
+server-owned time and is not wired into a production listener. Apple's
+published sample passes at its historical timestamp; wrong app/key/challenge,
+stale or future time, tampering, truncation and trailing bytes fail. The owner
+suite passes **244/244** with zero failures/skips; the long release-source
+fixture suites are rerunning with the new receipt files in every required
+inventory. The sample uses a raw challenge where our native adapter hashes
+the challenge, so real iOS→server interoperability remains unverified.
+Apple's online fraud metric, independent security review, sealed credential
+cutover and production deployment remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
