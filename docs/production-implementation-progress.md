@@ -2268,6 +2268,36 @@ source/test files, plus two contextual documentation files (scan
 `81ed72b52d81c9a48118f88dc6beabf72344e0c1d61c959ffed5cd3e00f39304`).
 The scan is not independent human review or provider/device qualification.
 
+## Disabled Android authenticated-generation readback — 2026-09-24
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+is clean and pushed at `ab6fb583185a6f1a7e524fe9844840fcc2950ea5`.
+Its disabled, unwired readback coordinator takes an authenticated owner head,
+downloads the exact immutable Google Drive generation, requests one fresh
+credential-directed native assertion for the stored PRF salt, requires a
+server-verified assertion result, then locally unwraps and decrypts the
+backup. It rechecks both the owner head and selected Google subject after
+verification and returns only redacted original-identity evidence. Local PRF
+output is excluded from server JSON and cleared after asynchronous use.
+
+The strict pinned-source full JVM run passed **1,683 cases**, zero failures or
+errors, with 14 existing skips; its backup module passed 229/229. `detektAll`
+and pinned Utils/WebSocket source verification passed. Hosted `validate`
+passed for this head; `build-and-test` and IAS candidate validation were still
+running at the recorded snapshot. The earlier unsigned AAB was built from
+`29c49af93f69b6dc22666b07b37f6bad0ef4295d` and does not qualify this
+source. No production owner HTTP adapter, application-owned full-cohort
+verifier or transactional wallet installer exists yet. The recovery flag
+remains false, and no cross-device restoration has been claimed.
+A scoped Codex Security diff scan of
+`29c49af93f69b6dc22666b07b37f6bad0ef4295d..ab6fb583185a6f1a7e524fe9844840fcc2950ea5`
+completed with zero reportable findings and full coverage of both changed
+production source files, the two changed test files and documentation (scan
+`d6148f9d-b64d-4b83-99f8-881c7bce65de`, report SHA-256
+`3cd098d7fdfe7c2cfcf31dc70aa5fc123666139e90edd6834f0e8f4c78187414`).
+This is scoped static review, not an independent human approval or native
+provider/device qualification.
+
 ## Android Play Integrity bootstrap adapter — 2026-09-24
 
 The non-deployed owner-authority source now contains an opt-in, server-owned
@@ -2282,12 +2312,22 @@ the final canonical-field and testing-override corrections; the affected
 adapter/WebAuthn suite passed 36/36 afterward. Syntax and diff checks passed.
 The adapter is included in source-publication and release-bundle inventories.
 
+The final full owner-authority suite passed **231/231** with zero failures or
+skips after those corrections. The source-publication self-test passed all 88
+adversarial cases, and both release-unblock-bundle export and verification
+self-tests passed. A scoped Codex Security diff scan of
+`f86fc7000c501fbded207a444552acf1926e4413..aabe6d7a4acc45078c2136010667a372e4f59fbf`
+completed with zero reportable findings across the eight changed source files
+(scan `2872c3ce-9f3e-49e9-8437-e1b28a75e83b`). These results cover this
+source candidate; they are not a live Google verdict or independent human
+release approval.
+
 No service-account token provider, actual Play app-signing certificate or
 released version list has been provisioned here; there is no live Google
 decode, native token request, Apple App Attest verifier, admitted production
 listener, or device acceptance. The production HTTP factory continues to
 reject construction and recovery remains disabled. The exact source also
-needs scoped independent security review and protected-branch CI. Google's
+needs independent human security review and protected-branch CI. Google's
 [REST discovery schema](https://playintegrity.googleapis.com/$discovery/rest?version=v1)
 and [verdict documentation](https://developer.android.com/google/play/integrity/verdicts)
 define the checked fields.
