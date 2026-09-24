@@ -69,6 +69,26 @@ export interface WalletProof {
   readonly publicKey: string;
   readonly signature: string;
 }
+export type AppAttestation =
+  | { readonly kind: 'play-integrity'; readonly token: string }
+  | { readonly kind: 'app-attest'; readonly keyId: string; readonly attestationObject: string };
+export interface BootstrapAdmission {
+  readonly android: {
+    readonly packageName: string;
+    readonly signingCertificateSha256: string; // Lowercase hex of the Play signing certificate.
+  };
+  readonly ios: {
+    readonly teamId: string;
+    readonly bundleId: string;
+  };
+  /** Server-owned implementation; must verify platform certificate/token and the exact nonce. */
+  verifyAppAttestation(input: {
+    readonly platform: Platform;
+    readonly expectedNonce: string; // SHA-256 nonce bound to signed wallet proof and registration.
+    readonly expectedApplication: string;
+    readonly attestation: AppAttestation;
+  }): Promise<{ readonly platform: Platform; readonly nonce: string; readonly application: string }>;
+}
 export interface CryptographicVerifier {
   /**
    * Verify fresh self-custody wallet proof AND first WebAuthn credential.
@@ -81,6 +101,7 @@ export interface CryptographicVerifier {
     readonly ceremony: Ceremony;
     readonly credential: PublicCredentialResponse;
     readonly walletProof: WalletProof;
+    readonly appAttestation: AppAttestation;
   }): Promise<{ readonly credential: CredentialRecord; readonly walletBindingHash: string }>;
   /**
    * Verify exact server challenge, RP, qualified platform origin, UV/UP,

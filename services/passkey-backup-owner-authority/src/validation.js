@@ -108,6 +108,20 @@ export function walletProof(value) {
   base64(value.signature, 64, 80);
   return { ...value };
 }
+export function appAttestation(value, verifiedPlatform) {
+  if (verifiedPlatform === 'android') {
+    exact(value, ['kind', 'token']);
+    if (value.kind !== 'play-integrity' || typeof value.token !== 'string' ||
+        value.token.length < 32 || value.token.length > 32768 ||
+        !/^[A-Za-z0-9._-]+$/.test(value.token)) deny('invalid_request');
+  } else if (verifiedPlatform === 'ios') {
+    exact(value, ['kind', 'keyId', 'attestationObject']);
+    if (value.kind !== 'app-attest') deny('invalid_request');
+    base64(value.keyId, 16, 256);
+    base64(value.attestationObject, 32, 32768);
+  } else deny('invalid_request');
+  return { ...value };
+}
 export function credentialRecord(value, expectedId, expectedUserHandle) {
   exact(value, ['id', 'publicKey', 'userHandle', 'counter', 'deviceType', 'backedUp']);
   backupFlags(value);

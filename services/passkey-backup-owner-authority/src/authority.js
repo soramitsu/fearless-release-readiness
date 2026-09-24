@@ -1,6 +1,6 @@
 import { AuthorityStore } from './store.js';
 import {
-  AuthorityError, RP_ID, backupFlags, base64, counter, credentialRecord, credentialResponse,
+  AuthorityError, RP_ID, appAttestation, backupFlags, base64, counter, credentialRecord, credentialResponse,
   deny, exact, hash, opaque, platform, random, requestBinding, walletProof,
 } from './validation.js';
 
@@ -539,11 +539,14 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       return api.commitChallengeCredentialMutation(grantToken, binding, bytes, evidence);
     },
     async completeBootstrap(input) {
-      exact(input, ['ceremonyId', 'credential', 'walletProof']);
+      exact(input, ['ceremonyId', 'credential', 'walletProof', 'appAttestation']);
       const credential = credentialResponse(input.credential, 'registration');
       const proof = walletProof(input.walletProof);
       const { row } = claim(input.ceremonyId, 'bootstrap');
-      const evidence = await verify('bootstrap', { ceremony: verifierContext(row), credential, walletProof: proof });
+      const attestation = appAttestation(input.appAttestation, row.platform);
+      const evidence = await verify('bootstrap', {
+        ceremony: verifierContext(row), credential, walletProof: proof, appAttestation: attestation,
+      });
       exact(evidence, ['credential', 'walletBindingHash']);
       base64(evidence.walletBindingHash, 32, 32);
       const record = credentialRecord(evidence.credential, credential.id, row.user_handle);

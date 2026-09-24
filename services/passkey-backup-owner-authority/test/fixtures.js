@@ -8,6 +8,11 @@ import { hash, SCOPES } from '../src/validation.js';
 export const audience = 'fearless.passkey-backup';
 export const b64 = (value, length = 32) => Buffer.alloc(length, value).toString('base64url');
 export const proof = { scheme: 'ed25519', publicKey: b64(4), signature: b64(5, 64) };
+// Public, deliberately noncryptographic test inputs. The positive fixture
+// verifier does not verify an Apple or Google attestation.
+export const appAttestation = (platform = 'android') => platform === 'android'
+  ? { kind: 'play-integrity', token: 'A'.repeat(32) }
+  : { kind: 'app-attest', keyId: b64(42), attestationObject: b64(43, 64) };
 export const register = (id = b64(2)) => ({ id, rawId: id, type: 'public-key',
   clientExtensionResults: {}, response: { clientDataJSON: b64(1), attestationObject: b64(3) } });
 export const assertion = (userHandle, id = b64(2)) => ({ id, rawId: id, type: 'public-key', clientExtensionResults: {},
@@ -89,7 +94,8 @@ export function setup(t, options = {}) {
   });
   const bootstrap = async (instance = core, id = b64(2), key = proof.publicKey) => {
     const challenge = instance.beginBootstrap('android');
-    const owner = await instance.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(id), walletProof: { ...proof, publicKey: key } });
+    const owner = await instance.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(id),
+      walletProof: { ...proof, publicKey: key }, appAttestation: appAttestation(challenge.platform) });
     return { owner, challenge };
   };
   return { core, path, dir, clock, open, bootstrap };

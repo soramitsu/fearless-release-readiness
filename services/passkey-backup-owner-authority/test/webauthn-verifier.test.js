@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { ECDH, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import {
   authenticationCredential, createAuthenticator, registrationCredential,
 } from '../../passkey-backup-challenge-service/test/webauthn-fixture.js';
 import { AuthorityError, hash } from '../src/validation.js';
+import { bootstrapWalletMessage, verifyBootstrapWalletProof } from '../src/bootstrap-proof.js';
 import { createWebAuthnVerifier } from '../src/webauthn-verifier.js';
-import { audience, b64, proof, register, setup, verifier as fakeVerifier } from './fixtures.js';
+import { appAttestation, audience, b64, proof, register, setup, verifier as fakeVerifier } from './fixtures.js';
 
 const androidOrigin = `android:apk-key-hash:${Buffer.alloc(32, 0xa5).toString('base64url')}`;
 const iosOrigin = 'https://fearlesswallet.io';
@@ -66,7 +67,7 @@ function fixtureOwner(t, platform, overrides = {}) {
   return { ...fixture, async bootstrapForPlatform() {
     const challenge = fixture.core.beginBootstrap(platform);
     const owner = await fixture.core.completeBootstrap({ ceremonyId: challenge.ceremonyId,
-      credential: register(), walletProof: proof });
+      credential: register(), walletProof: proof, appAttestation: appAttestation(platform) });
     const db = new DatabaseSync(fixture.path);
     try {
       db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
@@ -166,6 +167,138 @@ for (const [platform, origin] of [['ios', iosOrigin], ['android', androidOrigin]
 test('first-owner bootstrap remains unavailable without wallet proof and attestation', async () => {
   await assert.rejects(verifier.bootstrap({}), (error) =>
     error instanceof AuthorityError && error.code === 'verifier_unavailable');
+});
+
+function signedWalletProof(ceremony, credential, scheme = 'ed25519') {
+  const pair = scheme === 'ed25519' ? generateKeyPairSync('ed25519')
+    : generateKeyPairSync('ec', { namedCurve: 'secp256k1' });
+  const spki = pair.publicKey.export({ type: 'spki', format: 'der' });
+  const key = spki.subarray(scheme === 'ed25519' ? -32 : -65);
+  const message = bootstrapWalletMessage(ceremony, credential);
+  const signature = scheme === 'ed25519' ? sign(null, message, pair.privateKey)
+    : sign('sha256', message, { key: pair.privateKey, dsaEncoding: 'ieee-p1363' });
+  return { scheme, publicKey: key.toString('base64url'), signature: signature.toString('base64url') };
+}
+const bootstrapAdmission = (verifyAppAttestation) => ({
+  android: { packageName: 'io.soramitsu.fearless', signingCertificateSha256: 'a5'.repeat(32) },
+  ios: { teamId: 'ABCDE12345', bundleId: 'io.soramitsu.fearless' },
+  verifyAppAttestation,
+});
+
+test('first owner commits only after signed local wallet, bound app attestation and real WebAuthn registration', async (t) => {
+  let appChecks = 0;
+  const admitted = createWebAuthnVerifier({
+    allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+    // Test double only: a real server adapter must verify Apple's App Attest
+    // certificate/receipt and nonce against the configured Team/bundle ID.
+    bootstrapAdmission: bootstrapAdmission(async ({ platform, expectedNonce, expectedApplication, attestation }) => {
+      appChecks++;
+      assert.equal(platform, 'ios');
+      assert.equal(attestation.kind, 'app-attest');
+      return { platform, nonce: expectedNonce, application: expectedApplication };
+    }),
+  });
+  const { core, path } = setup(t, { verifier: admitted });
+  const pending = core.beginBootstrap('ios');
+  const authenticator = createAuthenticator('bootstrap-owner');
+  const credential = publicRegistration(registrationCredential(pending.challenge, authenticator, { origin: iosOrigin }));
+  const walletProof = signedWalletProof(pending, credential);
+  const result = await core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential,
+    walletProof, appAttestation: appAttestation('ios') });
+  assert.equal(result.subject, pending.subject);
+  assert.equal(appChecks, 1);
+  const stored = new DatabaseSync(path, { readOnly: true });
+  try {
+    assert.equal(stored.prepare('SELECT wallet_binding FROM owners WHERE subject=?').get(result.subject).wallet_binding,
+      verifyBootstrapWalletProof(pending, credential, walletProof).walletBindingHash);
+    assert.equal(stored.prepare('SELECT count(*) AS n FROM credentials WHERE owner=?').get(result.subject).n, 1);
+  } finally { stored.close(); }
+  const duplicate = core.beginBootstrap('ios');
+  const newCredential = publicRegistration(registrationCredential(duplicate.challenge,
+    createAuthenticator('bootstrap-owner'), { origin: iosOrigin }));
+  await assert.rejects(core.completeBootstrap({ ceremonyId: duplicate.ceremonyId, credential: newCredential,
+    walletProof: signedWalletProof(duplicate, newCredential), appAttestation: appAttestation('ios') }),
+  (error) => error.code === 'credential_already_linked');
+});
+
+test('wallet bootstrap message binds owner, namespace, nonce and every public registration field', () => {
+  const pending = ceremony('bootstrap', 'ios');
+  const credential = publicRegistration(registrationCredential(pending.challenge,
+    createAuthenticator('message-binding'), { origin: iosOrigin }));
+  const wallet = signedWalletProof(pending, credential);
+  const baseline = verifyBootstrapWalletProof(pending, credential, wallet);
+  assert.match(baseline.walletBindingHash, /^[A-Za-z0-9_-]{43}$/);
+  for (const changed of [
+    { ceremony: { ...pending, subject: ceremony('bootstrap', 'ios').subject }, credential },
+    { ceremony: { ...pending, namespace: ceremony('bootstrap', 'ios').namespace }, credential },
+    { ceremony: { ...pending, challenge: randomBytes(32).toString('base64url') }, credential },
+    { ceremony: pending, credential: { ...credential, response: {
+      ...credential.response, attestationObject: b64(99, 64),
+    } } },
+  ]) {
+    assert.throws(() => verifyBootstrapWalletProof(changed.ceremony, changed.credential, wallet),
+      (error) => error.code === 'verification_failed');
+  }
+  assert.throws(() => verifyBootstrapWalletProof(pending, credential,
+    { ...wallet, scheme: 'sr25519' }), (error) => error.code === 'verifier_unavailable');
+});
+
+test('secp256k1 wallet proof accepts both public-key encodings under one owner binding', () => {
+  const pending = ceremony('bootstrap', 'android');
+  const credential = publicRegistration(registrationCredential(pending.challenge,
+    createAuthenticator('secp-binding'), { origin: androidOrigin }));
+  const wallet = signedWalletProof(pending, credential, 'secp256k1');
+  const compressed = ECDH.convertKey(Buffer.from(wallet.publicKey, 'base64url'),
+    'secp256k1', undefined, undefined, 'compressed').toString('base64url');
+  const full = verifyBootstrapWalletProof(pending, credential, wallet);
+  const compact = verifyBootstrapWalletProof(pending, credential, { ...wallet, publicKey: compressed });
+  assert.equal(full.walletBindingHash, compact.walletBindingHash);
+  assert.equal(full.attestationNonce, compact.attestationNonce);
+});
+
+test('first-owner attestation result must match nonce, platform and configured app identity', async () => {
+  const pending = ceremony('bootstrap', 'android');
+  const credential = publicRegistration(registrationCredential(pending.challenge,
+    createAuthenticator('app-bound'), { origin: androidOrigin }));
+  const walletProof = signedWalletProof(pending, credential);
+  const input = { ceremony: pending, credential, walletProof, appAttestation: appAttestation() };
+  for (const result of [true, { platform: 'android', nonce: b64(2), application: 'android:wrong' },
+    { platform: 'ios', nonce: verifyBootstrapWalletProof(pending, credential, walletProof).attestationNonce,
+      application: 'ios:wrong' }]) {
+    const admitted = createWebAuthnVerifier({
+      allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+      bootstrapAdmission: bootstrapAdmission(async () => result),
+    });
+    await assert.rejects(admitted.bootstrap(input), (error) => error.code === 'verification_failed');
+  }
+  assert.throws(() => createWebAuthnVerifier({
+    allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+    bootstrapAdmission: { ...bootstrapAdmission(() => {}), verifyAppAttestation: true },
+  }), (error) => error.code === 'invalid_configuration');
+  assert.throws(() => createWebAuthnVerifier({
+    allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+    bootstrapAdmission: { ...bootstrapAdmission(async () => {}),
+      android: { ...bootstrapAdmission(async () => {}).android,
+        signingCertificateSha256: '00'.repeat(32) } },
+  }), (error) => error.code === 'invalid_configuration');
+  let attestations = 0;
+  const admitted = createWebAuthnVerifier({
+    allowedOrigins: { android: [androidOrigin], ios: [iosOrigin] },
+    bootstrapAdmission: bootstrapAdmission(async ({ platform, expectedNonce, expectedApplication }) => {
+      attestations++;
+      return { platform, nonce: expectedNonce, application: expectedApplication };
+    }),
+  });
+  await assert.rejects(admitted.bootstrap({ ...input, walletProof: {
+    ...walletProof, signature: b64(99, 64),
+  } }), (error) => error.code === 'verification_failed');
+  assert.equal(attestations, 0);
+  const wrongOrigin = publicRegistration(registrationCredential(pending.challenge,
+    createAuthenticator('wrong-bootstrap-origin'), { origin: 'https://evil.example' }));
+  await assert.rejects(admitted.bootstrap({ ...input, credential: wrongOrigin,
+    walletProof: signedWalletProof(pending, wrongOrigin) }),
+  (error) => error.code === 'verification_failed');
+  assert.equal(attestations, 1);
 });
 
 test('platform origin, challenge, RP and user-handle substitutions are rejected', async () => {

@@ -3,14 +3,20 @@ import {
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
 import {
-  RP_ID, backupFlags, base64, counter, credentialRecord, credentialResponse, deny, exact, opaque,
+  RP_ID, appAttestation, backupFlags, base64, counter, credentialRecord, credentialResponse,
+  deny, exact, opaque,
 } from './validation.js';
+import { verifyBootstrapWalletProof } from './bootstrap-proof.js';
 
 const IOS_ORIGINS = new Set([
   'https://fearlesswallet.io',
   'https://backup.fearlesswallet.io',
 ]);
 const ANDROID_ORIGIN = /^android:apk-key-hash:[A-Za-z0-9_-]{43}$/u;
+const PACKAGE_NAME = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/u;
+const BUNDLE_ID = /^[a-zA-Z][a-zA-Z0-9-]*(?:\.[a-zA-Z][a-zA-Z0-9-]*)+$/u;
+const TEAM_ID = /^[A-Z0-9]{10}$/u;
+const SHA256_HEX = /^[a-f0-9]{64}$/u;
 
 function configuredOrigins(value) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype ||
@@ -30,6 +36,36 @@ function configuredOrigins(value) {
     result[platform] = Object.freeze([...origins]);
   }
   return Object.freeze(result);
+}
+
+function configuredBootstrapAdmission(value, origins) {
+  if (value === undefined) return null;
+  try {
+    exact(value, ['android', 'ios', 'verifyAppAttestation']);
+    exact(value.android, ['packageName', 'signingCertificateSha256']);
+    exact(value.ios, ['teamId', 'bundleId']);
+  } catch { deny('invalid_configuration'); }
+  if (typeof value.verifyAppAttestation !== 'function' ||
+      typeof value.android.packageName !== 'string' || !PACKAGE_NAME.test(value.android.packageName) ||
+      typeof value.android.signingCertificateSha256 !== 'string' ||
+      !SHA256_HEX.test(value.android.signingCertificateSha256) ||
+      typeof value.ios.teamId !== 'string' || !TEAM_ID.test(value.ios.teamId) ||
+      typeof value.ios.bundleId !== 'string' || !BUNDLE_ID.test(value.ios.bundleId)) {
+    deny('invalid_configuration');
+  }
+  // Android's WebAuthn origin and Play Integrity verdict must name the same
+  // Play-distributed signing certificate. A misconfigured pair cannot turn
+  // evidence from two different applications into one bootstrap admission.
+  const expectedAndroidOrigin = `android:apk-key-hash:${Buffer.from(
+    value.android.signingCertificateSha256, 'hex').toString('base64url')}`;
+  if (origins.android.some((origin) => origin !== expectedAndroidOrigin)) deny('invalid_configuration');
+  return Object.freeze({
+    application: Object.freeze({
+      android: `android:${value.android.packageName}:${value.android.signingCertificateSha256}`,
+      ios: `ios:${value.ios.teamId}:${value.ios.bundleId}`,
+    }),
+    verifyAppAttestation: value.verifyAppAttestation,
+  });
 }
 
 function ceremonyFor(input, kind) {
@@ -79,13 +115,46 @@ function claimedChallenge(input, kind) {
 
 /**
  * Real WebAuthn verification for existing-owner authentication and enrollment.
- * First-owner bootstrap remains unavailable until wallet possession, app
- * attestation, and legacy-owner migration have a reviewed atomic integration.
+ * First-owner bootstrap is opt-in only with a server-supplied attestation
+ * verifier; production HTTP still rejects construction pending legacy cutover.
  */
-export function createWebAuthnVerifier({ allowedOrigins } = {}) {
+export function createWebAuthnVerifier({ allowedOrigins, bootstrapAdmission } = {}) {
   const origins = configuredOrigins(allowedOrigins);
+  const admission = configuredBootstrapAdmission(bootstrapAdmission, origins);
   return Object.freeze({
-    async bootstrap() { deny('verifier_unavailable'); },
+    async bootstrap(input) {
+      if (!admission) deny('verifier_unavailable');
+      const ceremony = ceremonyFor(input, 'bootstrap');
+      const credential = credentialResponse(input.credential, 'registration');
+      const attestation = appAttestation(input.appAttestation, ceremony.platform);
+      const proof = verifyBootstrapWalletProof(ceremony, credential, input.walletProof);
+      const expectedApplication = admission.application[ceremony.platform];
+      try {
+        const result = await admission.verifyAppAttestation(Object.freeze({
+          platform: ceremony.platform,
+          expectedNonce: proof.attestationNonce,
+          expectedApplication,
+          attestation: Object.freeze(attestation),
+        }));
+        exact(result, ['platform', 'nonce', 'application']);
+        if (result.platform !== ceremony.platform || result.nonce !== proof.attestationNonce ||
+            result.application !== expectedApplication) deny('verification_failed');
+        const registration = await verifyRegistrationResponse({
+          response: credential,
+          expectedChallenge: ceremony.challenge,
+          expectedOrigin: origins[ceremony.platform],
+          expectedRPID: RP_ID,
+          requireUserPresence: true,
+          requireUserVerification: true,
+          supportedAlgorithmIDs: [-7, -257],
+        });
+        if (!registration?.verified) deny('verification_failed');
+        return Object.freeze({
+          credential: registrationRecord(registration.registrationInfo, credential, ceremony.userHandle),
+          walletBindingHash: proof.walletBindingHash,
+        });
+      } catch { deny('verification_failed'); }
+    },
     // These are server-only adapters for a claim returned by the SQLite core.
     // The core's orchestration path owns the claim and commits the evidence;
     // calling this adapter directly does not establish an owner or authority.

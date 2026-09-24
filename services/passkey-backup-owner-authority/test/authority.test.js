@@ -5,7 +5,7 @@ import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createOwnerAuthority } from '../src/authority.js';
 import { hash, SCOPES } from '../src/validation.js';
-import { audience, b64, proof, register, assertion, request, verifier, setup } from './fixtures.js';
+import { appAttestation, audience, b64, proof, register, assertion, request, verifier, setup } from './fixtures.js';
 
 const denies = (fn, code) => assert.throws(fn, (e) => code ? e.code === code : !!e.code);
 const rejects = (promise, code) => assert.rejects(promise, (e) => code ? e.code === code : !!e.code);
@@ -25,8 +25,25 @@ function child(message) {
 test('default production adapters deny bootstrap and never accept truthy client verification claims', async (t) => {
   const { core } = setup(t, { verifier: undefined });
   const challenge = core.beginBootstrap('android');
-  await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof }), 'verifier_unavailable');
-  await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof, verified: true }), 'invalid_request');
+  await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof,
+    appAttestation: appAttestation() }), 'verifier_unavailable');
+  await rejects(core.completeBootstrap({ ceremonyId: challenge.ceremonyId, credential: register(), walletProof: proof,
+    appAttestation: appAttestation(), verified: true }), 'invalid_request');
+});
+test('bootstrap requires platform-specific attestation evidence and never persists its transport token', async (t) => {
+  const { core, path } = setup(t);
+  const missing = core.beginBootstrap('android');
+  await rejects(core.completeBootstrap({ ceremonyId: missing.ceremonyId,
+    credential: register(), walletProof: proof }), 'invalid_request');
+  const wrongPlatform = core.beginBootstrap('android');
+  await rejects(core.completeBootstrap({ ceremonyId: wrongPlatform.ceremonyId,
+    credential: register(), walletProof: proof,
+    appAttestation: appAttestation('ios') }), 'invalid_request');
+  const token = 'Z'.repeat(256);
+  const valid = core.beginBootstrap('android');
+  await core.completeBootstrap({ ceremonyId: valid.ceremonyId, credential: register(),
+    walletProof: proof, appAttestation: { kind: 'play-integrity', token } });
+  assert.equal(readFileSync(path).includes(Buffer.from(token)), false);
 });
 test('discoverable owner authentication still requires a concrete credential user handle', async (t) => {
   const { core, bootstrap } = setup(t);
@@ -126,10 +143,12 @@ test('failed precommit never leaks success or partially creates owner/session', 
     if (armed && stage === 'beforeCommit' && ++commits === 2) throw Error('synthetic I/O after owner insert');
   } });
   const pending = core.beginBootstrap('android'); armed = true;
-  await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(), walletProof: proof }), 'store_unavailable');
+  await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(), walletProof: proof,
+    appAttestation: appAttestation() }), 'store_unavailable');
   armed = false; const restart = open();
   const pending2 = restart.beginBootstrap('android');
-  const owner = await restart.completeBootstrap({ ceremonyId: pending2.ceremonyId, credential: register(), walletProof: proof });
+  const owner = await restart.completeBootstrap({ ceremonyId: pending2.ceremonyId, credential: register(), walletProof: proof,
+    appAttestation: appAttestation() });
   assert.notEqual(owner.subject, pending.subject);
 });
 test('expired grant and observed wall rollback remain denied after restart', async (t) => {
@@ -175,9 +194,11 @@ test('revoke-all tombstone prevents Google or new-wallet bootstrap from replacin
   denies(() => core.revokeAll(owner.sessionToken), 'final_recovery_route_confirmation_required');
   core.revokeAll(owner.sessionToken, true);
   const pending = core.beginBootstrap('ios');
-  await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(b64(6)), walletProof: proof }), 'owner_already_exists');
+  await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(b64(6)), walletProof: proof,
+    appAttestation: appAttestation('ios') }), 'owner_already_exists');
   const google = core.beginBootstrap('ios');
-  await rejects(core.completeBootstrap({ ceremonyId: google.ceremonyId, credential: register(b64(6)), walletProof: { googleIdToken: 'not-evidence' } }), 'invalid_request');
+  await rejects(core.completeBootstrap({ ceremonyId: google.ceremonyId, credential: register(b64(6)),
+    walletProof: { googleIdToken: 'not-evidence' }, appAttestation: appAttestation('ios') }), 'invalid_request');
   const fresh = await bootstrap(core, b64(7), b64(10)); assert.notEqual(fresh.owner.subject, owner.subject);
 });
 test('verified discoverable authentication preserves owner across platforms with exact user handle', async (t) => {
@@ -290,7 +311,8 @@ test('PRF, phrases, ciphertext, attestation extras and Google identity are rejec
   }
   for (const extra of ['phrase', 'ciphertext', 'googleIdToken', 'privateKey']) {
     const pending = core.beginBootstrap('ios');
-    await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(b64(7)), walletProof: proof, [extra]: 'secret' }), 'invalid_request');
+    await rejects(core.completeBootstrap({ ceremonyId: pending.ceremonyId, credential: register(b64(7)), walletProof: proof,
+      appAttestation: appAttestation('ios'), [extra]: 'secret' }), 'invalid_request');
   }
 });
 test('bounded anonymous ceremony and session grant issuance denies excess without fallback', async (t) => {
