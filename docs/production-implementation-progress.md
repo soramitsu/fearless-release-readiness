@@ -2791,6 +2791,42 @@ review found no remaining issue in the ingress change. This does not enable
 production startup or migrate legacy
 credentials.
 
+The current pushed iOS candidate at `964e8fd7a4233fbcfc37da2f8e618a4aac9ac9ad` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) composes the
+disabled immutable Drive generation round trip with an authenticated owner
+grant/commit boundary. A journal-derived operation reference now reconciles
+an interrupted commit even after the head advances. A durable, one-way commit
+marker prevents a second owner CAS after a lost response or a torn marker;
+absent status remains unresolved and read-only. Promotion consumes a
+verified PRF once to decrypt and verify the exact downloaded ciphertext and
+original-wallet signing/export evidence before grant; after commit it checks
+that the authenticated head selects the same bytes. A final authenticated
+head read after the last selected-account check rejects a concurrent valid
+revision-8 successor rather than returning stale evidence. A restarted committed
+operation requires a fresh PRF proof. Ambiguous absence preserves the journal
+and prior decryptable head. The focused iOS 18.1 simulator suites passed
+**95/95** without failures/skips; changed production sources passed strict
+SwiftLint, project parsing, and diff checks. This has no production caller or
+real app-owned plaintext-wallet verifier, and recovery remains disabled.
+
+The current pushed Android candidate at `9cddc562d1babb288dbadc81556ffa0f4be582d1`
+on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+adds a disabled verified-generation promoter and existing-head candidate
+checker. It journals an immutable Drive candidate and one-way owner commit
+attempt, checks downloaded ciphertext through a one-use local PRF and
+original-key signing/export evidence before grant, then reconciles an
+ambiguous CAS through read-only operation status. A committed result requires
+exact Drive bytes, the selected Google account and a final authenticated
+head read. Two regression cases advance the head during post-CAS Drive
+readback and during the final account check. The exact local source passed
+**276/276** backup JVM tests and `detektAll` with JDK 21 and pristine pinned
+Utils. The same branch corrects a stale schema-79 assertion in real-Room
+migration instrumentation: the current schema is 80 and API 34 focused
+instrumentation passed **6/6**; the migration CI contract passed one positive
+and 107 adversarial cases. Hosted checks for this newly pushed head are still
+pending. Android first-owner enrollment, production original-key verification
+and cross-device acceptance remain open, and recovery stays compiled off.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
