@@ -124,8 +124,17 @@ commit the owner link and historical credential cohort atomically.
    entry positions, the sealed source digest, and a SHA-256 commitment to the
    specific target public rows it compared. `publicRepresentationExact: true` means the currently
    represented public fields match that sealed image; it is **not** an owner
-   proof. The tool does not verify the commitment behind `proof_sha256`, prove
-   the JSON writer has stopped, import anything, or allow production startup.
+   proof. A separate `proofMetadata` section compares retained schema-v8
+   challenge/proof metadata with the exact sealed source and each binding's
+   commitment in the same pinned SQLite read transaction. Every source
+   credential needs a matching proof aligned to the binding owner; one proof
+   commitment anchors each nonempty storage key, including keys with several
+   credentials. Its completion flag stays false for a missing or mismatched
+   proof and for an empty historical tombstone without a credential-specific
+   proof. A true flag establishes only consistency of the retained proof,
+   source and binding metadata; it does not replay the WebAuthn
+   signature transcript, prove the JSON writer has stopped, import anything,
+   or allow production startup. Schema v7 has no verified-proof table.
    It always reports `migrationPermitted: false` and exits `3` on a valid
    read-only report. A changed/unsafe image or invalid SQLite store exits `1`.
    The descriptor-pinned SQLite read rejects rollback-journal and WAL sidecars

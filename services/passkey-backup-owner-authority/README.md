@@ -127,9 +127,12 @@ The additional [sealed cutover verifier](docs/legacy-cutover.md) compares the
 quarantined image with schema-v8 public credential rows, exact counters and
 historical user handles, metadata, wallet-key scopes, and empty tombstones. It
 flags conflicting source digests, missing/extra rows and ambiguous owner
-aliasing. It remains read-only and always denies migration, including when
-`publicRepresentationExact` is true: only fresh proofs and a drained one-writer
-cutover can establish ownership and safe production admission.
+aliasing. A separate redacted `proofMetadata` section compares retained
+schema-v8 proof/challenge rows and binding commitments with the sealed source
+in one SQLite read transaction. It remains read-only and always denies
+migration, even when both public representation and proof metadata match:
+the report cannot replay WebAuthn signatures or prove a drained one-writer
+cutover.
 
 Schema v8 retains the internal `issueLegacyCutoverChallenge`,
 `claimLegacyCutoverChallenge`, `consumeLegacyCutoverClaim` and

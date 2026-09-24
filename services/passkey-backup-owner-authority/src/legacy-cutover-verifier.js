@@ -56,9 +56,9 @@ export function readSealedLegacyCredential({ legacySnapshotPath, expectedSourceS
 }
 
 /**
- * Compare a privately quarantined JSON image with schema-v7 SQLite without
- * opening either store for writing. This is a representation check only:
- * proof_sha256 is a commitment, not an authenticated ownership ceremony.
+ * Compare a privately quarantined JSON image with schema-v7/v8 SQLite without
+ * opening either store for writing. Public representation and retained proof
+ * metadata are reported separately; neither can authorize an owner link.
  * The return value can never authorize import, startup, or recovery.
  */
 export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expectedSourceSha256 }) {
@@ -82,6 +82,8 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   const credentials = new Map(target.credentials.map((row) => [row.id, row]));
   const metadata = new Map(target.legacyCredentialMetadata.map((row) => [row.credential_id, row]));
   const scopes = new Map(target.credentialScopes.map((row) => [row.credential_id, row]));
+  const challenges = new Map(target.legacyCutoverChallenges.map((row) => [row.id, row]));
+  const proofs = new Map(target.legacyCutoverVerifiedProofs.map((row) => [row.legacy_credential_id, row]));
   const ownerSubjects = new Set(target.owners.map((row) => row.subject));
   const sourceKeys = new Set(source.credentialsByStorageKey.keys());
   const sourceCredentialIds = new Set();
@@ -101,13 +103,31 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
       diagnostics.push(Object.freeze({ kind, storageEntryIndex, credentialEntryIndex }));
     } else omittedDiagnostics += 1;
   };
+  const proofCounts = {
+    retainedProofs: target.legacyCutoverVerifiedProofs.length,
+    sourceAlignedProofs: 0, ownerAlignedProofs: 0, anchoredStorageKeys: 0,
+    missingProofs: 0, unprovenEmptyTombstones: 0, discrepancies: 0,
+  };
+  const proofDiagnostics = [];
+  let omittedProofDiagnostics = 0;
+  const proofIssue = (kind, storageEntryIndex = null, credentialEntryIndex = null) => {
+    proofCounts.discrepancies += 1;
+    if (proofDiagnostics.length < MAX_DIAGNOSTICS) {
+      proofDiagnostics.push(Object.freeze({ kind, storageEntryIndex, credentialEntryIndex }));
+    } else omittedProofDiagnostics += 1;
+  };
+  if (target.schemaVersion < 8) proofIssue('verified_proof_schema_unavailable');
 
   let storageEntryIndex = 0;
   for (const [storageKey, sourceCredentials] of source.credentialsByStorageKey) {
     const index = storageEntryIndex++;
     const historicalHash = source.ownersByStorageKey.get(storageKey);
     const binding = bindings.get(storageKey);
-    if (sourceCredentials.size === 0) counts.sourceTombstones += 1;
+    if (sourceCredentials.size === 0) {
+      counts.sourceTombstones += 1;
+      proofCounts.unprovenEmptyTombstones += 1;
+      proofIssue('empty_tombstone_has_no_credential_proof', index);
+    }
     if (!binding) issue('storage_binding_missing', index);
     else {
       let exact = true;
@@ -137,10 +157,48 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
       historicalHashesByOwner.get(binding.owner).add(historicalHash);
     }
     let credentialEntryIndex = 0;
+    let bindingAnchorMatched = false;
     for (const [id, sourceCredential] of sourceCredentials) {
       const credentialIndex = credentialEntryIndex++;
       counts.sourceCredentials += 1;
       sourceCredentialIds.add(id);
+      const proof = proofs.get(id);
+      if (!proof) {
+        proofCounts.missingProofs += 1;
+        proofIssue('verified_proof_missing', index, credentialIndex);
+      } else {
+        const challenge = challenges.get(proof.challenge_id);
+        if (!challenge || challenge.state !== 2) {
+          proofIssue('verified_proof_source_mismatch', index, credentialIndex);
+        } else if (challenge.storage_key !== storageKey) {
+          proofIssue('verified_proof_storage_key_mismatch', index, credentialIndex);
+        } else if (proof.source_sha256 !== expectedSourceSha256 ||
+            challenge.source_sha256 !== expectedSourceSha256 ||
+            challenge.snapshot_name !== `legacy-${expectedSourceSha256}.json`) {
+          proofIssue('verified_proof_source_mismatch', index, credentialIndex);
+        } else if (challenge.legacy_owner_hash !== historicalHash ||
+            challenge.legacy_credential_id !== id || proof.legacy_credential_id !== id ||
+            challenge.legacy_public_key_sha256 !== createHash('sha256')
+              .update(Buffer.from(sourceCredential.publicKey, 'base64url')).digest('hex') ||
+            challenge.legacy_counter !== sourceCredential.counter ||
+            challenge.legacy_user_handle !== sourceCredential.userId ||
+            challenge.legacy_scope !== 'storage' || challenge.rp_id !== 'fearlesswallet.io' ||
+            challenge.owner !== proof.owner ||
+            proof.legacy_device_type !== sourceCredential.deviceType ||
+            proof.legacy_backed_up !== Number(sourceCredential.backedUp)) {
+          proofIssue('verified_proof_credential_mismatch', index, credentialIndex);
+        } else {
+          proofCounts.sourceAlignedProofs += 1;
+          if (!binding || binding.owner !== proof.owner ||
+              binding.source_sha256 !== expectedSourceSha256 ||
+              binding.legacy_owner_hash !== historicalHash) {
+            proofIssue('verified_proof_binding_owner_mismatch', index, credentialIndex);
+          } else {
+            proofCounts.ownerAlignedProofs += 1;
+            if (binding.proof_sha256 === proof.proof_sha256) bindingAnchorMatched = true;
+          }
+        }
+      }
       const targetCredential = credentials.get(id);
       const targetMetadata = metadata.get(id);
       const targetScope = scopes.get(id);
@@ -177,6 +235,10 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
       }
       if (exact) counts.matchedCredentials += 1;
     }
+    if (sourceCredentials.size > 0) {
+      if (bindingAnchorMatched) proofCounts.anchoredStorageKeys += 1;
+      else proofIssue('verified_proof_binding_anchor_missing', index);
+    }
   }
   for (const owners of ownersByHistoricalHash.values()) {
     if (owners.size !== 1) issue('historical_owner_split');
@@ -200,12 +262,24 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
       counts.targetOwnerOnlyCredentials += 1;
     }
   }
+  for (const proof of target.legacyCutoverVerifiedProofs) {
+    if (proof.source_sha256 === expectedSourceSha256 && !sourceCredentialIds.has(proof.legacy_credential_id)) {
+      proofIssue('verified_proof_not_in_source');
+    }
+  }
   return Object.freeze({ schemaVersion: 1, mode: 'read-only', migrationPermitted: false,
     publicRepresentationExact: counts.discrepancies === 0,
     sourceSha256: expectedSourceSha256, comparedTargetRowsSha256,
     sourceSchemaVersion: source.needsMigration ? 3 : 4,
     ownerSchemaVersion: target.schemaVersion, counts: Object.freeze(counts),
     diagnostics: Object.freeze(diagnostics), omittedDiagnostics,
+    proofMetadata: Object.freeze({
+      sourceAndBindingMetadataComplete: target.schemaVersion === 8 && counts.sourceCredentials > 0 &&
+        proofCounts.ownerAlignedProofs === counts.sourceCredentials &&
+        proofCounts.anchoredStorageKeys === counts.sourceStorageKeys - counts.sourceTombstones &&
+        proofCounts.discrepancies === 0,
+      counts: Object.freeze(proofCounts),
+      diagnostics: Object.freeze(proofDiagnostics), omittedDiagnostics: omittedProofDiagnostics }),
     blockers: Object.freeze([
       'fresh_legacy_credential_assertion_and_random_owner_proof_unverified',
       'legacy_json_writer_drain_unverified',

@@ -775,6 +775,19 @@ export function readOwnerCredentialSnapshot(path) {
     const credentialScopes = schemaVersion >= 4
       ? db.prepare('SELECT credential_id,owner,scope,storage_key FROM credential_scopes ORDER BY credential_id').all()
         .map((row) => Object.freeze({ ...row })) : [];
+    // Keep proof/challenge metadata in the same pinned read transaction as
+    // credentials and bindings. Offline comparison must not join snapshots
+    // taken from different SQLite states. This is never a migration grant.
+    const legacyCutoverChallenges = schemaVersion >= 7
+      ? db.prepare(`SELECT id,source_sha256,snapshot_name,storage_key,legacy_owner_hash,
+        legacy_credential_id,legacy_public_key_sha256,legacy_counter,legacy_user_handle,
+        legacy_scope,owner,rp_id,platform,state FROM legacy_cutover_challenges ORDER BY id`).all()
+        .map((row) => Object.freeze({ ...row })) : [];
+    const legacyCutoverVerifiedProofs = schemaVersion >= 8
+      ? db.prepare(`SELECT challenge_id,proof_sha256,source_sha256,owner,
+        legacy_credential_id,legacy_new_counter,legacy_device_type,legacy_backed_up
+        FROM legacy_cutover_verified_proofs ORDER BY challenge_id`).all()
+        .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
     assertNoSqliteSidecars(path);
     if (!sameFileImage(fileBefore, assertPrivateFileStat(fstatSync(fd))) ||
@@ -784,7 +797,9 @@ export function readOwnerCredentialSnapshot(path) {
       owners: Object.freeze(owners), credentials: Object.freeze(credentials),
       storageBindings: Object.freeze(storageBindings),
       legacyCredentialMetadata: Object.freeze(legacyCredentialMetadata),
-      credentialScopes: Object.freeze(credentialScopes) });
+      credentialScopes: Object.freeze(credentialScopes),
+      legacyCutoverChallenges: Object.freeze(legacyCutoverChallenges),
+      legacyCutoverVerifiedProofs: Object.freeze(legacyCutoverVerifiedProofs) });
   } catch {
     try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
     deny('store_unavailable');

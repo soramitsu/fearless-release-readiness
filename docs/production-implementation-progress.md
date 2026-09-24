@@ -2607,6 +2607,21 @@ attacker insertion path or production caller was found. Final signed-app
 Keychain/App Attest identity and live-device owner ceremonies remain separate
 acceptance evidence, as does independent human security review.
 
+The owner authority's sealed legacy-cutover report now compares retained
+schema-v8 proof/challenge metadata and binding commitments with the exact
+digest-pinned historical JSON image in the same read-only SQLite snapshot.
+It reports redacted proof diagnostics separately from public-record equality;
+missing, forged, cross-source or cross-key proof metadata and empty historical
+tombstones cannot appear as complete proof coverage. For multiple credentials
+on one storage key, every credential needs an aligned proof and the key needs
+one matching binding anchor; a second unproved credential keeps coverage
+incomplete. The report still always
+returns `migrationPermitted: false`, and it does not replay signatures, import
+credentials or prove the JSON writer was drained. The owner suite passed
+**253/253**, focused cutover tests **65/65**, syntax lint and diff checks pass.
+An independent read-only code review found no actionable issue in this diff;
+human security approval and the production one-writer cutover remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

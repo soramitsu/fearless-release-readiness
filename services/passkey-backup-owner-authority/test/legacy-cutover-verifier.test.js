@@ -79,6 +79,14 @@ test('sealed v4 public rows, exact legacy handle/counter and empty tombstone com
   assert.equal(report.mode, 'read-only');
   assert.equal(report.migrationPermitted, false);
   assert.equal(report.publicRepresentationExact, true);
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.deepEqual(report.proofMetadata.counts, {
+    retainedProofs: 0, sourceAlignedProofs: 0, ownerAlignedProofs: 0, anchoredStorageKeys: 0,
+    missingProofs: 1, unprovenEmptyTombstones: 1, discrepancies: 3,
+  });
+  assert.deepEqual(report.proofMetadata.diagnostics.map((entry) => entry.kind),
+    ['verified_proof_missing', 'verified_proof_binding_anchor_missing',
+      'empty_tombstone_has_no_credential_proof']);
   assert.match(report.comparedTargetRowsSha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(report.counts, {
     sourceStorageKeys: 2, sourceCredentials: 1, sourceTombstones: 1,
@@ -91,6 +99,7 @@ test('sealed v4 public rows, exact legacy handle/counter and empty tombstone com
   assert.equal(JSON.stringify(report).includes(key), false);
   assert.equal(JSON.stringify(report).includes(item.first.subject), false);
   assert.equal(JSON.stringify(report).includes(b64(2)), false);
+  assert.equal(JSON.stringify(report).includes(item.source.credentialsByStorageKey[0].credentials[0].userId), false);
   assert.deepEqual(readFileSync(item.path), beforeSqlite);
   assert.deepEqual(readFileSync(item.legacySnapshotPath), beforeSource);
   assert.equal(readOwnerCredentialSnapshot(item.path).credentials[0].user_handle,
@@ -99,6 +108,19 @@ test('sealed v4 public rows, exact legacy handle/counter and empty tombstone com
   const reopened = verifySealedLegacyCutover(item.args);
   assert.equal(reopened.publicRepresentationExact, true);
   assert.equal(reopened.comparedTargetRowsSha256, report.comparedTargetRowsSha256);
+});
+
+test('a v7 consumed claim has no verified-proof schema or migration authority', async (t) => {
+  const item = await fixture(t);
+  downgradeStoreFixture(item.path, 7);
+  const report = verifySealedLegacyCutover(item.args);
+  assert.equal(report.ownerSchemaVersion, 7);
+  assert.equal(report.publicRepresentationExact, true);
+  assert.equal(report.migrationPermitted, false);
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.ok(report.proofMetadata.diagnostics.some((entry) =>
+    entry.kind === 'verified_proof_schema_unavailable'));
+  assert.equal(report.proofMetadata.counts.sourceAlignedProofs, 0);
 });
 
 test('sealed v3 source is compared without migrating its JSON file', async (t) => {
