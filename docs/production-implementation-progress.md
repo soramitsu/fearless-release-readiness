@@ -2260,7 +2260,10 @@ Synthetic verifier/wallet fixtures do not establish native GPM, owner-service
 authentication, real original-wallet restoration, or iOS↔Android replacement
 device acceptance. No recovery UI or feature flag was enabled. Exact-head
 hosted `validate`, `release-contracts` and release-safety checks pass; build
-and human review are pending. A scoped Codex Security diff scan of the exact
+also passed on the exact `3600325812dbf965b4e9978285a82f6cf1c6bbc0`
+head after 55 minutes 39 seconds. The hosted Signed Release archive gate
+step was skipped, so there is still no Apple-delivered acceptance; human
+review remains pending. A scoped Codex Security diff scan of the exact
 `7fbd883a557bc49665b60362930eaafd3c11594e..3600325812dbf965b4e9978285a82f6cf1c6bbc0`
 change found zero reportable findings with complete coverage of four changed
 source/test files, plus two contextual documentation files (scan
@@ -2363,9 +2366,13 @@ complete coverage of both changed production source files, with the lockfile,
 tests and docs read as context
 (scan `102f3db5-2c2d-40c2-8d08-859f4f628644`, report SHA-256
 `1e83d60df2377e21dae1ffa866bca9156b40f3caa62d9d5512dbd8023e06ca48`).
-The subsequent manual review found the spoofable metadata above. The corrected
-source requires a fresh scoped review; neither scan is the required independent
-human approval.
+The subsequent manual review found the spoofable metadata above. A separate
+scoped scan of the corrective
+`39d90f737c94f124091da66696ccafe6d8ded94e..8dbac74ee31b1ebc3950e696e2c55dd8331c7a39`
+diff found zero remaining reportable findings and complete coverage of its one
+changed production source file (scan `1372c9ce-bf3d-4781-84d4-e875818fea0f`,
+report SHA-256 `28a8a3652fc7d41dc445e398d48abaec3df6e11744b46fb612db88efd478ef15`).
+Neither static scan is the required independent human approval.
 
 ## Completion record
 
