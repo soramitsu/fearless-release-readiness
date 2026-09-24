@@ -2622,6 +2622,46 @@ credentials or prove the JSON writer was drained. The owner suite passed
 An independent read-only code review found no actionable issue in this diff;
 human security approval and the production one-writer cutover remain open.
 
+The current iOS recovery-source commit
+`2507a32fbaec6a4d4247b3705aed9867c3ff98e7` adds a bounded read-only
+owner-head HTTP adapter and rejects a changed owner head or revoked owner
+session after exact Drive readback and local original-key proof. The owner
+response must match the session's owner and namespace, the selected Google
+storage-account binding and exact generation history; duplicate decoded JSON
+keys, extra fields and coercions fail closed. Its signed iOS 18.1 arm64
+simulator suite passed **38/38** on the split, project-wired source. The new
+source file passes SwiftFormat and strict SwiftLint; Xcode project syntax and
+diff checks pass. An independent read-only static review of this exact iOS
+diff found no actionable issue in owner-head parsing, bearer handling,
+Drive/local-proof checks or project wiring; it does not replace human release
+approval or live-device testing. The preceding iOS commit's hosted `validate`,
+`release-contracts`, `ios-release-safety` and `build` all passed. On the new
+head, `validate`, `release-contracts` and `ios-release-safety` pass while
+`build` is still pending. Root commit `e5d3790` now has all
+three exact-head hosted checks (`verify`, `verify-owner`, `validate`) passing.
+The read-only client does not create an owner session, install a wallet or
+enable recovery; there is still no deployed owner authority or device proof.
+
+Android commit `d30e027a2a27ba252e4f64de9589e705e9133731` advances the
+disabled portable receiver's Room reservation schema to v80. Each reserved
+local wallet ID now retains its exact FPWMSM01 wallet ID and historical source
+position. Replay compares those identities with the encrypted cohort and
+quarantines substitutions; legacy v79 pending rows are bound only when the
+same journal remains present. The schema migration preserves existing wallet
+rows and the reserved-ID trigger, while permanently abandoned IDs stay fenced.
+The compatibility release gate now requires seven released-schema→80 matrix
+cases and the v79→80 origin-reservation test (41 exact identities across its
+modules); the full profile requires both real Room restart/replay tests and a
+343-test floor. Focused JVM stager tests passed **18/18**, migration policy
+**6/6**, API 34 core-db tests **10/10**, and real Room tests **2/2**. The
+result-parser suite passed two positive and 40 negative fixtures, CI-gate
+fixtures one positive and 107 negative, and evidence packaging **49/49**.
+An independent read-only diff review found no actionable issue; this is
+static component review, not production security or device approval. Exact-head
+hosted Android `validate` passed; `build-and-test` and IAS context checks are
+pending. API 30/31/36 matrix, Play-signed upgrade and actual cohort secret
+installation/signing/export remain open. Portable recovery stays disabled.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
