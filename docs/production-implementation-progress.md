@@ -25,23 +25,24 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `92dae82f310281c4e32cc83e44de382471b58cc6` and
-`9d5aac5e73f7f6354f7c8a85175ab267470704b6`, respectively. Both clean app
+candidates are `d54007148aec9cb92f993c4ecfc3be09ec708fde` and
+`1088b2ba7e2966b02291fda3f1950af059ef1846`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
-316/316 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
-The exact iOS source-proof and Keychain projection suites passed 64/64 iOS 18.1
+320/320 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+The exact iOS source-proof and Keychain readback suites passed 67/67 iOS 18.1
 arm64 Release simulator tests; the preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
-the new heads remain in progress. An internal diff review of the preceding
+the new iOS head remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
 recommendation was fixed before the current journal change.
 Protected qualification,
 independent human security approval and signed distribution acceptance remain
-outstanding. The latest Android source composes V1, V2 and V3 original-source
-proofs across a mixed signing/watch cohort and rejects orphan or foreign
-source records. It remains read-only, with no app-owned exporter or installed
-replacement-key proof. Its exact pinned Utils and WebSocket source check passes;
-PR #1260's new hosted jobs are pending.
+outstanding. The latest Android source captures an app-owned, read-only
+V1/V2/V3 cohort after original-source proof and exact wallet-scoped secret
+inventory checks. It has no installed replacement-key proof or recovery
+integration. Its exact pinned Utils and WebSocket source check passes; the
+new-head hosted CI has started, while the preceding head passed IAS validation
+and validate and still has build-and-test pending.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2967,13 +2968,54 @@ SwiftLint, scoped SwiftFormat, syntax and diff checks passed. This does not
 prove atomic Core Data/Keychain installation, original-key export/readback,
 provider recovery, or a decryptable cross-device backup; recovery stays off.
 
+The next iOS source at `1088b2ba7e2966b02291fda3f1950af059ef1846`
+adds a read-only proof over the destination tags planned by the receive
+journal. It reads each installed Keychain source twice through the app's
+keystore interface, requires exact bytes and stable second reads, and fails
+without making writes on missing, changed or unavailable keys. Tampered
+journals fail before Keychain access. The exact final-source iOS 18.1 arm64
+Release simulator suites passed **67/67** tests with no failures or skips;
+strict SwiftLint, SwiftFormat, project syntax and diff checks passed. This
+proof does not perform Core Data/Keychain installation or establish
+original-key signing/export on a replacement device.
+
+Android source `d54007148aec9cb92f993c4ecfc3be09ec708fde` adds an
+application-owned verified semantic exporter behind an internal, unwired
+entry point. It captures the current Room wallet/chain cohort, requires one
+selected wallet, proves V1/V2/V3 original signing sources and the exact
+wallet-scoped encrypted secret namespaces against a supplied V2 genesis
+policy, and rechecks the cohort and metadata under the cross-store lock before
+returning a fresh caller-owned plaintext buffer. It writes no custody marker
+and clears the encoded buffer on failure. An unmapped chain/asset preference
+blocks export instead of being silently lost. The final account suite passed
+**320/320**, default and forced scoped Detekt passed, the pinned Utils and
+WebSocket source check passed, and the exact committed release source tree
+passed in a clean detached checkout. The working checkout's direct source-tree
+check encounters a pre-existing ignored legacy-audit document, which was
+preserved. Globally orphaned secret namespaces, the compiled route/genesis
+policy, rejected preference mappings, transactional receive installation,
+original-key signing/export on a replacement device, backup upload/promotion
+and device acceptance remain open. Recovery stays disabled.
+
+The site association source remains on review-pending PR #49 and its preview check
+passed. A direct live verification of `https://fearlesswallet.io` still fails:
+Android association lacks the required response header and login-credential
+delegation; Apple association has the wrong content type on the extensionless
+path, lacks the required header and webcredentials entry, and the deployed
+payloads differ from the PR candidate. The Play-distributed certificate is
+not yet independently matched. The available GitHub identity received HTTP
+404 for the Android release-build reviewer variable and release environments,
+so the protected signing governance cannot be verified from this host; that
+result is an access/configuration prerequisite, not evidence that those
+resources are absent.
+
 Neither mobile candidate has a production feature enabled. CI checks for the
 new heads, independent human security review, deployed one-writer authority, Drive/OAuth
 provisioning, signed upgrades and cross-platform device acceptance remain
-release gates. The Android app-owned exporter must eventually return a fresh,
-caller-owned buffer because first-generation preparation erases the exported
-plaintext after encryption; no production exporter exists yet. Iroha remains
-entirely with its owner on `optimizations`.
+release gates. The Android app-owned exporter returns a fresh, caller-owned
+buffer because first-generation preparation erases exported plaintext after
+encryption; that internal exporter is not connected to the production backup
+workflow. Iroha remains entirely with its owner on `optimizations`.
 
 ## Completion record
 
