@@ -1842,7 +1842,7 @@ pass; the hosted build is running, and independent review remains required.
 The owner authority's non-deployed HTTP candidate now exposes authenticated
 backup-head read, operation-status reconciliation, generation-grant issuance
 and metadata commit. Reads and grant issuance require the live owner session;
-commit requires both its exact-body one-use generation grant and the matching
+commit requires both its canonical-request one-use grant and the matching
 owner session in the same SQLite transaction. It cannot use a legacy
 challenge-route grant or accept a grant copied to another owner's session.
 The HTTP regression covers wrong/missing tokens, secret fields, altered
@@ -1851,6 +1851,33 @@ and syntax checks pass. These metadata routes do not verify Drive bytes or
 client-side decryption, and the candidate still rejects production
 construction. Legacy JSON credential cutover, real attestation and native
 end-to-end recovery remain release gates.
+
+The scoped security diff scan of root source
+`0e2210a04aa362ee7bc0e95dabb935f979ecf81c..f33fddc226bb88f25aad6bfc2b0506ef8154e977`
+completed with zero reportable findings and complete coverage of the two
+changed owner-authority source files. Its snapshot digest is
+`codex-security-snapshot/v1:sha256:2e2c99d68ff61f86e22cb0a46cf87200601019027bae8f2d3da1c673b85407f8`.
+This static scoped scan is supporting evidence only; it is not independent
+release security approval and does not cover live attestation, migration,
+Drive interoperability or replacement-device recovery. Root exact-head
+`f33fddc226bb88f25aad6bfc2b0506ef8154e977` passed its hosted
+validate, verify and verify-owner checks; reviewer approval is still required.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to clean, pushed `83cf8a5a4d5e75bd86277d94d95f9b1bd5aaa20a`.
+The new pure storage projection revalidates exact FPWCAI01 and FPWMSM01
+material and preserves logical wallet, chain, favorite, custody, metadata,
+V1/V2/V3 secret and opaque source-sidecar intents, including standalone EVM
+and native TON roots. It rejects repeated public or chain identities and
+makes no Room or encrypted-preference writes. Final-source scoped Detekt
+passes; the account module passes 276/276 tests, including 10/10 cohort
+cases. Exact-head hosted validate passes; build-and-test and IAS candidate
+validation are running. The earlier unsigned AAB is tied to
+`0cc66140b33b823caf772f22732652c95f60d124`, not this new head.
+The atomic installer, Room ID reservation, unsigned-position/backup-state
+policy, custody proof, installed original-key signing/export and both
+replacement-device directions remain blockers; portable recovery stays
+disabled.
 
 ## Completion record
 
