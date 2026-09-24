@@ -790,10 +790,12 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
         if ((state.head?.bundleSha256 ?? null) !== request.expectedHeadSha256) deny('head_conflict');
         const epoch = decimal(request.keyEpoch, 1);
         const priorEpoch = state.head === null ? 0 : Number(state.head.keyEpoch);
+        const rotationFloor = tx.query('SELECT minimum_epoch FROM key_rotation_floors WHERE owner=?', owner.subject)?.minimum_epoch ?? 1;
         // A new key can advance only one epoch at the exact accepted head.
         // This is a metadata fence, not proof that a client generated, uploaded
         // and successfully decrypted a replacement with surviving credentials.
-        if (state.head === null ? epoch !== 1 : epoch !== priorEpoch && epoch !== priorEpoch + 1) {
+        if (epoch < rotationFloor ||
+            (state.head === null ? epoch !== 1 : epoch !== priorEpoch && epoch !== priorEpoch + 1)) {
           deny('key_epoch_transition_required');
         }
         // An immutable FPBKGEN1 generation commits its own ID and parent in

@@ -1891,6 +1891,55 @@ wallets already on a replacement device; ID reservation, atomic installation,
 backup-state/custody mapping, original-key signing/export and live two-way
 restore remain blocked. No storage write or feature enablement was added.
 
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) advanced
+to clean, pushed `cf0a89b97ca051380d4213d7e24bf1a4611d4c01`. Its
+read-only receiving Keychain projection now requires each chain account's
+recorded entropy, seed and derivation bytes to match a scoped original-source
+item in the same journal-bound cohort. Missing or conflicting sources fail
+before a write. The exact-source focused simulator suite passes 10/10 on iOS
+26.5; both touched Swift files pass strict SwiftLint and SwiftFormat. The
+previously recorded TON service and audit results remain tied to
+`9b94c9e9396bbd24fdfb91c4a77b5cb717d75495`; this new head has fresh
+hosted checks in progress. Android opaque source sidecars remain unsupported
+by the iOS projection, and there is no transactional receiving installer or
+cross-platform replacement-device proof. Recovery remains disabled.
+
+The non-deployed owner authority now uses explicit SQLite schema v6 to fence
+backup-key epochs after credential revocation. A trigger raises a durable
+per-owner minimum epoch on every live-credential revoke, including the
+grant-bound legacy mutation path. A same-epoch backup metadata commit then
+fails; a new session after session-only revocation can still publish at the
+existing epoch. Migration from v5 conservatively requires one successor
+epoch for an owner with historical revoked credentials because v5 cannot prove
+whether its last backup preceded those revocations. Startup and read-only
+snapshot checks reject missing fence triggers or inconsistent state. The
+full owner suite passes 162/162 when test files run serially; the previous
+parallel invocation had two cross-process timing failures, so `npm test` now
+serializes files while retaining the explicit multi-process race cases.
+Syntax checks pass. This checks declared epoch metadata only: mobile code
+must still create a fresh random backup key, rewrap it for surviving
+credentials, verify download and decryption, and safely retire compromised
+copies. No owner service has been deployed or enabled.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced again to clean, pushed `448017a6af0cf36432258e1c950140d276f86de6`.
+Fresh-install cohort staging checks an empty Room wallet set under the shared
+wallet mutation mutex, then atomically stores the encrypted cohort journal
+with token-bound per-ID reservation markers. Both signed and watch-only
+wallet creation reject a pending cohort; an orphan marker or a journal with
+any missing marker blocks new staging/creation until reconciliation. Exact
+token abandonment compares the unchanged journal and every reservation
+before removing them. The full account module passes 291/291 tests without
+skips; default Detekt and forced scoped cohort/watch Detekt pass. A forced
+all-eight-touched-file Detekt run still exposes pre-existing coordinator/test
+formatting debt, as recorded in the Android status document. No Room wallet
+row or target signing secret is installed, and a future installer must repeat
+the Room and secret-namespace checks to account for bypass or cross-process
+writers. Backup-state/custody mapping, original-key signing/export on an
+installed replacement device, and both cross-platform device directions are
+still blocked. Exact-head hosted validate passes; build-and-test and IAS
+validation remain pending.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

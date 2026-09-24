@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync } from 
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, base64, deny, hash, opaque } from './validation.js';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
  operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
@@ -145,9 +145,36 @@ BEGIN
   NEW.directed_credential_id IS NOT OLD.directed_credential_id;
 END;
 `;
+// Any actual credential revocation fences the next accepted backup at a new
+// key epoch. A persisted floor also survives a later rotation, so another
+// revocation raises it again from the then-current head. A v5 migration must
+// conservatively fence owners with historical revocations: their order relative
+// to the existing backup head cannot be reconstructed from v5 metadata.
+const KEY_ROTATION_SCHEMA = `
+CREATE TABLE key_rotation_floors (
+ owner TEXT PRIMARY KEY REFERENCES owners(subject),
+ minimum_epoch INTEGER NOT NULL CHECK(minimum_epoch>0)
+) STRICT;
+CREATE TRIGGER key_rotation_floor_no_decrease BEFORE UPDATE ON key_rotation_floors
+WHEN NEW.owner!=OLD.owner OR NEW.minimum_epoch<OLD.minimum_epoch
+BEGIN SELECT RAISE(ABORT,'rotation floor cannot decrease'); END;
+CREATE TRIGGER key_rotation_floor_no_delete BEFORE DELETE ON key_rotation_floors
+BEGIN SELECT RAISE(ABORT,'rotation floor cannot be deleted'); END;
+CREATE TRIGGER credential_revoke_rotation AFTER UPDATE OF revoked ON credentials
+WHEN OLD.revoked=0 AND NEW.revoked=1
+BEGIN
+ INSERT INTO key_rotation_floors(owner,minimum_epoch)
+ VALUES(NEW.owner,COALESCE((
+  SELECT o.key_epoch+1 FROM backup_heads h
+  JOIN backup_operations o ON o.operation_id=h.operation_id
+  WHERE h.owner=NEW.owner
+ ),1))
+ ON CONFLICT(owner) DO UPDATE SET minimum_epoch=MAX(minimum_epoch,excluded.minimum_epoch);
+END;
+`;
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=5)) STRICT;
-INSERT INTO meta VALUES(1,0,0,5);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=6)) STRICT;
+INSERT INTO meta VALUES(1,0,0,6);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -184,7 +211,8 @@ ${LEGACY_COHORT_SCHEMA}
 ${CREDENTIAL_SCOPE_TABLE}
 ${CREDENTIAL_SCOPE_TRIGGERS}
 ${PENDING_CHALLENGE_SCHEMA}
-PRAGMA user_version=5;
+${KEY_ROTATION_SCHEMA}
+PRAGMA user_version=6;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -221,6 +249,21 @@ INSERT INTO meta_v5 SELECT id,wall,observed,5 FROM meta WHERE id=1 AND version=4
 DROP TABLE meta;
 ALTER TABLE meta_v5 RENAME TO meta;
 PRAGMA user_version=5;
+`;
+const MIGRATE_V5_TO_V6 = `
+${KEY_ROTATION_SCHEMA}
+INSERT INTO key_rotation_floors(owner,minimum_epoch)
+ SELECT c.owner,COALESCE((
+  SELECT o.key_epoch+1 FROM backup_heads h
+  JOIN backup_operations o ON o.operation_id=h.operation_id
+  WHERE h.owner=c.owner
+ ),1)
+ FROM credentials c WHERE c.revoked=1 GROUP BY c.owner;
+CREATE TABLE meta_v6 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=6)) STRICT;
+INSERT INTO meta_v6 SELECT id,wall,observed,6 FROM meta WHERE id=1 AND version=5;
+DROP TABLE meta;
+ALTER TABLE meta_v6 RENAME TO meta;
+PRAGMA user_version=6;
 `;
 
 function validateLegacyCohortSchema(db) {
@@ -271,6 +314,19 @@ function validatePendingChallengeSchema(db) {
     }
     if (row.user_handle !== hash(Buffer.from(`user\0${row.storage_key}`, 'utf8'))) deny('store_invalid');
   }
+}
+
+function validateKeyRotationSchema(db) {
+  db.prepare('SELECT owner,minimum_epoch FROM key_rotation_floors LIMIT 0').all();
+  for (const name of ['credential_revoke_rotation', 'key_rotation_floor_no_decrease', 'key_rotation_floor_no_delete']) {
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?").get(name)) deny('store_invalid');
+  }
+  if (db.prepare(`SELECT 1 FROM credentials c LEFT JOIN key_rotation_floors f ON f.owner=c.owner
+    WHERE c.revoked=1 AND f.owner IS NULL LIMIT 1`).get() ||
+      db.prepare(`SELECT 1 FROM key_rotation_floors f LEFT JOIN backup_heads h ON h.owner=f.owner
+    LEFT JOIN backup_operations o ON o.operation_id=h.operation_id
+    WHERE (h.owner IS NULL AND f.minimum_epoch!=1) OR
+      (h.owner IS NOT NULL AND (o.operation_id IS NULL OR f.minimum_epoch>o.key_epoch+1)) LIMIT 1`).get()) deny('store_invalid');
 }
 
 function assertPrivateFileStat(st, directory = false) {
@@ -367,6 +423,11 @@ export class AuthorityStore {
         if (!create && migrate && oldVersion === 4 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 4) {
           this.#db.exec(MIGRATE_V4_TO_V5);
+          oldVersion = 5;
+        }
+        if (!create && migrate && oldVersion === 5 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 5) {
+          this.#db.exec(MIGRATE_V5_TO_V6);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -377,6 +438,7 @@ export class AuthorityStore {
         validateLegacyCohortSchema(this.#db);
         validateCredentialScopeSchema(this.#db);
         validatePendingChallengeSchema(this.#db);
+        validateKeyRotationSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -464,13 +526,14 @@ export function readOwnerCredentialSnapshot(path) {
     // through an fd alias might otherwise omit an uncheckpointed sidecar.
     if (db.prepare('PRAGMA journal_mode').get().journal_mode !== 'delete') deny('store_invalid');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-    if (![2, 3, 4, SCHEMA_VERSION].includes(schemaVersion) ||
+    if (![2, 3, 4, 5, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
     if (schemaVersion >= 3) validateLegacyCohortSchema(db);
     if (schemaVersion >= 4) validateCredentialScopeSchema(db);
-    if (schemaVersion === SCHEMA_VERSION) validatePendingChallengeSchema(db);
+    if (schemaVersion >= 5) validatePendingChallengeSchema(db);
+    if (schemaVersion >= 6) validateKeyRotationSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()

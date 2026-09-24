@@ -23,7 +23,7 @@ function readSealedSource(path, expectedSha256) {
 }
 
 /**
- * Compare a privately quarantined JSON image with schema-v5 SQLite without
+ * Compare a privately quarantined JSON image with schema-v6 SQLite without
  * opening either store for writing. This is a representation check only:
  * proof_sha256 is a commitment, not an authenticated ownership ceremony.
  * The return value can never authorize import, startup, or recovery.
@@ -38,7 +38,7 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   }
   const source = readSealedSource(legacySnapshotPath, expectedSourceSha256);
   const target = readOwnerCredentialSnapshot(ownerPath);
-  if (target.schemaVersion !== 5) deny('cutover_owner_schema_mismatch');
+  if (target.schemaVersion !== 6) deny('cutover_owner_schema_mismatch');
   const comparedTargetRowsSha256 = createHash('sha256')
     .update('FP_LEGACY_PUBLIC_STATE_V1\0')
     .update(JSON.stringify([target.owners, target.credentials, target.storageBindings,

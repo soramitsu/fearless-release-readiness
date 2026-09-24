@@ -148,6 +148,7 @@ test('surviving credential can publish one-step key rotation after revocation wi
   const restored = await core.completeAuthentication({ ceremonyId: core.beginAuthentication('ios').ceremonyId,
     credential: assertion(challenge.userHandle, b64(6)) });
   assert.equal(restored.subject, owner.subject);
+  denies(() => commit(core, restored.sessionToken, { ...rotated, keyEpoch: '1' }), 'key_epoch_transition_required');
   const result = commit(core, restored.sessionToken, rotated);
   assert.equal(result.descriptor.keyEpoch, '2');
   const head = core.readBackupHead(restored.sessionToken);
@@ -160,6 +161,90 @@ test('surviving credential can publish one-step key rotation after revocation wi
   denies(() => commit(core, restored.sessionToken, { ...next, keyEpoch: '1' }), 'key_epoch_transition_required');
   denies(() => commit(core, restored.sessionToken, { ...next, keyEpoch: '4' }), 'key_epoch_transition_required');
   assert.equal(commit(core, restored.sessionToken, { ...next, keyEpoch: '2' }).descriptor.keyEpoch, '2');
+});
+
+test('a second credential revocation requires another epoch even after the first rotation', async (t) => {
+  const { core, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const first = candidate(owner);
+  commit(core, owner.sessionToken, first);
+  const secondCredential = await core.completeEnrollment({
+    ceremonyId: core.beginEnrollment(owner.sessionToken).ceremonyId,
+    sessionToken: owner.sessionToken, credential: register(b64(6)),
+  });
+  core.revokeCredential(secondCredential.sessionToken, b64(2), true);
+  const secondSession = await core.completeAuthentication({
+    ceremonyId: core.beginAuthentication('android').ceremonyId,
+    credential: assertion(challenge.userHandle, b64(6)),
+  });
+  const second = candidate(owner, { operationId: b64(33), generationId: b64(34),
+    expectedHeadRevision: '1', expectedHeadSha256: first.bundleSha256,
+    bundleSha256: 'c'.repeat(64), keyEpoch: '2', driveFileId: 'drive-second' });
+  commit(core, secondSession.sessionToken, second);
+  const thirdCredential = await core.completeEnrollment({
+    ceremonyId: core.beginEnrollment(secondSession.sessionToken).ceremonyId,
+    sessionToken: secondSession.sessionToken, credential: register(b64(7)),
+  });
+  core.revokeCredential(thirdCredential.sessionToken, b64(6), true);
+  const thirdSession = await core.completeAuthentication({
+    ceremonyId: core.beginAuthentication('ios').ceremonyId,
+    credential: assertion(challenge.userHandle, b64(7)),
+  });
+  const third = candidate(owner, { operationId: b64(35), generationId: b64(36),
+    expectedHeadRevision: '2', expectedHeadSha256: second.bundleSha256,
+    bundleSha256: 'd'.repeat(64), keyEpoch: '3', driveFileId: 'drive-third' });
+  denies(() => commit(core, thirdSession.sessionToken, { ...third, keyEpoch: '2' }), 'key_epoch_transition_required');
+  assert.equal(commit(core, thirdSession.sessionToken, third).descriptor.keyEpoch, '3');
+});
+
+test('session revocation alone leaves backup key epoch unchanged', async (t) => {
+  const { core, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const first = candidate(owner);
+  commit(core, owner.sessionToken, first);
+  core.revokeSessions(owner.sessionToken);
+  const restored = await core.completeAuthentication({
+    ceremonyId: core.beginAuthentication('ios').ceremonyId,
+    credential: assertion(challenge.userHandle),
+  });
+  const next = candidate(owner, { operationId: b64(23), generationId: b64(24),
+    expectedHeadRevision: '1', expectedHeadSha256: first.bundleSha256,
+    bundleSha256: 'c'.repeat(64), driveFileId: 'drive-after-session-revoke' });
+  assert.equal(commit(core, restored.sessionToken, next).descriptor.keyEpoch, '1');
+});
+
+test('explicit v5 migration conservatively fences a historical revoked credential', async (t) => {
+  const { core, path, open, bootstrap } = setup(t);
+  const { owner, challenge } = await bootstrap();
+  const first = candidate(owner);
+  commit(core, owner.sessionToken, first);
+  const enrolled = await core.completeEnrollment({
+    ceremonyId: core.beginEnrollment(owner.sessionToken).ceremonyId,
+    sessionToken: owner.sessionToken, credential: register(b64(6)),
+  });
+  core.revokeCredential(enrolled.sessionToken, b64(2), true);
+  const restored = await core.completeAuthentication({
+    ceremonyId: core.beginAuthentication('ios').ceremonyId,
+    credential: assertion(challenge.userHandle, b64(6)),
+  });
+  core.close();
+  downgradeStoreFixture(path, 5);
+  denies(() => open(), 'store_unavailable');
+  const migrated = open({ migrate: true });
+  const next = candidate(owner, { operationId: b64(23), generationId: b64(24),
+    expectedHeadRevision: '1', expectedHeadSha256: first.bundleSha256,
+    bundleSha256: 'c'.repeat(64), driveFileId: 'drive-after-v5-migration' });
+  denies(() => commit(migrated, restored.sessionToken, next), 'key_epoch_transition_required');
+  assert.equal(commit(migrated, restored.sessionToken, { ...next, keyEpoch: '2' }).descriptor.keyEpoch, '2');
+  const db = new DatabaseSync(path);
+  try {
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(db.prepare('SELECT minimum_epoch FROM key_rotation_floors WHERE owner=?').get(owner.subject).minimum_epoch, 2);
+    assert.throws(() => db.prepare('UPDATE key_rotation_floors SET minimum_epoch=1 WHERE owner=?').run(owner.subject),
+      /rotation floor cannot decrease/);
+    assert.throws(() => db.prepare('DELETE FROM key_rotation_floors WHERE owner=?').run(owner.subject),
+      /rotation floor cannot be deleted/);
+  } finally { db.close(); }
 });
 
 test('two separate writers cannot both commit the same expected head', async (t) => {
