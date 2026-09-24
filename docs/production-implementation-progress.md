@@ -2411,6 +2411,15 @@ production owner HTTP integration or replacement-device proof. The recovery
 flag remains false; earlier unsigned AAB/device evidence belongs to an older
 Android commit.
 
+A scoped Codex Security diff scan of
+`ab6fb583185a6f1a7e524fe9844840fcc2950ea5..a1338aa8af0efe377decd282f0f6b3a550d46501`
+completed with four of four changed security-relevant source/policy items
+reviewed and zero reportable findings (scan
+`ee981941-007f-40ad-aa20-fb785a7c35e8`, report SHA-256
+`8810a692aa4de66f7e38635a71ee925784fdc1431a1360e560cf331196508ab6`).
+This static diff review is not an independent human approval or real provider
+qualification.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
