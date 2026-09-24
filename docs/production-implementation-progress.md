@@ -26,10 +26,11 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are identified below. Earlier test and CI results qualify only
-their respective commits. The current iOS exact-head checks have passed;
-Android exact-head build and IAS checks are still pending. Both app trees are
-on review branches, and independent security review, protected qualification
-and distribution acceptance remain outstanding.
+their respective commits. Android's exact-head build, tests and IAS candidate
+validation have passed; the IAS artifact handoff was skipped. iOS release
+safety checks have passed while its hosted build remains in progress. Both app
+trees are on review branches, and independent security review, protected
+qualification and distribution acceptance remain outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2174,6 +2175,47 @@ signature transcript or import authorization; an intentional 128-row lifetime
 cap also makes this preparation path unsuitable as a deployed migration
 service. No owner link, historical credential import, production HTTP route or
 recovery enablement was added.
+
+## Exact-source Android 16 KiB emulator evidence — 2026-09-24
+
+The clean Android `29c49af93f69b6dc22666b07b37f6bad0ef4295d` unsigned
+Release AAB (`dc5a7eec398c07282813d6b46ce0f7dd025ead66ee2d387d900b219de02d60b6`)
+was converted with pinned bundletool 1.18.3 into device-specific APKs and
+installed on a fresh API 36 `google_apis_ps16k` arm64 emulator. The emulator
+reported a 16,384-byte page size and Android 16 build fingerprint
+`google/sdk_gphone16k_arm64/emu64a16k:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys`.
+The app cold-launched and relaunched into `WalletRootActivity`; its process
+remained alive with no fatal or native-loader error in the isolated startup
+log. The local receipt is
+`fearless-Android-production-consolidated-20260731/build/reports/android-api36-ps16k-runtime-29c49af9.json`
+(SHA-256 `39e582351f59f6d64ec382e3f2c20f01842b17eaf4359f683e98d67e4e05a099`).
+Bundletool used local debug signing for these APKs, so this is not a
+Play-distributed installation or signed upgrade.
+
+The first local instrumentation attempt selected a dirty, older sibling Utils
+checkout and failed dependency verification; disabling verification only
+revealed its AGP version conflict. With strict verification and the exact
+clean pinned Utils `1c80a2bf3fa1f996cf1328873e09f282ee29b69e` and
+WebSocket `9714b30b6a16d40a2122765077bb71cf44314798` source checkouts,
+the `PortableWalletRootSigningProofDeviceTest` passed 2/2 on that same
+16 KiB emulator, with zero failures, errors or skips. It loaded the arm64
+SR25519 JNI in a debug instrumentation APK, proved signing from the portable
+root and matching iOS scalar/nonce vector, and rejected substituted or
+ambiguous keys. Receipt:
+`fearless-Android-production-consolidated-20260731/build/reports/android-api36-ps16k-native-signing-29c49af9.json`
+(SHA-256 `6ad84d22c28d72124eca9e4fe2be8644c001bfd77935f1c8cd1dd4846c89786e`).
+These checks strengthen emulator native-compatibility evidence but do not
+qualify physical devices, Play-signed release signing, in-place upgrades,
+other native paths or portable recovery.
+
+A scoped Codex Security diff scan of root
+`da8f9f456d7dbb83d32483a4c1f1441c2dbb48bf..6542bcb60cd4ba3f24677924d1b2e1561856b12f`
+found zero reportable findings with complete coverage of its three changed
+production source files (scan `8858cdaf-0f88-46b1-888f-9369eba6a405`,
+report SHA-256 `eb66e3523a1a94326a22f40e3b3e17ff5a54c827fd464bd077caf9611852ac84`).
+This is scoped patch evidence, not independent human review, live service
+qualification or authorization to enable recovery. Root `verify` and
+`verify-owner` pass at that exact head; hosted `validate` remains in progress.
 
 ## Completion record
 
