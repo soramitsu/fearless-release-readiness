@@ -27,10 +27,12 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are identified below. Earlier test and CI results qualify only
 their respective commits. Android's exact-head build, tests and IAS candidate
-validation have passed; the IAS artifact handoff was skipped. iOS release
-safety checks have passed while its hosted build remains in progress. Both app
-trees are on review branches, and independent security review, protected
-qualification and distribution acceptance remain outstanding.
+validation have passed; the IAS artifact handoff was skipped. The preceding
+iOS `7fbd883a` candidate passed all its hosted checks; the latest
+`36003258` candidate has passed `validate`, with its hosted build and
+release-contract checks still running. Both app trees are on review branches,
+and independent security review, protected qualification and distribution
+acceptance remain outstanding.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -2237,6 +2239,27 @@ by the release workflow is not visible through this access. The local process
 has no release-keystore inputs. These observations leave the real upload-key,
 tag-signer and protected-signing path unqualified; no production signing or
 Play publication was attempted.
+
+## Disabled iOS replacement-device readback step — 2026-09-24
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) is clean
+and pushed at `3600325812dbf965b4e9978285a82f6cf1c6bbc0`. Its disabled
+recovery path now has an assertion-only, one-use PRF restore gate: a fresh
+credential-directed assertion must pass an injected server verifier before
+the local PRF output can be used. A separate read-only verifier downloads the
+Drive generation named by the authenticated owner head, unwraps and decrypts it
+locally, checks original-wallet identity/signing/export evidence, and rechecks
+the selected Google account after that asynchronous work. It returns redacted
+local evidence, not an installation or server-head mutation. The focused iOS
+26/Xcode 27 simulator suite passed 65/65; its final local log is
+`fearless-iOS-production-consolidated-20260731/build/passkey-head-readback-ios26-final.log`
+(SHA-256 `1cd2598591d8ee79e7b153b4bd2a5751823e975adaeb0e5271abdfad7cb730ff`).
+An iOS 18.4 simulator compiled but could not launch because that local runtime
+lacked `libswiftWebKit.dylib`; the existing iOS minimum was not changed.
+Synthetic verifier/wallet fixtures do not establish native GPM, owner-service
+authentication, real original-wallet restoration, or iOS↔Android replacement
+device acceptance. No recovery UI or feature flag was enabled. Exact-head
+hosted `validate` passes; build, release-contracts and human review are pending.
 
 ## Completion record
 
