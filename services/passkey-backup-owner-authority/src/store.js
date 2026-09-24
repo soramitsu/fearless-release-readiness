@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync } from 
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, base64, deny, hash, opaque } from './validation.js';
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
  operation_id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES owners(subject), request_hash TEXT NOT NULL,
@@ -172,9 +172,59 @@ BEGIN
  ON CONFLICT(owner) DO UPDATE SET minimum_epoch=MAX(minimum_epoch,excluded.minimum_epoch);
 END;
 `;
+// Preparation only: a claimed pair of public WebAuthn responses can be burned,
+// but no row in this table constitutes verified ownership or permits import.
+const LEGACY_CUTOVER_CHALLENGE_SCHEMA = `
+CREATE TABLE legacy_cutover_challenges (
+ id TEXT PRIMARY KEY, version INTEGER NOT NULL CHECK(version=1),
+ source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64),
+ snapshot_name TEXT NOT NULL CHECK(snapshot_name='legacy-'||source_sha256||'.json'),
+ storage_key TEXT NOT NULL CHECK(length(storage_key) BETWEEN 8 AND 128),
+ legacy_owner_hash TEXT NOT NULL CHECK(length(legacy_owner_hash)=43),
+ legacy_credential_id TEXT NOT NULL UNIQUE, legacy_public_key_sha256 TEXT NOT NULL CHECK(length(legacy_public_key_sha256)=64),
+ legacy_counter INTEGER NOT NULL CHECK(legacy_counter BETWEEN 0 AND 4294967295),
+ legacy_user_handle TEXT NOT NULL, legacy_scope TEXT NOT NULL CHECK(legacy_scope='storage'),
+ owner TEXT NOT NULL REFERENCES owners(subject), generation INTEGER NOT NULL CHECK(generation>=0),
+ -- Preserve the bound digest as a replay tombstone even after session revocation.
+ session TEXT NOT NULL CHECK(length(session)=43),
+ owner_credential_id TEXT NOT NULL REFERENCES credentials(id),
+ owner_credential_counter INTEGER NOT NULL CHECK(owner_credential_counter BETWEEN 0 AND 4294967295),
+ rp_id TEXT NOT NULL CHECK(rp_id='fearlesswallet.io'),
+ platform TEXT NOT NULL CHECK(platform IN ('android','ios')),
+ nonce TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL CHECK(expires>=0),
+ state INTEGER NOT NULL CHECK(state IN (0,1,2)),
+ legacy_body_sha256 TEXT, owner_body_sha256 TEXT,
+ CHECK((state=0 AND legacy_body_sha256 IS NULL AND owner_body_sha256 IS NULL) OR
+       (state IN (1,2) AND legacy_body_sha256 IS NOT NULL AND owner_body_sha256 IS NOT NULL AND
+        length(legacy_body_sha256)=64 AND length(owner_body_sha256)=64))
+) STRICT;
+CREATE INDEX legacy_cutover_challenges_expiry ON legacy_cutover_challenges(expires);
+CREATE INDEX legacy_cutover_challenges_owner ON legacy_cutover_challenges(owner);
+CREATE TRIGGER legacy_cutover_challenge_transition BEFORE UPDATE ON legacy_cutover_challenges
+BEGIN
+ SELECT RAISE(ABORT,'immutable legacy cutover challenge') WHERE
+  NEW.id IS NOT OLD.id OR NEW.version IS NOT OLD.version OR
+  NEW.source_sha256 IS NOT OLD.source_sha256 OR NEW.snapshot_name IS NOT OLD.snapshot_name OR
+  NEW.storage_key IS NOT OLD.storage_key OR NEW.legacy_owner_hash IS NOT OLD.legacy_owner_hash OR
+  NEW.legacy_credential_id IS NOT OLD.legacy_credential_id OR
+  NEW.legacy_public_key_sha256 IS NOT OLD.legacy_public_key_sha256 OR
+  NEW.legacy_counter IS NOT OLD.legacy_counter OR NEW.legacy_user_handle IS NOT OLD.legacy_user_handle OR
+  NEW.legacy_scope IS NOT OLD.legacy_scope OR NEW.owner IS NOT OLD.owner OR
+  NEW.generation IS NOT OLD.generation OR NEW.session IS NOT OLD.session OR
+  NEW.owner_credential_id IS NOT OLD.owner_credential_id OR
+  NEW.owner_credential_counter IS NOT OLD.owner_credential_counter OR
+  NEW.rp_id IS NOT OLD.rp_id OR NEW.platform IS NOT OLD.platform OR
+  NEW.nonce IS NOT OLD.nonce OR NEW.expires IS NOT OLD.expires OR
+  NOT ((OLD.state=0 AND NEW.state=1 AND NEW.legacy_body_sha256 IS NOT NULL AND
+        NEW.owner_body_sha256 IS NOT NULL) OR
+       (OLD.state=1 AND NEW.state=2 AND
+        NEW.legacy_body_sha256 IS OLD.legacy_body_sha256 AND
+        NEW.owner_body_sha256 IS OLD.owner_body_sha256));
+END;
+`;
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=6)) STRICT;
-INSERT INTO meta VALUES(1,0,0,6);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=7)) STRICT;
+INSERT INTO meta VALUES(1,0,0,7);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -212,7 +262,8 @@ ${CREDENTIAL_SCOPE_TABLE}
 ${CREDENTIAL_SCOPE_TRIGGERS}
 ${PENDING_CHALLENGE_SCHEMA}
 ${KEY_ROTATION_SCHEMA}
-PRAGMA user_version=6;
+${LEGACY_CUTOVER_CHALLENGE_SCHEMA}
+PRAGMA user_version=7;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -264,6 +315,14 @@ INSERT INTO meta_v6 SELECT id,wall,observed,6 FROM meta WHERE id=1 AND version=5
 DROP TABLE meta;
 ALTER TABLE meta_v6 RENAME TO meta;
 PRAGMA user_version=6;
+`;
+const MIGRATE_V6_TO_V7 = `
+${LEGACY_CUTOVER_CHALLENGE_SCHEMA}
+CREATE TABLE meta_v7 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=7)) STRICT;
+INSERT INTO meta_v7 SELECT id,wall,observed,7 FROM meta WHERE id=1 AND version=6;
+DROP TABLE meta;
+ALTER TABLE meta_v7 RENAME TO meta;
+PRAGMA user_version=7;
 `;
 
 function validateLegacyCohortSchema(db) {
@@ -327,6 +386,42 @@ function validateKeyRotationSchema(db) {
     LEFT JOIN backup_operations o ON o.operation_id=h.operation_id
     WHERE (h.owner IS NULL AND f.minimum_epoch!=1) OR
       (h.owner IS NOT NULL AND (o.operation_id IS NULL OR f.minimum_epoch>o.key_epoch+1)) LIMIT 1`).get()) deny('store_invalid');
+}
+
+function validateLegacyCutoverChallengeSchema(db) {
+  db.prepare(`SELECT id,version,source_sha256,snapshot_name,storage_key,legacy_owner_hash,
+    legacy_credential_id,legacy_public_key_sha256,legacy_counter,legacy_user_handle,legacy_scope,
+    owner,generation,session,owner_credential_id,owner_credential_counter,rp_id,platform,
+    nonce,expires,state,legacy_body_sha256,owner_body_sha256 FROM legacy_cutover_challenges LIMIT 0`).all();
+  if (!db.prepare(`SELECT name FROM sqlite_master WHERE type='trigger' AND
+    name='legacy_cutover_challenge_transition'`).get() ||
+      db.prepare(`SELECT 1 FROM legacy_cutover_challenges p
+      LEFT JOIN sessions s ON s.digest=p.session
+      LEFT JOIN owners o ON o.subject=p.owner
+      WHERE o.subject IS NULL OR (s.digest IS NOT NULL AND
+        (s.owner!=p.owner OR s.generation!=p.generation OR s.platform!=p.platform OR
+         s.credential!=p.owner_credential_id)) LIMIT 1`).get()) deny('store_invalid');
+  const rows = db.prepare(`SELECT id,source_sha256,snapshot_name,storage_key,legacy_owner_hash,
+    legacy_credential_id,legacy_public_key_sha256,legacy_user_handle,session,owner_credential_id,
+    nonce,state,legacy_body_sha256,owner_body_sha256 FROM legacy_cutover_challenges`).all();
+  if (rows.length > 128) deny('store_invalid');
+  for (const row of rows) {
+    opaque(row.id, 'cutover.');
+    if (!/^[0-9a-f]{64}$/.test(row.source_sha256) ||
+        !/^[0-9a-f]{64}$/.test(row.legacy_public_key_sha256) ||
+        row.snapshot_name !== `legacy-${row.source_sha256}.json` ||
+        !/^[A-Za-z0-9._:-]{8,128}$/.test(row.storage_key)) deny('store_invalid');
+    base64(row.legacy_owner_hash, 32, 32);
+    base64(row.legacy_credential_id, 1, 384);
+    base64(row.legacy_user_handle, 32, 32);
+    base64(row.session, 32, 32);
+    base64(row.owner_credential_id, 1, 384);
+    base64(row.nonce, 32, 32);
+    if ((row.state === 0 && (row.legacy_body_sha256 !== null || row.owner_body_sha256 !== null)) ||
+        ([1, 2].includes(row.state) &&
+          (!/^[0-9a-f]{64}$/.test(row.legacy_body_sha256 ?? '') ||
+           !/^[0-9a-f]{64}$/.test(row.owner_body_sha256 ?? '')))) deny('store_invalid');
+  }
 }
 
 function assertPrivateFileStat(st, directory = false) {
@@ -428,6 +523,11 @@ export class AuthorityStore {
         if (!create && migrate && oldVersion === 5 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 5) {
           this.#db.exec(MIGRATE_V5_TO_V6);
+          oldVersion = 6;
+        }
+        if (!create && migrate && oldVersion === 6 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 6) {
+          this.#db.exec(MIGRATE_V6_TO_V7);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -439,6 +539,7 @@ export class AuthorityStore {
         validateCredentialScopeSchema(this.#db);
         validatePendingChallengeSchema(this.#db);
         validateKeyRotationSchema(this.#db);
+        validateLegacyCutoverChallengeSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -526,7 +627,7 @@ export function readOwnerCredentialSnapshot(path) {
     // through an fd alias might otherwise omit an uncheckpointed sidecar.
     if (db.prepare('PRAGMA journal_mode').get().journal_mode !== 'delete') deny('store_invalid');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-    if (![2, 3, 4, 5, SCHEMA_VERSION].includes(schemaVersion) ||
+    if (![2, 3, 4, 5, 6, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
@@ -534,6 +635,7 @@ export function readOwnerCredentialSnapshot(path) {
     if (schemaVersion >= 4) validateCredentialScopeSchema(db);
     if (schemaVersion >= 5) validatePendingChallengeSchema(db);
     if (schemaVersion >= 6) validateKeyRotationSchema(db);
+    if (schemaVersion >= 7) validateLegacyCutoverChallengeSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()

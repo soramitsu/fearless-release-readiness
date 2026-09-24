@@ -22,8 +22,36 @@ function readSealedSource(path, expectedSha256) {
   return parseCredentialStoreSnapshotBytes(before);
 }
 
+/** Exact public credential from an independently named and digest-pinned private image.
+ * This is source evidence only: it proves neither wallet ownership nor that the
+ * live JSON writer has stopped. No source bytes or public key enter the report.
+ */
+export function readSealedLegacyCredential({ legacySnapshotPath, expectedSourceSha256, storageKey, credentialId }) {
+  if (typeof legacySnapshotPath !== 'string' || !isAbsolute(legacySnapshotPath) ||
+      typeof expectedSourceSha256 !== 'string' || !SHA256_HEX.test(expectedSourceSha256) ||
+      basename(legacySnapshotPath) !== `legacy-${expectedSourceSha256}.json` ||
+      typeof storageKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(storageKey) ||
+      typeof credentialId !== 'string') deny('cutover_invalid_request');
+  const source = readSealedSource(legacySnapshotPath, expectedSourceSha256);
+  const cohort = source.credentialsByStorageKey.get(storageKey);
+  const credential = cohort?.get(credentialId);
+  if (!credential) deny('cutover_source_credential_missing');
+  return Object.freeze({
+    sourceSha256: expectedSourceSha256,
+    snapshotName: `legacy-${expectedSourceSha256}.json`,
+    storageKey,
+    legacyOwnerHash: source.ownersByStorageKey.get(storageKey),
+    legacyCredentialId: credential.id,
+    legacyPublicKeySha256: createHash('sha256').update(Buffer.from(credential.publicKey, 'base64url')).digest('hex'),
+    legacyCounter: credential.counter,
+    legacyUserHandle: credential.userId,
+    legacyScope: 'storage',
+    legacyRegistrationPlatform: credential.registrationPlatform,
+  });
+}
+
 /**
- * Compare a privately quarantined JSON image with schema-v6 SQLite without
+ * Compare a privately quarantined JSON image with schema-v7 SQLite without
  * opening either store for writing. This is a representation check only:
  * proof_sha256 is a commitment, not an authenticated ownership ceremony.
  * The return value can never authorize import, startup, or recovery.
@@ -38,7 +66,7 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   }
   const source = readSealedSource(legacySnapshotPath, expectedSourceSha256);
   const target = readOwnerCredentialSnapshot(ownerPath);
-  if (target.schemaVersion !== 6) deny('cutover_owner_schema_mismatch');
+  if (target.schemaVersion !== 7) deny('cutover_owner_schema_mismatch');
   const comparedTargetRowsSha256 = createHash('sha256')
     .update('FP_LEGACY_PUBLIC_STATE_V1\0')
     .update(JSON.stringify([target.owners, target.credentials, target.storageBindings,

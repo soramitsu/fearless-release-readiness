@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { AuthorityStore } from './store.js';
+import { readSealedLegacyCredential } from './legacy-cutover-verifier.js';
 import {
   AuthorityError, RP_ID, appAttestation, backupFlags, base64, counter, credentialRecord, credentialResponse,
   deny, exact, hash, opaque, platform, random, requestBinding, walletProof,
@@ -31,7 +33,48 @@ function prune(tx) {
   tx.run('DELETE FROM sessions WHERE expires<=?', tx.now);
   tx.run('DELETE FROM ceremonies WHERE expires<=?', tx.now);
   tx.run('DELETE FROM pending_challenges WHERE expires<=?', tx.now);
+  tx.run('DELETE FROM legacy_cutover_challenges WHERE expires<=?', tx.now);
   tx.run('DELETE FROM limits WHERE bucket<?', Math.floor(tx.now / 60_000) - 1);
+}
+
+function sha256Hex(value) { return createHash('sha256').update(value).digest('hex'); }
+
+function cutoverSource(input) {
+  try { return readSealedLegacyCredential(input); }
+  catch { deny('cutover_source_invalid'); }
+}
+
+// Positional public transcript. The role prefix separates the two WebAuthn
+// challenges even though they belong to one durable, single-use nonce.
+function cutoverAssertionChallenge(row, role) {
+  const fields = [row.version, row.source_sha256, row.snapshot_name, row.storage_key,
+    row.legacy_owner_hash, row.legacy_credential_id, row.legacy_public_key_sha256,
+    row.legacy_counter, row.legacy_user_handle, row.legacy_scope,
+    row.owner, row.generation, row.session, row.owner_credential_id,
+    row.owner_credential_counter, row.rp_id, row.platform, row.nonce, row.expires];
+  return hash(Buffer.from(`FP_LEGACY_CUTOVER_${role}_V1\0${JSON.stringify(fields)}`, 'utf8'));
+}
+
+function cutoverAssertions(row, legacyAssertion, ownerAssertion, ownerUserHandle) {
+  // Both credential IDs are fixed in the claimed challenge. A directed
+  // assertion may omit userHandle, but any supplied handle must match.
+  const legacy = credentialResponse(legacyAssertion, 'authentication', { allowNullUserHandle: true });
+  const owner = credentialResponse(ownerAssertion, 'authentication', { allowNullUserHandle: true });
+  if (legacy.id !== row.legacy_credential_id ||
+      (legacy.response.userHandle !== null && legacy.response.userHandle !== row.legacy_user_handle) ||
+      owner.id !== row.owner_credential_id ||
+      (owner.response.userHandle !== null && owner.response.userHandle !== ownerUserHandle)) deny();
+  return { legacyBodySha256: sha256Hex(JSON.stringify(legacy)),
+    ownerBodySha256: sha256Hex(JSON.stringify(owner)) };
+}
+
+function matchingCutoverSource(row, source) {
+  return source.sourceSha256 === row.source_sha256 && source.snapshotName === row.snapshot_name &&
+    source.storageKey === row.storage_key && source.legacyOwnerHash === row.legacy_owner_hash &&
+    source.legacyCredentialId === row.legacy_credential_id &&
+    source.legacyPublicKeySha256 === row.legacy_public_key_sha256 &&
+    source.legacyCounter === row.legacy_counter && source.legacyUserHandle === row.legacy_user_handle &&
+    source.legacyScope === row.legacy_scope;
 }
 function createLimit(tx, owner) {
   prune(tx);
@@ -435,6 +478,128 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     beginEnrollment(token) {
       const verifiedPlatform = store.transaction((tx) => session(tx, token).platform);
       return challenge('enrollment', verifiedPlatform, token);
+    },
+    // Internal preparation only. A sealed image and an owner session identify
+    // the two public credentials to challenge; neither establishes a link.
+    issueLegacyCutoverChallenge(sessionToken, input) {
+      exact(input, ['schemaVersion', 'legacySnapshotPath', 'expectedSourceSha256', 'storageKey', 'credentialId']);
+      if (input.schemaVersion !== 1) deny('invalid_request');
+      return store.transaction((tx) => {
+        const current = session(tx, sessionToken);
+        createLimit(tx, current.owner);
+        const source = cutoverSource(input);
+        const owner = activeOwner(tx, current.owner, current.generation);
+        const ownerCredential = activeCredential(tx, current.credential, owner.subject);
+        if (tx.query('SELECT 1 FROM credentials WHERE id=?', source.legacyCredentialId) ||
+            tx.query('SELECT 1 FROM storage_bindings WHERE storage_key=?', source.storageKey) ||
+            tx.query('SELECT 1 FROM storage_bindings WHERE legacy_owner_hash=? AND owner!=?',
+              source.legacyOwnerHash, owner.subject) ||
+            tx.query('SELECT 1 FROM storage_bindings WHERE owner=? AND legacy_owner_hash!=?',
+              owner.subject, source.legacyOwnerHash) ||
+            tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE legacy_owner_hash=? AND owner!=?',
+              source.legacyOwnerHash, owner.subject) ||
+            tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE owner=? AND legacy_owner_hash!=?',
+              owner.subject, source.legacyOwnerHash) ||
+            tx.query(`SELECT 1 FROM legacy_cutover_challenges WHERE storage_key=? AND
+              (legacy_owner_hash!=? OR owner!=? OR source_sha256!=?)`,
+            source.storageKey, source.legacyOwnerHash, owner.subject, source.sourceSha256) ||
+            tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE legacy_owner_hash=? AND source_sha256!=?',
+              source.legacyOwnerHash, source.sourceSha256) ||
+            tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE owner=? AND source_sha256!=?',
+              owner.subject, source.sourceSha256)) deny('cutover_identity_collision');
+        if (tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges').n >= 128 ||
+            tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges WHERE owner=?', owner.subject).n >= 8 ||
+            tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE legacy_credential_id=?',
+              source.legacyCredentialId)) deny('rate_limited');
+        const expires = Math.floor(Math.min(current.expires, tx.now + CEREMONY_MS) / 1000) * 1000;
+        if (expires <= tx.now) deny();
+        const row = {
+          id: random('cutover.'), version: 1,
+          source_sha256: source.sourceSha256, snapshot_name: source.snapshotName,
+          storage_key: source.storageKey, legacy_owner_hash: source.legacyOwnerHash,
+          legacy_credential_id: source.legacyCredentialId,
+          legacy_public_key_sha256: source.legacyPublicKeySha256,
+          legacy_counter: source.legacyCounter, legacy_user_handle: source.legacyUserHandle,
+          legacy_scope: source.legacyScope,
+          owner: owner.subject, generation: owner.generation, session: current.digest,
+          owner_credential_id: ownerCredential.id, owner_credential_counter: ownerCredential.counter,
+          rp_id: RP_ID, platform: current.platform, nonce: random(), expires,
+        };
+        tx.run(`INSERT INTO legacy_cutover_challenges VALUES(
+          ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL)`,
+        row.id, row.version, row.source_sha256, row.snapshot_name, row.storage_key,
+        row.legacy_owner_hash, row.legacy_credential_id, row.legacy_public_key_sha256,
+        row.legacy_counter, row.legacy_user_handle, row.legacy_scope, row.owner,
+        row.generation, row.session, row.owner_credential_id, row.owner_credential_counter,
+        row.rp_id, row.platform, row.nonce, row.expires);
+        return Object.freeze({ schemaVersion: 1, challengeId: row.id,
+          sourceSha256: row.source_sha256, snapshotName: row.snapshot_name,
+          storageKey: row.storage_key, legacyCredentialId: row.legacy_credential_id,
+          ownerSubject: row.owner, ownerCredentialId: row.owner_credential_id,
+          rpId: row.rp_id, platform: row.platform,
+          legacyChallenge: cutoverAssertionChallenge(row, 'LEGACY'),
+          ownerChallenge: cutoverAssertionChallenge(row, 'OWNER'), expiresAt: expires / 1000,
+          migrationPermitted: false });
+      });
+    },
+    // Claim the exact pair before an asynchronous verifier can run. This API
+    // does not invoke a verifier or elevate either response to proof.
+    claimLegacyCutoverChallenge(sessionToken, input) {
+      exact(input, ['schemaVersion', 'challengeId', 'legacyAssertion', 'ownerAssertion']);
+      if (input.schemaVersion !== 1) deny('invalid_request');
+      opaque(input.challengeId, 'cutover.');
+      return store.transaction((tx) => {
+        const row = tx.query('SELECT * FROM legacy_cutover_challenges WHERE id=?', input.challengeId);
+        if (!row || row.state !== 0 || row.expires <= tx.now) deny();
+        const current = session(tx, sessionToken);
+        const owner = activeOwner(tx, row.owner, row.generation);
+        const ownerCredential = activeCredential(tx, row.owner_credential_id, owner.subject);
+        if (current.digest !== row.session || current.owner !== row.owner ||
+            current.generation !== row.generation || current.platform !== row.platform ||
+            current.credential !== row.owner_credential_id ||
+            ownerCredential.counter !== row.owner_credential_counter) deny();
+        const responses = cutoverAssertions(row, input.legacyAssertion, input.ownerAssertion,
+          ownerCredential.user_handle);
+        tx.run(`UPDATE legacy_cutover_challenges SET state=1,legacy_body_sha256=?,owner_body_sha256=?
+          WHERE id=? AND state=0`, responses.legacyBodySha256, responses.ownerBodySha256, row.id);
+        return Object.freeze({ schemaVersion: 1, challengeId: row.id,
+          legacyChallenge: cutoverAssertionChallenge(row, 'LEGACY'),
+          ownerChallenge: cutoverAssertionChallenge(row, 'OWNER'),
+          state: 'claimed-unverified', expiresAt: row.expires / 1000,
+          migrationPermitted: false });
+      });
+    },
+    // Burns the claim after rechecking both public response commitments and
+    // the sealed source under the SQLite writer lock. It never accepts proof.
+    consumeLegacyCutoverClaim(sessionToken, input) {
+      exact(input, ['schemaVersion', 'challengeId', 'legacySnapshotPath', 'expectedSourceSha256',
+        'legacyAssertion', 'ownerAssertion']);
+      if (input.schemaVersion !== 1) deny('invalid_request');
+      opaque(input.challengeId, 'cutover.');
+      return store.transaction((tx) => {
+        const row = tx.query('SELECT * FROM legacy_cutover_challenges WHERE id=?', input.challengeId);
+        if (!row || row.state !== 1 || row.expires <= tx.now ||
+            input.expectedSourceSha256 !== row.source_sha256) deny();
+        const current = session(tx, sessionToken);
+        const owner = activeOwner(tx, row.owner, row.generation);
+        const ownerCredential = activeCredential(tx, row.owner_credential_id, owner.subject);
+        if (current.digest !== row.session || current.owner !== row.owner ||
+            current.generation !== row.generation || current.platform !== row.platform ||
+            current.credential !== row.owner_credential_id ||
+            ownerCredential.counter !== row.owner_credential_counter) deny();
+        const source = cutoverSource({ legacySnapshotPath: input.legacySnapshotPath,
+          expectedSourceSha256: input.expectedSourceSha256,
+          storageKey: row.storage_key, credentialId: row.legacy_credential_id });
+        if (!matchingCutoverSource(row, source)) deny('cutover_source_invalid');
+        const responses = cutoverAssertions(row, input.legacyAssertion, input.ownerAssertion,
+          ownerCredential.user_handle);
+        if (responses.legacyBodySha256 !== row.legacy_body_sha256 ||
+            responses.ownerBodySha256 !== row.owner_body_sha256) deny();
+        tx.run('UPDATE legacy_cutover_challenges SET state=2 WHERE id=? AND state=1', row.id);
+        return Object.freeze({ schemaVersion: 1, challengeId: row.id,
+          state: 'consumed-unverified', expiresAt: row.expires / 1000,
+          migrationPermitted: false });
+      });
     },
     // Internal only: the storage binding must already be independently proven.
     // No Google identity or wallet label can create or infer it here.

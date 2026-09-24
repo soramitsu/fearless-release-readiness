@@ -3,7 +3,7 @@
 This is a design for a future, reviewed migration. **No live credential route is
 converted or admitted by this document.** The current challenge HTTP process
 writes schema-4 JSON after separate grant introspection; the owner authority
-uses schema-6 SQLite. Its local HTTP candidate requires explicit test admission
+uses schema-7 SQLite. Its local HTTP candidate requires explicit test admission
 and rejects production construction. The read-only reconciliation
 report always denies migration. Its two file snapshots are sequential and are
 not proof of ownership or an atomic cross-store view.
@@ -37,6 +37,25 @@ digest and exact public credential cohort. It must not contain a recovery phrase
 private key, PRF output, backup key, Google token or decrypted backup. A proof
 for one storage key must not authorize another, even if account names match.
 
+Schema v7 implements only the preparation state machine for that future proof:
+an internal API issues two role-separated challenges bound to the sealed JSON
+digest/name, historical storage key and owner hash, source credential ID,
+public-key digest, counter, user handle and scope, random owner/session and
+credential counter, RP, platform, nonce and expiry. A single-use claim stores
+only hashes of the two typed public responses before asynchronous verification;
+a subsequent burn rechecks those hashes and the exact sealed source under the
+SQLite writer lock. At most 128 rows globally and eight per owner are retained,
+with a two-minute maximum lifetime. Claimed and consumed rows remain replay
+tombstones until expiry even after session revocation. Neither step verifies a
+WebAuthn signature, establishes an owner link, imports a credential or permits
+migration. Pending claims for a storage key and historical owner must use the
+same sealed source digest and random owner; a commit that crosses expiry cannot
+return successful claim or consume authority. An ID-directed assertion may omit
+its user handle, but any supplied handle must match the stored credential.
+The future proof validator must independently verify both fresh
+assertions against their exact stored public keys and challenges before a
+reviewed import transaction can use this state.
+
 ## Cutover transaction and admission
 
 1. Stop and drain the sole JSON writer and all outstanding challenge/grant
@@ -46,7 +65,7 @@ for one storage key must not authorize another, even if account names match.
    conflicting owner hash, missing proof, changed snapshot or an owner binding
    already claimed by another namespace. Never initialize an empty database to
    bypass failure.
-2. SQLite schema v6 has storage-key→random-owner binding and capacity for
+2. SQLite schema v7 has storage-key→random-owner binding and capacity for
    complete historical public metadata and zero-credential tombstones. It
    preserves credential-scoped historical user handles in `credentials` rather
    than replacing them with `owners.user_handle`, and records explicit owner-wide
@@ -70,7 +89,7 @@ for one storage key must not authorize another, even if account names match.
    `legacy-<sha256>.json` image against its independently supplied digest and
    compares **every** source storage key, empty tombstone, credential ID,
    COSE public key, historical user handle, counter, device/backup/revocation
-   state, AAGUID, transports, platform and wallet-key scope with schema-v6
+   state, AAGUID, transports, platform and wallet-key scope with schema-v7
    SQLite. It checks each binding's exact source digest and historical owner
    hash, rejects missing/extra target rows and flags split historical hashes
    or merged random-owner aliases. Its report gives only aggregate counts and
@@ -131,7 +150,7 @@ session, grant, owner generation, credential public key/handle/counter and
 storage-key mapping under one SQLite writer lock before consuming the grant
 and committing the mutation. A null response user handle is admissible only
 when the claimed challenge already names the same credential ID. An ID supplied
-by an adapter without the claimed server record is insufficient. Schema v6
+by an adapter without the claimed server record is insufficient. Schema v7
 implements this **internal** issue/claim/commit state machine for an already
 proven storage binding. The internal server-owned WebAuthn adapter now verifies
 the claimed nonce, RP, configured platform origin, UV/UP, registration
@@ -148,7 +167,7 @@ the historical key from the exact wallet ID and account name but refuses to
 create an owner/key link from those names. Its `credentials/list` projection
 consumes a grant in that transaction and returns only live credentials scoped
 to the key with preserved public historical metadata; a bound empty tombstone
-lists empty. The route tests compare explicit v4→v6 metadata preservation,
+lists empty. The route tests compare explicit v4→v7 metadata preservation,
 check a frozen legacy key/handle vector, and serialize a two-process grant
 race. They use manually seeded proof commitments and do not prove any JSON
 credential was safely assigned to a random owner. All seven live HTTP routes
@@ -165,7 +184,7 @@ proven wallet key in the same SQLite transaction; the internal wallet-key
 revoke-all leaves owner-wide recovery credentials alone. Missing scope rows
 invalidate the store. This still does not authorize a live registration: its
 pending challenge and verified public metadata must bind the exact storage
-key before a new wallet-key credential can be inserted. The internal v6
+key before a new wallet-key credential can be inserted. The internal v7
 registration commit now performs that atomic insert when such a proven
 binding exists; no live route or import creates the binding.
 
@@ -185,7 +204,7 @@ The owner core's `consumeGrant` now returns
 closed schema-1 response rejects that extra field before calling any of its
 four HTTP mutation handlers. This prevents this non-deployed owner core from
 being accidentally wired as a grant source for the JSON writer. The marker
-names the protocol fence, not the database schema version; v6 retains it.
+names the protocol fence, not the database schema version; v7 retains it.
 It does not convert a route, prove a legacy owner, or make two stores atomic; a future
 integrated HTTP service needs a new reviewed, explicit owner-authority contract.
 The trusted introspection endpoint must preserve the marker; a proxy or
