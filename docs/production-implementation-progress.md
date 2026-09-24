@@ -29,8 +29,8 @@ candidates are identified below. Earlier test and CI results qualify only
 their respective commits. Android's exact-head build, tests and IAS candidate
 validation have passed; the IAS artifact handoff was skipped. The preceding
 iOS `7fbd883a` candidate passed all its hosted checks; the latest
-`36003258` candidate has passed `validate`, with its hosted build and
-release-contract checks still running. Both app trees are on review branches,
+`36003258` candidate has passed `validate`, release-contracts and release
+safety, with its hosted build still running. Both app trees are on review branches,
 and independent security review, protected qualification and distribution
 acceptance remain outstanding.
 
@@ -2259,7 +2259,14 @@ lacked `libswiftWebKit.dylib`; the existing iOS minimum was not changed.
 Synthetic verifier/wallet fixtures do not establish native GPM, owner-service
 authentication, real original-wallet restoration, or iOS↔Android replacement
 device acceptance. No recovery UI or feature flag was enabled. Exact-head
-hosted `validate` passes; build, release-contracts and human review are pending.
+hosted `validate`, `release-contracts` and release-safety checks pass; build
+and human review are pending. A scoped Codex Security diff scan of the exact
+`7fbd883a557bc49665b60362930eaafd3c11594e..3600325812dbf965b4e9978285a82f6cf1c6bbc0`
+change found zero reportable findings with complete coverage of four changed
+source/test files, plus two contextual documentation files (scan
+`1e9e8023-239c-45f4-a223-5d19bf6b64e3`, report SHA-256
+`81ed72b52d81c9a48118f88dc6beabf72344e0c1d61c959ffed5cd3e00f39304`).
+The scan is not independent human review or provider/device qualification.
 
 ## Completion record
 
