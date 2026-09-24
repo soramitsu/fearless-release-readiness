@@ -1357,6 +1357,37 @@ at `8c814c2527ce6b4d7465a9ef9fc8c3d533b2ba93` passed its `verify`,
 only; the shipping source/artifact manifest and independent reviews remain
 open.
 
+## First-owner admission and exact iOS restore writes — 2026-09-24
+
+The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
+advanced to pushed `6f1ad83cfe09028b1d88140b64603b5b61e56fd4`. The
+metadata-only owner authority now has an opt-in first-owner verifier that
+requires an Ed25519 or secp256k1 wallet signature over the random owner,
+challenge, RP, platform, user handle and every accepted public registration
+field. A separate typed Play Integrity or App Attest input is bound to the
+signed proof by an exact nonce and configured app identity. Android's
+WebAuthn origin must agree with the configured Play signing certificate.
+The default verifier and production HTTP still deny bootstrap; neither a
+Google nor Apple attestation verifier is provisioned, SR25519 proof is not
+implemented, and native interoperability and historical one-writer cutover
+remain open. The final service suite passes 120/120, syntax checks and diff
+checks pass. A supplemental scoped read-only review found no concrete
+bypass; this does not replace the required independent security review.
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced through pushed `3d56e0f72` and
+`011c6ff86b816c2c1bc7b99c660093737edb1166`. An explicit Core Data
+restore-write mode can now remove obsolete chain-account and asset-visibility
+rows and clear an earlier native TON identity while ordinary wallet saves
+retain their released merge behavior. A scoped review found stale ecosystem
+metadata on retained chain rows and a duplicate-visibility regression in
+ordinary saves; both were corrected in the final source. The exact-source
+iPhone 15/iOS 17.2 mapper suite passes 14/14, with SwiftFormat's existing
+22 findings and strict SwiftLint's existing count reduced from 12 to 11;
+diff checks pass. This write mode is not wired to the portable receive plan,
+has no cross-store transaction journal, and does not establish replacement-
+device recovery. Hosted build CI and formal security review remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
