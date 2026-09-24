@@ -1551,6 +1551,20 @@ installed wallet's signing/export behavior. The transactional installer,
 Android-source mapping, replacement-device recovery and independent review
 remain open.
 
+## iOS root-source coverage in receive projection — 2026-09-24
+
+The iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `66523499dfbde61828677f39dfd04153fdfb8116`.
+The journal-bound Keychain projection now rejects a cohort if an active
+Substrate or EVM root lacks its original signer item, or a native TON root
+lacks its required phrase item. It also rejects wallet-wide entropy that
+disagrees with the corresponding signed root field. Candidate destination IDs
+are not considered fresh until an installer proves they are unoccupied under
+its writer lock. The exact-source iPhone 15/iOS 17.2 focused suite passes
+7/7; targeted SwiftFormat, strict SwiftLint and diff checks pass. This still
+does not write a destination, prove every optional export source, or qualify
+replacement-device recovery.
+
 ## Android API 34 current-schema instrumentation — 2026-09-24
 
 The Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
