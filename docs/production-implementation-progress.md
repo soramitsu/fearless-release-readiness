@@ -1291,6 +1291,18 @@ production file still passes SwiftFormat and strict SwiftLint, and the
 modified test file retains the same baseline rule counts. Hosted CI,
 independent review and the actual installer remain open.
 
+The iOS PR then advanced to pushed
+`a97a7c69be6b9ad3da75576b92e4997eda1c0281`. A scoped read-only review
+found that the receive plan did not explicitly block unmapped favorite and
+metadata state, a false wallet-initialized flag, or Android chain names and
+initialized flags unsupported by current iOS storage. Those now produce
+separate blockers, and a valid native TON root exercises the export-source
+blocker. The exact-source preflight suite passes 48/48 on iPhone 15/iOS 17.2;
+the production file passes SwiftFormat and strict SwiftLint. The modified
+test file retains its prior 58 SwiftFormat and six strict SwiftLint findings
+by rule count. Hosted CI, formal independent security review and a real
+transactional installer remain open. Recovery stays disabled.
+
 Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 advanced to pushed `23dab9199957d7760fed87fca1290dda773888a8`.
 Its unwired receiving proof verifies Android-origin Substrate ED25519,
