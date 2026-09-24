@@ -1241,6 +1241,65 @@ strict SwiftLint, project-file lint and diff checks pass. This does not prove
 Android-origin V2 chain bytes, every chain signer, export parity or safe
 installation, and no recovery path invokes the proof.
 
+## Portable receiving-key proof — 2026-09-24
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304)
+advanced to pushed `eff35fb6d1fd24ca38c1becd81463926ba8fb5cd`.
+Its unwired read-only proof now checks Solana mainnet/devnet, TON V4R2 and
+Nexus ED25519 private/public key bindings, recorded account IDs and chain
+addresses, in addition to the existing Bitcoin and Taira derivation checks.
+It accepts a separately imported scoped key on those chains rather
+than misclassifying it as a root-derived key. A tampered private key fails.
+The focused iPhone 15/iOS 17.2 material/capture/adapter/signing-proof suite
+passes 41/41 on that head, with targeted SwiftFormat, strict SwiftLint
+and diff checks clean.
+This does not prove final signer selection, safe installation, auxiliary
+source restoration or replacement-device export parity. Recovery stays off.
+
+The iOS PR then advanced to pushed
+`e849c6058c314637716354e2275e71913582a8b9`. An explicit
+`MetaAccountSelectionMapper` write path now persists captured display
+preferences only when a caller supplies them, applying the same bounds as
+the capture path. Ordinary wallet saves leave existing preferences intact.
+The combined material and mapper suites pass 51/51 on iPhone 15/iOS 17.2;
+targeted production-file SwiftFormat and diff checks pass. Strict SwiftLint
+on that existing mapper has the same five pre-existing findings as its prior
+revision; its test file retains the same eight pre-existing SwiftFormat
+findings. A scoped read-only review found no actionable issue. No production
+recovery installer calls this path, and exact-head hosted CI and formal
+independent security review remain pending.
+
+Android [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+advanced to pushed `23dab9199957d7760fed87fca1290dda773888a8`.
+Its unwired receiving proof verifies Android-origin Substrate ED25519,
+ECDSA and SR25519 roots, standalone EVM roots, Android TON seed/phrase roots
+and native iOS TON seed-plus-public/phrase roots against the original public
+identity. A wrong signing key, account identity, TON address or phrase fails.
+It counts legacy, chain, watch and auxiliary slots plus optional unverified
+root-source fields as unproven. The JVM proof suite passes 10/10 on that
+head; an API 36 arm64 emulator passes the native SR25519 proof/substitution
+test 1/1; scoped Detekt on all three new files and diff checks pass.
+
+The Android PR then advanced to pushed
+`b1ff7090002b63538855bb344077c7995aab611d`. Its still-unwired proof
+accepts iOS's 64-byte SR25519 scalar-plus-nonce secret and verifies exact
+native vector parity with Android JNI. It also accepts iOS's 64-byte
+ED25519 storage while proving only the first 32-byte miniSeed and counting
+the unused suffix as unproven recovery material. An ambiguous nonce or
+64-byte ECDSA secret fails. Exact-head focused JVM tests pass 12/12, and
+both SR25519 device proofs pass 2/2 on an API 36 arm64 emulator. Forced
+scoped Detekt on all three changed proof files and diff checks pass; a
+scoped read-only review found no actionable issue. Exact-head hosted CI and
+formal independent security review remain pending. This does not prove
+the remaining chain and legacy slots, complete export or a safe installer,
+so it is not iOS-to-replacement-Android recovery. No installer invokes the
+proof.
+
+The root [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
+at `57e3bdc321c71752743970053f2f176b060f2df1` passed its `verify`,
+`verify-owner` and `validate` CI jobs. This supports that root commit only;
+the shipping source/artifact manifest and independent reviews remain open.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
