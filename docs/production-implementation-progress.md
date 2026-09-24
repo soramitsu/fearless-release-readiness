@@ -2445,6 +2445,30 @@ real device→server interoperability and independent review are still open.
 The old JSON service remains the only live credential writer; no recovery
 feature was enabled.
 
+## iOS native App Attest request candidate — 2026-09-24
+
+iOS [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) is
+clean and pushed at `38c83b5a0c85272308acb9474f75880591fc9742`;
+its App Attest code is at `6764aab12a68d20dee2ef8618bfb59b4fe0b50f1`.
+The disabled, unwired iOS 18+ adapter uses `DCAppAttestService` to generate
+an Apple key, then attests `SHA256` of the decoded 32-byte owner-bootstrap
+nonce. It emits only a canonical 32-byte key ID and public attestation
+object in the typed server transport. Native errors, descriptions and JSON
+exclude wallet secrets and local PRF output. It rejects a second concurrent
+ceremony and ignores late callbacks after cancellation. Its focused iOS 18.1
+arm64 simulator suite passed **40/40** App Attest and adjacent PRF tests;
+the unsigned arm64 Release simulator app build succeeded on the same source.
+Scoped SwiftFormat/SwiftLint, project syntax and diff checks passed.
+
+The broader dual-architecture Release simulator build failed at the existing
+x86_64 IrohaCrypto native link (unresolved `_blake2b`, `_ed25519_*`,
+`_sha256`, `_sha512`); no Iroha branch was changed. The matching server
+App Attest verifier above is a local candidate, but real Apple receipt
+validation, authenticated nonce issuance, exact delivered Team ID/bundle/
+environment, same-key retry/persistence for transient Apple failures,
+real-device proof and Apple-signed upgrade acceptance remain open. The
+recovery feature is still compiled off.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
