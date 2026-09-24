@@ -2791,10 +2791,27 @@ review found no remaining issue in the ingress change. This does not enable
 production startup or migrate legacy
 credentials.
 
-The current pushed iOS candidate at `a8065f18ea98cbccf695197cfec391ae12e8d196` on
-[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) composes the
-disabled immutable Drive generation round trip with an authenticated owner
-grant/commit boundary. A journal-derived operation reference now reconciles
+The current pushed iOS candidate at `60b1d73e2e1906e994298249a289fa69a502b4ca` on
+[PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304) adds a
+disabled, unwired first-owner bootstrap HTTP/proof boundary. It commits the
+exact public registration into a wallet-signed server challenge and binds an
+Apple App Attest nonce to that signed proof. The application-owned signer
+interface must recheck the selected wallet identity, authorized signing key,
+decryption, signing, and export after attestation. The client sends only
+public credential/proof/attestation fields; any failed response after the
+one-shot completion is treated as an unknown owner outcome requiring
+discoverable credential authentication. It returns a session only, not a
+verified backup. The exact current iOS 18.1 arm64 simulator changed-area set
+passed **9/9** with no failures/skips; strict SwiftLint, SwiftFormat, project
+validation, and diff checks passed. A broader unsigned App Attest retry run
+failed an existing Keychain persistence test with `errSecMissingEntitlement`
+(-34018); the narrowed changed-area run passed. Native bootstrap PRF ceremony,
+concrete app-owned original-key signer, deployed owner service, and real
+provider/device evidence remain missing.
+
+The earlier iOS candidate composes the disabled immutable Drive generation
+round trip with an authenticated owner grant/commit boundary. A journal-derived
+operation reference reconciles
 an interrupted commit even after the head advances. A durable, one-way commit
 marker prevents a second owner CAS after a lost response or a torn marker;
 absent status remains unresolved and read-only. Promotion consumes a
@@ -2804,15 +2821,14 @@ that the authenticated head selects the same bytes. A final authenticated
 head read after the last selected-account check rejects a concurrent valid
 revision-8 successor rather than returning stale evidence. A restarted committed
 operation requires a fresh PRF proof. Ambiguous absence preserves the journal
-and prior decryptable head. The focused iOS 18.1 simulator suites passed
-**95/95** without failures/skips; changed production sources passed strict
-SwiftLint, project parsing, and diff checks. This has no production caller or
-real app-owned plaintext-wallet verifier, and recovery remains disabled. The
-final commit only corrects `AGENTS.md` setup guidance to the immutable
-reviewed shared-features pin; the 95/95 run covers the same production source
-at its direct parent.
+and prior decryptable head. The focused iOS 18.1 simulator generation suites
+passed **95/95** without failures/skips on the direct ancestor; changed
+production sources passed strict SwiftLint. This still has no production
+caller or real app-owned plaintext-wallet verifier, and recovery remains
+disabled. The intervening documentation-only commit corrected `AGENTS.md`
+setup guidance to the immutable reviewed shared-features pin.
 
-The current pushed Android candidate at `374da8449d319ef350957a2781da11406a294abc`
+The current pushed Android candidate at `68a4c3fb295763541c8883554443bfd419ca3552`
 on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 adds a disabled first-owner bootstrap client, verified-generation promoter,
 and existing-head candidate checker. Bootstrap requires locally authorized
@@ -2822,21 +2838,26 @@ and Play Integrity bound to that proof. It submits only public credential,
 proof, and attestation fields once; the returned owner session must match the
 server challenge and an authenticated head must be empty. Unknown completion
 is not retried as a new owner. The client returns owner metadata only, not a
-verified backup. The separate promotion candidate journals an immutable Drive
-generation and one-way owner commit
-attempt, checks downloaded ciphertext through a one-use local PRF and
+verified backup. A separate disabled initial-backup method evaluates PRF in
+a discoverable owner assertion, waits for server verification of the selected
+credential and owner session, and checks an authenticated empty head before
+exposing PRF bytes in a zeroizing local callback. It does not build a wrapper
+or generation. The separate promotion candidate journals an immutable Drive
+generation and one-way owner commit attempt, checks downloaded ciphertext
+through a one-use local PRF and
 original-key signing/export evidence before grant, then reconciles an
 ambiguous CAS through read-only operation status. A committed result requires
 exact Drive bytes, the selected Google account and a final authenticated
 head read. Two regression cases advance the head during post-CAS Drive
 readback and during the final account check. The exact local source passed
-**284/284** backup JVM tests and `detektAll` with JDK 21 and pristine pinned
-Utils. The same branch corrects a stale schema-79 assertion in real-Room
-migration instrumentation: the current schema is 80 and API 34 focused
+**287/287** backup JVM tests and `detektAll` with JDK 21 and pristine pinned
+Utils; the focused owner-authentication suite passed again after the final
+head-fixture assertion. The same branch corrects a stale schema-79 assertion
+in real-Room migration instrumentation: the current schema is 80 and API 34 focused
 instrumentation passed **6/6**; the migration CI contract passed one positive
 and 107 adversarial cases on the direct parent. Hosted checks for this newly
 pushed head are pending. Application-owned original-key authorization, the
-first-generation verified PRF wrapper and backup, the deployed owner service,
+first-generation wrapper and verified backup, the deployed owner service,
 and cross-device acceptance remain open, and recovery stays compiled off.
 
 ## Completion record
