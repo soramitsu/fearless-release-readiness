@@ -25,7 +25,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `4aeec8568d46b7aa53e3b6edfb01dcb23b23d051` and
+candidates are `f38a572b15f09f761cdc01006cf501856511183d` and
 `686ae183c7592a5b3ca127f1f805602557a273b7`, respectively. Both clean
 app trees are on review branches. Exact-head local recovery-component tests
 and an independent static diff review passed as recorded below; their new
@@ -2680,10 +2680,10 @@ commit reported no security finding (scan
 `2098034c-6f70-4943-9999-10bcb26d6cfa`, report SHA-256
 `f2cdb594c602ef8f6d2157670c51f4470821457a3d0b010ad23ac670c8870370`).
 It does not cover the final fix or substitute for human/device acceptance. On
-the final head, hosted `validate` passes; release-contracts and build are
+the final head, hosted `validate` and `release-contracts` pass; build is
 pending. Owner recovery remains compiled off, unwired and undeployed.
 
-The pushed Android source now ends at `4aeec8568d46b7aa53e3b6edfb01dcb23b23d051`
+The preceding Android source ended at `4aeec8568d46b7aa53e3b6edfb01dcb23b23d051`
 on [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260).
 The version-2 encrypted cohort journal atomically stages a separate bounded
 encrypted original-source sidecar with exact auxiliary-source fields and
@@ -2701,6 +2701,22 @@ working tree before wording-only edits and reported zero security findings
 Hosted `validate` passes on the final head; build/test and IAS candidate
 checks are pending. No target secret or wallet row has been installed, and
 neither journal retirement nor portable recovery is enabled.
+
+The current pushed Android source is `f38a572b15f09f761cdc01006cf501856511183d`
+on the same [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260).
+It adds a disabled, unwired discoverable-passkey owner-authentication client
+for the non-deployed authority. Android Credential Manager requests user
+verification without PRF or a credential hint; the native result sanitizer
+sends only public assertion fields. The client rejects duplicate/mismatched
+responses, bounds local clock skew consistently with iOS, rechecks expiry
+after native UI and returns only a short-lived redacted owner session. Backup
+module JVM tests passed **246/246** with zero failures/skips, including eight
+owner-authentication tests; `detektAll` and diff checks passed against pinned
+Utils. Independent read-only review found a one-second clock-skew rejection,
+which was fixed and reviewed again with no remaining actionable issue. This
+candidate does not bootstrap an owner, use a session to install a wallet, or
+enable recovery. Exact-head hosted checks are pending; native GPM/Drive and
+cross-platform replacement-device acceptance remain open.
 
 ## Completion record
 
