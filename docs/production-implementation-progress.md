@@ -1195,8 +1195,8 @@ silently promoted.
 On that Android source, focused migration/provenance/enrollment/preflight/
 transcoder/coordinator JVM suites pass 129/129, Android migration tests
 compile, and a forced Detekt scan of all 10 new Kotlin files has zero
-findings. The v77→v78 instrumentation test has not run on a device or
-emulator. A broader scan of all modified files reports 523 findings in
+findings. At that checkpoint the v77→v78 instrumentation test had not run;
+subsequent emulator results are recorded below. A broader scan reports 523 findings in
 existing legacy files, including some added-line style findings; this is
 not a clean changed-file Detekt result. Exact-head hosted CI and independent
 review are pending.
@@ -1213,6 +1213,33 @@ semantic-codec suites pass 46/46 at this pushed head; project-file lint and
 diff check pass. Exact-head hosted CI, native GPM/Drive ceremonies, both
 replacement-device directions and an installer with original-key export
 parity remain open. No feature was enabled.
+
+Android's exact `33aa779eff73cdf6cbb139975e65cb9445e5d5a5` source also
+passes `:app:compileDebugKotlin` with the pinned local Utils/WebSocket
+checkouts. The v77→v78 migration instrumentation test ran on dedicated API
+30, 31 and 36 emulators, one test on each with zero failures; each preserved
+historical watch-shaped and signer-shaped rows as UNKNOWN. This is narrower
+than the required full historical migration and Play-delivered upgrade
+matrix. A direct `:app:compileReleaseKotlin` attempt stopped at the
+repository's release-task provenance guard because only full release entry
+tasks activate source-pin checks before project configuration. No Release
+artifact or signing conclusion follows from that attempted command; the
+actual upload keystore and Play-signed certificate still need operator
+qualification.
+
+The iOS PR subsequently advanced to pushed
+`77f9f1dfe0338b1a3a9b7c6d503e4c3b9f3a018e`. A third unwired read-only
+proof checks regular Substrate chain-account material against a caller-supplied
+reviewed set of canonical genesis IDs, the recorded account ID and an
+original-key local signature bound to the wallet and chain. Unapproved or
+named accounts remain explicitly unproven; an approved account with a wrong
+key, address or crypto type fails. The semantic format does not carry the
+source chain's Ethereum-based flag, so a future caller must attest its
+approved genesis set independently. Focused iPhone 15 simulator material and
+semantic-codec suites pass 50/50 at this pushed head; targeted SwiftFormat,
+strict SwiftLint, project-file lint and diff checks pass. This does not prove
+Android-origin V2 chain bytes, every chain signer, export parity or safe
+installation, and no recovery path invokes the proof.
 
 ## Completion record
 
