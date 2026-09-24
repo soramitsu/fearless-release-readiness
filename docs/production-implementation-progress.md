@@ -1741,6 +1741,17 @@ hosted checks and independent review are pending. No live authenticated
 KaiaScan response, funded transfer/fee reconciliation, freshness or device
 retry result has been established; the provider key is not provisioned here.
 
+The iOS follow-up at clean, pushed
+`e617c1e998241a963ee0bcaacd056d5014c836a4` excludes a Kaia row where
+the wallet appears only as `fee_payer` from transfer amounts. Without that
+guard, a delegated fee for someone else's transaction could appear as an
+incoming wallet transfer. It also rejects inconsistent page totals and
+unknown provider statuses. The exact-source iPhone 15/iOS 17.2 Kaia suite
+passes 7/7, and SwiftFormat plus strict SwiftLint pass on the changed source
+and test file. Fee-only activity presentation and funded fee reconciliation
+remain release gates; the exact-head hosted checks and independent review
+are still pending.
+
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.

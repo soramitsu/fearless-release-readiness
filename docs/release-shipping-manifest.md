@@ -63,11 +63,12 @@ Both iOS dependency commits and Git trees must match the checked-in
 exact iOS source commit. Their revisions and repository URLs must also match
 both workspace and project `Package.resolved` pins. The app's Swift package and
 Xcode project declarations must select that shared-features revision, and the
-shared-features package must select the same Starscream revision. Dependency
-checkouts must have no assume-unchanged or skip-worktree index flags that could
-hide modified tracked bytes. Each must have exactly one configured and one
-effective `origin` URL for its expected GitHub repository; the effective check
-catches local URL rewrites. A remote URL alone is not proof of source
+shared-features package must select the same Starscream revision. The root,
+every selected source checkout and every dependency must have no
+assume-unchanged or skip-worktree index flags that could hide modified tracked
+bytes from ordinary `git status`. Each dependency must have exactly one
+configured and one effective `origin` URL for its expected GitHub repository;
+the effective check catches local URL rewrites. A remote URL alone is not proof of source
 authenticity. The platform source audits still verify the dependency contents
 and resolved build graph independently.
 

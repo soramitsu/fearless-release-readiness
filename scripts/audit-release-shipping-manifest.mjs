@@ -190,18 +190,16 @@ function gitIdentity(directory, branch, commit, label) {
   assert.equal(git(directory, 'symbolic-ref', '--quiet', '--short', 'HEAD'), branch, `${label} branch mismatch`);
   assert.equal(git(directory, 'rev-parse', 'HEAD'), commit, `${label} source commit mismatch`);
   assert.equal(git(directory, 'status', '--porcelain=v1', '--untracked-files=all'), '', `${label} source is dirty`);
+  const entries = git(directory, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
+  assert.ok(entries.length > 0, `${label} tracked source is empty`);
+  assert.ok(entries.every((entry) => entry.startsWith('H ')),
+    `${label} source index flags hide tracked files`);
 }
 function dependency(manifest, role) {
   return manifest.dependencies.find((row) => row.role === role);
 }
 function dependencyDirectory(root, manifest, role) {
   return checkoutDirectory(root, dependency(manifest, role).path, role);
-}
-function dependencyIndexFlags(directory, role) {
-  const entries = git(directory, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
-  assert.ok(entries.length > 0, `${role} tracked source is empty`);
-  assert.ok(entries.every((entry) => entry.startsWith('H ')),
-    `${role} source index flags hide tracked files`);
 }
 function dependencyRepository(directory, role) {
   const repository = DEPENDENCY_REPOSITORIES.get(role);
@@ -430,7 +428,6 @@ export function auditReleaseShippingManifest(root = ROOT) {
   for (const row of manifest.dependencies) {
     const directory = checkoutDirectory(root, row.path, row.role);
     gitIdentity(directory, git(directory, 'symbolic-ref', '--quiet', '--short', 'HEAD'), row.sourceCommit, row.role);
-    dependencyIndexFlags(directory, row.role);
     dependencyRepository(directory, row.role);
   }
   for (const row of [...manifest.files, ...manifest.artifacts, ...manifest.evidence]) {

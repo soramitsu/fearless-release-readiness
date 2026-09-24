@@ -333,6 +333,25 @@ for (const flag of ['--assume-unchanged', '--skip-worktree']) {
   });
 }
 
+for (const [label, relative, trackedFile] of [
+  ['root', '', '.gitignore'],
+  ['Android', sourceRows[0][0], 'fixture.txt'],
+  ['iOS', sourceRows[1][0], 'fixture.txt'],
+]) {
+  for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+    test(`${label} ${flag} index flag cannot hide modified tracked source`, () => {
+      const f = fixture();
+      try {
+        const directory = path.join(f.root, relative);
+        git(directory, 'update-index', flag, trackedFile);
+        appendFileSync(path.join(directory, trackedFile), 'hidden changed bytes\n');
+        assert.equal(git(directory, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+        assert.throws(() => auditReleaseShippingManifest(f.root), /source index flags hide tracked files/u);
+      } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+    });
+  }
+}
+
 test('multiple configured origin URLs cannot impersonate one dependency repository', () => {
   const f = fixture();
   try {
