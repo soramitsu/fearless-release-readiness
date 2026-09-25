@@ -67,6 +67,13 @@ exclusive writer lease. This code is not deployed or invoked against the live
 store. It neither proves historical import nor admits the SQLite authority;
 those service gates remain open.
 
+A separate read-only cutover-manifest candidate verifier now binds canonical
+private manifest bytes to the sealed JSON source, exact SQLite public-row
+commitment, seven protected route names and an independently supplied owner
+image digest. It never authorizes migration or writer retirement. The importer,
+durable receipt, reviewer/image attestation, retired-writer drain proof, v8
+proof-capacity limit and empty-tombstone policy remain open.
+
 ## Current source checkpoint — 2026-09-24
 
 The shipping-manifest audit now selects the clean Android Utils checkout at

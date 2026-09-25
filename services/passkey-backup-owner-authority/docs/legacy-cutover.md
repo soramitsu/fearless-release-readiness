@@ -181,6 +181,20 @@ store and does not verify the manifest, import records, old image version or
 SQLite readiness; production admission must establish all of those first.
 The legacy marker and surviving lease must not be cleared as a rollback.
 
+The read-only `verify-legacy-cutover-manifest.mjs` candidate check now accepts
+a private canonical `cutover-<sha256>.json` image, its independent expected
+digest, the exact sealed JSON path, SQLite path and expected owner-image digest.
+It pins the source schema/counts, the SQLite public-row commitment and counts,
+the seven protected challenge-route names and the candidate image digest.
+It rechecks the sealed source and target through the existing offline verifier
+and reports whether public representation and retained proof metadata match.
+Even a match exits `3` with `migrationPermitted: false`: this check does not
+verify a reviewer signature, running image, drained old writer, WebAuthn
+transcripts or a durable import receipt. It is not accepted by the retirement
+primitive or production startup. The v8 proof limits (128 globally/eight per
+owner), unproven empty tombstones and missing historical-cohort importer remain
+blocking design work.
+
 Before admission, exercise in-flight assertion-versus-revoke, registration-
 versus-revoke, duplicate counter, final-route removal, wrong owner/storage key,
 expired/replayed proof, changed source digest, interrupted import and restart,
