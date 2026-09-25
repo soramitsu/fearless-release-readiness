@@ -6271,7 +6271,7 @@ write_root_readiness_scripts() {
     "soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merged	validate,build-and-test" \
     $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-xcm-evidence-release-commit\tdevelop\t1258\t38fb2f3b328e3a041c15e253b0abafe405ef8314' \
     "soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test" \
-    $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260\tda0331fcb39d119f34fc26ff433ea0020cdbc607' \
+    $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260\t56ca84b0983a1f7dd12d4974d32bd84e8bb24c5b' \
     "soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	merged	validate,build-and-test,Validate IAS candidate; trusted develop dispatch may hand off" \
     "soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	merged	validate,build,continuous-integration/jenkins/pr-merge" \
     "soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	validate,build,continuous-integration/jenkins/pr-merge" \
@@ -26953,7 +26953,7 @@ perl -0pi -e 's#base/resources\.pb fearless-public fearless-attack project_id#ba
 expect_failure "Android IAS Firebase project-ID mutation anchor removed" "fearless-Android IAS project-ID-anchored Firebase mutation regression"
 
 reset_fixture
-perl -0pi -e 's/da0331fcb39d119f34fc26ff433ea0020cdbc607/ea0331fcb39d119f34fc26ff433ea0020cdbc607/' "$workspace/config/release-readiness-prs.tsv"
+perl -0pi -e 's/56ca84b0983a1f7dd12d4974d32bd84e8bb24c5b/ea0331fcb39d119f34fc26ff433ea0020cdbc607/' "$workspace/config/release-readiness-prs.tsv"
 expect_failure "current Android migration PR review pin drifted" "root release PR readiness consolidated Android production immutable review pin"
 
 reset_fixture

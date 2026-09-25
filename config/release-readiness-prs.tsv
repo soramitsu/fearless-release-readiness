@@ -15,7 +15,7 @@ soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merg
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test
-# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	da0331fcb39d119f34fc26ff433ea0020cdbc607
+# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	56ca84b0983a1f7dd12d4974d32bd84e8bb24c5b
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	Validate IAS candidate; trusted develop dispatch may hand off	github-actions	15368	github-actions	323721421	.github/workflows/android-internal-app-sharing.yml

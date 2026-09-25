@@ -25,22 +25,27 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `da0331fcb39d119f34fc26ff433ea0020cdbc607` and
+candidates are `56ca84b0983a1f7dd12d4974d32bd84e8bb24c5b` and
 `db4beab4dc18684e1dbad0ba58c244359f8967fe`, respectively, on
 [Android PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 and [iOS PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
 Both branches are clean and pushed but still require independent review.
-Android's exact-head account JVM suite passed 345/345; default and scoped
-Detekt and the pinned Utils/WebSocket source verifier passed. Its receive-side
-watch proof rejects mismatched key/address pairs and mixed custody before
-read-only planning, and accepts only the existing strict V4R2 TON JSON address
-shape. The exact new source diff scan
-`7bc49c66-2a97-4b66-979d-7020051d3124` found zero reportable issues
-across all three changed production files.
+Android's exact-head account JVM suite passed 347/347; default and scoped
+Detekt passed. Its receive-side watch proof rejects mismatched key/address
+pairs and mixed custody before read-only planning, accepts only the existing
+strict V4R2 TON JSON address shape, and requires chain-watch raw genesis IDs
+to match a reviewed Substrate policy. The default empty policy denies incoming
+chain watches during staging and journal replay. The predecessor TON scan
+`7bc49c66-2a97-4b66-979d-7020051d3124` and the exact successor scan
+`41c9cfa8-04cd-4ead-b05d-dbbe92e1cf1c` found zero reportable issues;
+the latter covered both changed production files. The pinned Utils/WebSocket
+source verifier passed on the predecessor.
 The preceding `1093b133` head passed Branch Flow, IAS and full Android CI,
 including API 30/31/36 migration and restart checks and the source-bound
-complete AAB native-payload verifier. The new exact-head Branch Flow passed;
-Android CI and IAS are running.
+complete AAB native-payload verifier. The `da0331f` Branch Flow passed, while
+its Android CI was cancelled after the successor push. The successor's
+exact-head hosted checks are running; earlier green runs remain supporting
+evidence only.
 The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
@@ -112,8 +117,8 @@ private manifest bytes to the sealed JSON source, exact SQLite public-row
 commitment, seven protected route path/scope pairs and an independently supplied owner
 image digest. It never authorizes migration or writer retirement. A proof-bound
 offline importer and durable receipt now exist in non-deployed source. Reviewer/image
-attestation, retired-writer drain proof, proof-capacity remediation and
-empty-tombstone ownership remain open.
+attestation, retired-writer drain proof, cohort-scale retained-proof storage
+and query qualification, and empty-tombstone ownership remain open.
 
 ## Current source checkpoint — 2026-09-24
 
@@ -2242,10 +2247,12 @@ proof/counter can survive even when the caller receives
 `authorization_expired`. A real-signed regression now covers it, and the
 service docs state that outcome. The owner suite passes 212/212, with syntax
 and diff checks. The SHA-256 record is consistency metadata, not a stored
-signature transcript or import authorization; an intentional 128-row lifetime
-cap also makes this preparation path unsuitable as a deployed migration
-service. No owner link, historical credential import, production HTTP route or
-recovery enablement was added.
+signature transcript or import authorization. At that checkpoint, an
+intentional 128-row lifetime cap also made this preparation path unsuitable as
+a deployed migration service. The later `482ef0c` source change limits only
+unproven pending rows; retained verified proofs now require cohort-scale
+storage and query qualification. No owner link, historical credential import,
+production HTTP route or recovery enablement was added.
 
 ## Exact-source Android 16 KiB emulator evidence — 2026-09-24
 

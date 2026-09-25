@@ -1,5 +1,15 @@
 # Passkey backup owner authority — metadata core candidate
 
+This is the proposed server-side owner and credential **authorization** service
+for portable recovery. It links public passkey credentials to a random wallet
+owner, checks authenticated sessions, issues one-use grants and records
+revocations. It does not store wallet passwords, phrases, private keys, backup
+decryption keys, PRF output or decrypted backups. Google sign-in only grants
+client access to the user's Drive storage account; it cannot establish or
+replace a wallet owner. The existing JSON-backed challenge service is still
+the live credential writer. This SQLite candidate is not deployed. A production
+cutover requires one transactional writer after a proven historical migration.
+
 This is a bounded, non-deployed metadata core with an explicitly test-admitted HTTP composition candidate in `src/http.js`. It has no executable production listener, complete cross-platform attestation admission, ciphertext store, deployment configuration or feature-enable flag. The HTTP factory rejects production construction and has no deployable entrypoint. Authentication is unavailable by default. The optional `src/webauthn-verifier.js` adapter cryptographically verifies existing-owner assertions and new-credential registration against a configured exact platform origin. First-owner bootstrap is unavailable by default. With an explicitly injected, server-owned app-attestation verifier, it additionally verifies an Ed25519 or secp256k1 wallet proof, exact app identity/nonce evidence and a fresh WebAuthn registration. `src/play-integrity-admission.js` supplies a Google Play standard-token server adapter and a scoped, service-account-bound Application Default Credentials callback for that hook. `src/apple-app-attest-admission.js` supplies a pinned-root Apple production-attestation verifier and hardwires a separate server-owned receipt verifier. Neither adapter is provisioned or wired into a production composition; live Google/Apple verdicts, exact distribution identities and native ceremony interoperability remain unproved. SR25519 bootstrap-proof verification remains unavailable. The positive authority-core fixtures under `test/` are deliberately noncryptographic; simulated Google verdicts and Apple's published expired sample are not production evidence.
 
 `src/apple-app-attest-receipt.js` supplies the fail-closed verifier
@@ -189,7 +199,8 @@ public credential cohort to a live random-owner session, credential counter,
 RP, platform, nonce and two distinct challenges. Claim is a single-use SQLite
 transition before asynchronous verification; consumption rechecks the exact
 claimed response hashes, sealed source, session, generation and owner counter
-under the writer lock. Rows are capped at 128 globally and eight per owner.
+under the writer lock. Unproven rows are capped at 128 globally and eight per
+owner.
 Challenges expire within two minutes; unverified rows remain replay tombstones
 until expiry even if the session is revoked. Verified rows and their challenge
 metadata remain retained after expiry for audit. The table holds metadata and
@@ -203,9 +214,9 @@ v9 migration or by a later proof insert. Startup and offline readers check the
 row against the retained challenge, counters, source and response digests, and
 both challenge hashes. Its SHA-256 commitment is a metadata consistency digest,
 not a cryptographic signature transcript or reusable migration token. Verified
-rows remain for audit after expiry and are never accepted as live authority;
-the 128-row lifetime cap therefore bounds this non-deployed preparation path
-until a separately reviewed retention/import design exists.
+rows remain for audit after expiry and are never accepted as live authority.
+They do not consume the pending challenge quota, so the retained proof table
+requires cohort-scale storage and query qualification before admission.
 The challenge methods return `migrationPermitted: false`; the separate offline
 importer commits public metadata only and also denies production admission.
 Neither has a production HTTP route or authorizes cutover.
