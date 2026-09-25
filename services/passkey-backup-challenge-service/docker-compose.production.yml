@@ -1,0 +1,49 @@
+services:
+  passkey-backup-challenge-service:
+    image: "${PASSKEY_BACKUP_IMAGE_REPOSITORY:?Set the reviewed passkey image repository}@sha256:${PASSKEY_BACKUP_IMAGE_DIGEST:?Set the reviewed 64-character lowercase image digest}"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    stop_grace_period: 15s
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8789"
+      PASSKEY_ALLOWED_ORIGINS: https://fearlesswallet.io,https://backup.fearlesswallet.io
+      PASSKEY_ANDROID_ALLOWED_ORIGIN: "${PASSKEY_ANDROID_ALLOWED_ORIGIN:?Set PASSKEY_ANDROID_ALLOWED_ORIGIN to android:apk-key-hash:<unpadded-base64url-release-cert-sha256>}"
+      PASSKEY_AUTHORIZATION_INTROSPECTION_URL: "${PASSKEY_AUTHORIZATION_INTROSPECTION_URL:?Set PASSKEY_AUTHORIZATION_INTROSPECTION_URL to the canonical HTTPS atomic-consume endpoint}"
+      PASSKEY_AUTHORIZATION_AUDIENCE: fearless-passkey-backup
+      PASSKEY_AUTHORIZATION_TIMEOUT_MS: "2000"
+      PASSKEY_AUTHORIZATION_MAX_TTL_SECONDS: "300"
+      PASSKEY_TRUST_PROXY_HOPS: "1"
+      PASSKEY_TRUSTED_PROXY_CIDRS: "${PASSKEY_TRUSTED_PROXY_CIDRS:?Set PASSKEY_TRUSTED_PROXY_CIDRS to the TLS proxy IP/CIDR only}"
+      PASSKEY_CHALLENGE_TTL_MS: "300000"
+      PASSKEY_MAX_CEREMONIES: "10000"
+      PASSKEY_RATE_LIMIT_WINDOW_MS: "60000"
+      PASSKEY_RATE_LIMIT_MAX_REQUESTS: "120"
+      PASSKEY_GLOBAL_RATE_LIMIT_MAX_REQUESTS: "5000"
+      PASSKEY_CREDENTIAL_STORE_FILE: /data/passkey-backup/credentials.json
+      PASSKEY_RECOVERY_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8789:8789"
+    volumes:
+      - passkey-backup-data:/data/passkey-backup
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:8789/api/passkey-backup/v1/health').then(async (r) => { const body = await r.json(); process.exit(r.ok && body.ok === true && body.service === 'fearless-passkey-backup' && body.rpId === 'fearlesswallet.io' && body.schemaVersion === 1 ? 0 : 1); }).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  passkey-backup-data:

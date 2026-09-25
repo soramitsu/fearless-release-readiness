@@ -1,0 +1,241 @@
+# Passkey backup owner authority — metadata core candidate
+
+This is the proposed server-side owner and credential **authorization** service
+for portable recovery. It links public passkey credentials to a random wallet
+owner, checks authenticated sessions, issues one-use grants and records
+revocations. It does not store wallet passwords, phrases, private keys, backup
+decryption keys, PRF output or decrypted backups. Google sign-in only grants
+client access to the user's Drive storage account; it cannot establish or
+replace a wallet owner. The existing JSON-backed challenge service is still
+the live credential writer. This SQLite candidate is not deployed. A production
+cutover requires one transactional writer after a proven historical migration.
+
+This is a bounded, non-deployed metadata core with an explicitly test-admitted HTTP composition candidate in `src/http.js`. It has no executable production listener, complete cross-platform attestation admission, ciphertext store, deployment configuration or feature-enable flag. The HTTP factory rejects production construction and has no deployable entrypoint. Authentication is unavailable by default. The optional `src/webauthn-verifier.js` adapter cryptographically verifies existing-owner assertions and new-credential registration against a configured exact platform origin. First-owner bootstrap is unavailable by default. With an explicitly injected, server-owned app-attestation verifier, it additionally verifies an Ed25519 or secp256k1 wallet proof, exact app identity/nonce evidence and a fresh WebAuthn registration. `src/play-integrity-admission.js` supplies a Google Play standard-token server adapter and a scoped, service-account-bound Application Default Credentials callback for that hook. `src/apple-app-attest-admission.js` supplies a pinned-root Apple production-attestation verifier and hardwires a separate server-owned receipt verifier. Neither adapter is provisioned or wired into a production composition; live Google/Apple verdicts, exact distribution identities and native ceremony interoperability remain unproved. SR25519 bootstrap-proof verification remains unavailable. The positive authority-core fixtures under `test/` are deliberately noncryptographic; simulated Google verdicts and Apple's published expired sample are not production evidence.
+
+`src/apple-app-attest-receipt.js` supplies the fail-closed verifier
+for the embedded Apple App Attest fraud receipt. It verifies the CMS signature
+and certificate chain to the SHA-pinned [Apple Root CA - G3](https://www.apple.com/certificateauthority/AppleRootCA-G3.cer),
+requires the receipt-signing certificate purpose, and binds the signed app ID,
+attestation leaf, key ID and exact client-data hash. The signed receipt must
+be for production, of type `ATTEST`, and at most five minutes old. It does
+not call Apple's `attestationData` endpoint or assess the fraud metric. The
+published sample is valid only at its historical sample time and uses a
+different client-data-hash convention from the native iOS candidate. This
+admission path is not provisioned or wired into any production listener; real
+Apple-delivered identity, receipt and native-device interoperability are
+still required.
+
+## Implemented boundary
+
+An owner gets a random 256-bit `owner:` subject, an independently random `backup:` namespace and a random WebAuthn user handle. Neither a Google account, Drive file ID, wallet display name, client wallet ID nor an asserted `verified` property establishes or replaces an owner. The Drive storage account and stable wallet owner are separate identities. The server stores only public credential verification metadata, owner linkage, generations, expiry, and hashes of random bearer sessions/grants. It has no schema/API for a phrase, wallet secret, PRF output, decrypted backup, ciphertext or Google token.
+
+`createOwnerAuthority` uses a private local SQLite file. New state requires explicit `create: true`; a missing, corrupt, incompatible, publicly accessible or symbolic-link file fails closed. Parent directory must be owned by the process and mode 0700; database is mode 0600. Use a durable local filesystem. `BEGIN IMMEDIATE`, foreign keys, `synchronous=FULL`, full fsync and rollback journals serialize multi-process mutations. A commit/I/O ambiguity poisons that instance until restart. There is no in-memory fallback or automatic reset. SQLite is accessed through Node's built-in `node:sqlite` API (Node >=22.13; still experimental in Node22); the actual production runtime and storage must be pinned and qualified separately. See [Node SQLite](https://nodejs.org/api/sqlite.html), [SQLite transactions](https://www.sqlite.org/lang_transaction.html) and [durability settings](https://www.sqlite.org/pragma.html#pragma_synchronous).
+
+The core samples time after the SQLite writer lock. It persists maximum observed wall/continuous time even for denied requests, detects wall rollback, and uses process continuous time for frozen-clock expiry. It resamples after commit before returning expiring authority. This cannot defeat an operator restoring an old entire database or a hostile host clock; backup restore must not roll back counters, spent grants or revocations. It is not a hardware anti-rollback mechanism.
+
+Schema v2 added an authenticated **metadata-only** immutable-backup head. Schema v3 adds immutable storage-key bindings and per-credential legacy AAGUID, optional transports and registration platform; `credentials.user_handle` retains the historical per-credential handle, while a binding without credential metadata can preserve an empty owner tombstone. Schema v4 explicitly classifies every credential as owner-wide or bound to one proven wallet storage key; the historical metadata insert narrows scope in the same SQLite transaction. Schema v5 adds durable single-use pending registration/assertion challenges. Schema v6 adds a durable per-owner minimum backup-key epoch raised by credential revocation. Schema v7 adds bounded legacy cutover challenge metadata. Schema v8 adds a distinct, immutable verified-proof metadata row after two signed assertions and an owner-counter compare-and-swap. Schema v9 binds new proofs to the exact owner public key and adds an immutable single-cohort import receipt. A v7 consumed row migrates without proof; retained v8 proofs remain version 1 and cannot authorize the offline importer. Opening a v1–v8 file rejects by default. After a verified durable backup, an operator can invoke `createOwnerAuthority({migrate:true, ...})` to upgrade an earlier version through v9 in one SQLite transaction. Existing owners, credentials, counters, sessions, grants, backup heads and v7 unverified tombstones are retained. A v5 owner with historical revoked credentials is conservatively required to advance its current key epoch at the next backup because their revocation order relative to the head cannot be reconstructed. A failed upgrade rolls back; no automatic rollback or database downgrade exists. The head revision is distinct from the owner's credential/session generation and backup-key epoch.
+
+`readBackupHead(session)` returns the exact current and previous accepted descriptors, including each generation's parent revision and digest required to validate its FPBKGEN1 bytes; `backupOperationStatus(session, operationId)` reconciles an unknown commit outcome with the same complete descriptor. `issueGenerationGrant(session, closedRequest)` mints a 60-second, single-use internal grant bound to the canonical validated request, owner session/generation and configured audience. `commitGenerationMetadata(grant, closedRequest)` consumes that grant **in the same durable transaction** as comparing the expected head revision and digest, fixing the storage-account binding, allowing only the current backup-key epoch or its immediate successor, rejecting any previously accepted bundle digest for that owner and reused generation/file IDs, and advancing the head. The first generation must use epoch 1; rollback and skipped epochs fail. Revoking a credential raises the durable minimum to the current head epoch plus one, so a later same-epoch generation is rejected; revoking only sessions does not raise it. This is a metadata fence, not evidence that the client used a new random backup key or retired old wrappers. A session token or a grant for any of the seven challenge routes cannot commit a head. Wrong-body attempts do not consume the grant; successful commits and identical operation-ID replays do. To reconcile an ambiguous response, query `backupOperationStatus` with a current session; if the operation is absent, a still-valid grant can be retried, or a new grant can be issued. An identical operation-ID request with a new grant returns its original result even after a later head update; altered replay or a stale parent fails. The server retains up to 256 operation descriptors per owner, then fails updates rather than deleting history; it performs no Drive deletion or automatic pruning. It stores only random identifiers, a hashed Google-sub storage binding, public revision/epoch numbers, Drive file ID and SHA-256 commitments—no ciphertext, backup key, PRF output, phrase or Google bearer token. The caller must upload an immutable generation, re-download exact bytes and verify unwrap/decryption and wallet identity **before** invoking the head mutation. This core cannot prove that client claim; the backup HTTP routes exist only in the explicitly test-admitted, non-deployed candidate and do not mark portable recovery complete. The internal grant scope is deliberately outside the unchanged seven-route challenge-service contract. Credential revocation invalidates sessions/grants before head commits. Production HTTP composition must preserve this canonical-request grant boundary and integrate challenge credential lifecycle in the same durable owner transaction.
+
+### Candidate backup-head HTTP contract
+
+The non-deployed HTTP candidate adds four POST routes under
+`/api/passkey-backup/v1/owner/backup/`: `head`, `operation`, `grant` and
+`commit`. `head` accepts only `{ "schemaVersion": 1 }`; `operation` also
+requires the random operation ID. Both use a `Bearer session.` owner token and
+return metadata only. `grant` takes the exact closed generation request with
+the same owner session and returns a short-lived `grant.` token. `commit`
+takes that same request with `Bearer grant.` **and** the matching
+`X-Passkey-Owner-Session` token. The core checks both tokens against one owner
+session in its SQLite transaction, then consumes the grant with the head CAS.
+Neither token can be used on the seven legacy challenge routes. Revocation
+invalidates outstanding sessions and grants. No route accepts a phrase, PRF
+output, backup key, Google bearer, plaintext wallet or ciphertext. The
+candidate refuses production construction and does not verify a Drive upload
+or local decryption; mobile recovery remains disabled.
+
+## Bootstrap, discovery and enrollment contract
+
+The optional Android Google adapter obtains a Play Integrity OAuth token only
+through Google Auth Library with the exact `playintegrity` scope. Its ADC callback
+requires an operator-configured service-account email and checks both the
+actual Google Auth client type and resolved workload identity on every use;
+local user ADC cannot pass by adding a forged `client_email` field. Identity
+substitution fails closed. Prefer an attached service account or workload identity federation so
+there is no long-lived key file in the app or repository. The backend uses the
+token only for Google's fixed decode endpoint. The operator must verify the
+linked Play/Cloud project, the Play-distributed certificate and allowed release
+versions, provision the identity, and run live verdict/device checks before
+connecting it to a deployed listener. No such credentials or live evidence are
+included here. See [Google's standard request flow](https://developer.android.com/google/play/integrity/standard)
+and [ADC guidance](https://docs.cloud.google.com/docs/authentication/application-default-credentials).
+
+The server-only [typed verifier contract](src/verifier-contract.d.ts) is the trust boundary. Adapters are constructor-injected functions reviewed with server composition, never client objects or environment-selected permissive fallbacks. They receive a strict public credential response: extensions are empty or `credProps.rk`; PRF, largeBlob and other data are rejected before invoking an adapter. Native clients must remove local extension secrets before serialization, because server rejection cannot undo transmission. There is no request or proof logging in this core.
+
+1. `beginBootstrap(platform)` creates a two-minute server challenge and fresh random owner context. `completeBootstrap` requires a strictly typed Play Integrity or App Attest transport payload in addition to self-custody wallet proof and first-credential WebAuthn registration. The optional server verifier checks an exact domain-separated wallet signature over the challenge, RP, platform, random owner/namespace/user handle and a canonical digest of the complete new public registration response. It then requires a separately injected Apple/Google attestation verifier to return the expected app identity and a nonce bound to that signed proof, before verifying WebAuthn origin, challenge, RP, user verification and public key. Only then are owner, credential, binding, and a ten-minute session committed together. Existing wallet bindings and credential IDs are never overwritten, including after revocation. [The v1 proof encoding](docs/bootstrap-proof.md) is a candidate cross-platform contract; Ed25519 and secp256k1 have tested server implementations, while SR25519, platform attestation verifier provisioning/qualification, native signing and legacy-owner migration still block production admission. This creates only a new owner; it is not legacy-owner migration or account recovery.
+2. `beginAuthentication(platform)` is a **separate discoverable ceremony**, requiring no existing seven-route grant or owner hint. Completion resolves the candidate credential ID internally, checks the exact stored user handle, and invokes the real WebAuthn verifier for the server nonce, RP, qualified platform origin, user presence/verification, signature, stored public key, counter and backup flags. Verification success then rechecks credential and owner generation inside the session-creation transaction. The same response cannot create two sessions; concurrent nonzero-counter updates use compare-and-swap. Zero-counter synced credentials still require distinct claimed server nonces. A credential ID, user handle or Google sign-in alone is never authentication.
+   The verifier context and atomic challenge counter mutation use the selected credential's stored user handle. Historical credentials can retain their original per-credential handle even when it differs from the random handle assigned to a new owner; the owner handle is used for new enrollment. This compatibility does not import or authorize any legacy credential cohort.
+3. `beginEnrollment(session)` requires a current owner session; completion rechecks that same session and generation after new credential verification. In one commit it links the new credential, advances owner generation, invalidates existing sessions/grants/pending owner ceremonies, and returns a replacement session. The final credential cannot be replaced merely by asserting the old owner. All revoked credential IDs and wallet bindings remain tombstones. Revoking one or all credentials invalidates every owner session/grant. `revokeCredential` and `revokeAll` reject removal of any live credential unless their caller supplies an explicit true confirmation after the user has chosen to risk loss of recovery, or after a verified incomplete-enrollment rollback. Another credential record is not proof of an independently decryptable recovery route. The server cannot attest that user interface, rollback state or a client-side backup-key rotation; those remain release gates. Revoking sessions retains valid credentials for a new discoverable authentication.
+
+Platform on a challenge is an **untrusted requested policy selection** until the adapter validates its exact configured origin: the real Play-distributed Android certificate origin or approved iOS RP origin. It is not device/provider attestation. The adapter must not derive a verified platform from a request header, self-reported device type, AAGUID alone, Google token, or PRF output. Actual GPM/native PRF/provider qualification remains a mobile release gate.
+
+Malformed credential/unknown-credential requests and wrong-owner enrollment attempts are rejected before claiming the pending ceremony. Once a well-formed eligible response is admitted, its challenge is durably claimed before asynchronous verification; failed signatures burn it. There is no claim restoration on timeout/crash. Anonymous creation has a durable global 60/minute and 256-outstanding cap; per-owner enrollment is capped at eight, active sessions at 32/owner and 100,000 globally, credentials/tombstones at 32/owner, grants at 64/session and 100,000 globally, owners at 100,000. An HTTP layer must also add per-peer/device abuse controls, bounded bodies, deadlines, capacity monitoring and backpressure; the global cap alone is not public-service abuse isolation.
+
+The legacy cutover ceremony admits at most 128 unproven challenge rows globally and eight per owner. A retained, immutable signed proof no longer consumes that pending quota; otherwise the first 128 successful proofs would permanently block later historical credentials. Unverified consumed rows still count until expiry and pruning. The proof table itself is retained for reconciliation, so deployment needs disk-capacity monitoring and cohort-scale load qualification before admission.
+
+## Seven-route grant binding and protocol fence
+
+The core does not remove or bypass any current challenge/lifecycle protection. `issueGrant(session, request)` only accepts the exact seven method/path/scope pairs currently defined by the challenge service. The request is a closed object:
+
+```json
+{
+  "schemaVersion": 1,
+  "audience": "<configured exact audience>",
+  "method": "POST",
+  "path": "/api/passkey-backup/v1/credentials/list",
+  "bodySha256": "<unpadded base64url SHA-256 of the exact outbound raw body bytes>",
+  "scope": "passkey.credentials.list"
+}
+```
+
+Each returned `grant.` bearer token has 256 random bits, is stored only as SHA-256, expires in at most 60 seconds (never beyond its session), and authorizes one request. `consumeGrant(token, request)` rechecks owner generation, live session, and unrevoked session credential **in the same transaction** as removal. Wrong bindings do not consume the token. Consumption commits before returning `{schemaVersion, credentialAuthority, active, subject, audience, method, path, bodySha256, scope, platform, expiresAt}`. The `credentialAuthority: "owner-sqlite-v2"` marker makes this owner-core response incompatible with the legacy JSON challenge service's closed introspection response; that service rejects the grant before a route handler writes JSON. Loss or rejection of the response does not restore the grant: obtain a new one. Tests bind and replay all seven routes and verify legacy rejection. A future integrated HTTP service must consume and commit the exact grant within the same SQLite credential transaction rather than strip this marker.
+
+The `owner-sqlite-v2` marker names the protocol fence, not the database schema version. It remains unchanged for schema v8 so the live JSON service continues to reject the response.
+
+An introspection call already committed before revocation may return success. It is not retroactively recalled. The separate challenge store rejects an assertion if its own credential lifecycle changed during verification, including revoke/re-registration of the same ID. It cannot observe this authority's independent generation at that commit; shared transactional lifecycle integration remains required.
+
+The core has a **server-only migration target**: `commitChallengeCredentialMutation(grant, exactRequest, rawBody, serverVerifiedEvidence)`. It accepts only the existing registration-complete, assertion-complete, revoke and revoke-all routes. It checks the exact raw-body hash, route and scope, live grant, session credential and owner generation, then consumes the grant **in the same SQLite transaction** as the owner credential insert, counter compare-and-swap or revocation/generation bump. Revoked credential IDs remain tombstones; failures before commit change neither credential nor grant. Separate-process claim/assertion/revocation and duplicate-counter races, explicit v1/v2/v3/v4/v5/v6/v7→v8 migration, and before/after-commit failures are tested. This method accepts cryptographic verification evidence only from server-owned code; it is not an HTTP endpoint or a replacement for WebAuthn verification.
+
+`beginChallengeCredentialMutation(session, {kind,storageKey,directedCredentialId?})` now issues a two-minute challenge from an existing proven storage-key binding and a live owner session; it derives the historical per-key user handle and stores random nonce, owner generation, platform, session and optional directed credential ID in SQLite. `claimChallengeCredentialMutation(session, exactRequest, rawBody)` commits one claim and exact response-body digest **before** asynchronous WebAuthn verification. The final mutation requires that claimed row, the same session and exact-body grant, nonce/platform verification evidence, live owner generation, wallet-key credential scope and counter. A null assertion user handle is allowed only when the claimed SQLite row already selected that exact credential. A failed verification leaves the challenge claimed until expiry; successful completion deletes it. Wallet-key registration requires verified public AAGUID/transports metadata, preserves the deterministic per-key handle and inserts the wallet-key scope atomically. Discoverable owner authentication continues to require the stored user handle.
+
+The internal `verifyAndCommitChallengeCredentialMutation(session, grant, exactRequest, rawBody)` path copies and validates the request, claims its SQLite challenge, invokes the server-owned `createWebAuthnVerifier` registration/assertion adapter, then commits only its typed public evidence under the SQLite writer lock. That adapter checks the exact claimed nonce, RP, configured qualified origin, UV/UP, registration AAGUID/public transports, and the stored assertion COSE key and counter. A caller-supplied `verified` flag or local PRF output cannot enter the accepted public credential response. A failed signature burns the claimed challenge, and owner revocation during asynchronous verification prevents commit. Registration transports are public client hints, not attestation or proof of provider identity. The fixture suite uses synthetic authenticators; it is not native GPM or device qualification.
+
+The internal `commitChallengeReadRoute(session, grant, exactRequest, rawBody)` path handles all three remaining legacy read/challenge contracts: `registration/challenge`, `assertion/challenge` and `credentials/list`. It requires an existing storage-key→random-owner binding, the exact authorized raw body and the same live session that minted the grant. Registration derives the historical storage key from the exact wallet ID and lowercased account name, then requires that derived key to be independently bound to the current owner; a wallet label or account name never creates the binding. Challenge issuance and grant consumption share one SQLite writer transaction. A credential-directed assertion challenge selects only a live credential scoped to that key. Listing projects only live wallet-key credentials with their preserved public AAGUID, registration platform, device type, backup flag and transports; owner-wide recovery credentials remain outside the legacy wallet list. A missing or malformed historical metadata row fails closed. Tests compare pre/post explicit v4→v8 public records, exercise a tombstone, replay, a frozen legacy storage-key vector and a cross-process grant race. They seed bindings and public metadata; they do not establish a verified JSON cohort import.
+
+The existing deployed challenge HTTP routes are **not composed** with these internal paths. A non-deployed test-admitted HTTP candidate now covers all seven routes using one SQLite writer, plus separate first-owner bootstrap, discoverable authentication and exact-body grant issuance. Its `owner/bootstrap/challenge` and `owner/bootstrap/complete` routes pass typed public registration, wallet proof and app-attestation data only to the server-owned verifier. Completion returns an owner session only after that verifier succeeds; replay and a duplicate wallet binding fail, and a missing verifier leaves bootstrap unavailable. Bootstrap completion alone does not mark a backup verified or portable recovery complete. The transport permits at most 128 KiB for the combined iOS registration/app-attestation proof and 64 KiB for other requests; local PRF output is rejected. It requires both the owner session and one-use grant for each protected legacy route, with the route grant consumed in the same transaction as the read/challenge or credential mutation. Its responses project the seven existing route shapes. It rejects production construction, has no startup CLI or deployment configuration, and cannot create or import a historical storage binding. No live HTTP route is converted, no historical storage key or random owner is inferred, and no recovery capability is enabled. No Apple or Google production app-attestation verifier is provisioned.
+
+The legacy revoke and revoke-all mutations require the exact immutable storage-key binding to the current random owner. A single-credential revoke also requires an explicit wallet-key credential scope for the same key. Revoke-all changes only credentials scoped to that key; owner-wide recovery credentials and credentials for other wallets survive. Missing scopes, unbound keys and mismatched bindings fail without spending the grant. Tests manually seed historical public metadata to exercise the transaction; they do not prove a real legacy import. The internal pending-challenge API is not an independently deployable cutover.
+
+On a proven storage key, omitted `confirmFinalRecoveryRemoval` is accepted only for an unknown or already-revoked credential ID, or for revoke-all when the key has no live credentials. Removing any live credential requires explicit `true`; `false` is invalid. An idempotent single-revoke retry consumes its exact grant without changing owner generation. An unknown storage key still fails closed because the random owner cannot be established from the request alone. A raw completion body or adapter-supplied ID cannot establish that binding.
+
+The existing deployed challenge HTTP implementation still writes schema-4 JSON after grant introspection. It does **not** call this new method. The marker above prevents this core's grants from authorizing those JSON writes, but a different grant source could still expose the same split transaction and revocation race. Historical deterministic user handles also differ from the random owner handles required by the SQLite core; the new API deliberately refuses to equate them. The separate offline importer can atomically import a fully proven nonempty sealed cohort into the candidate authority, but no deployed cohort has been migrated or admitted. The candidate HTTP route tests use only fixture-proven bindings and test verifiers. They cannot justify a live switchover or recovery enablement. Production composition must migrate verified credential/owner relationships and make the shared SQLite transaction the sole lifecycle writer for all seven routes. The [cutover admission contract](docs/legacy-cutover.md) describes the required proof and one-writer switchover.
+
+The read-only inventory command below validates an existing schema-3/4 JSON file and schema-2–9 SQLite file, reports counts plus entry positions for missing/conflicting public metadata, and preserves both files. It cannot import credentials or authorize recovery. Schema v3 can retain the JSON storage-key binding, AAGUID, transports and platform; v4 classifies credential scope; v5 records internal pending challenges; v6 fences post-revocation key epochs; v7 records cutover claims; v8 distinguishes signed-proof metadata from unverified burns; v9 records a candidate import receipt. No deployed cohort is imported. Matching rows or populated fields remain blocked until the proof and source digest are checked under a drained one-writer cutover. Historical deterministic user handles also differ from new random owner handles. The snapshots are taken sequentially rather than atomically across stores, so run the command on private copies taken after stopping/draining the JSON writer; a report is only a diagnostic. The command always exits `3` after printing a valid report, `1` for invalid/unavailable stores, and `2` for usage errors. Never treat exit `3` or an empty conflict count as migration permission.
+
+```sh
+node services/passkey-backup-owner-authority/scripts/reconcile-legacy-credentials.mjs \
+  /absolute/private/credentials.json /absolute/private/authority.sqlite
+```
+
+For an operator-controlled private source capture, `quarantine-legacy-credentials.mjs` accepts an **already expected** SHA-256 digest of the exact JSON bytes and a distinct pre-existing `0700` quarantine directory. It requires a private regular source file and directory, reads a bounded exact image, validates that copied schema-3/4 image against the read-only SQLite inventory, and publishes `legacy-<sha256>.json` with `0600` permissions using a no-replace operation and directory fsync. A repeated or concurrent attempt with that digest fails without overwriting the first snapshot. It returns a redacted inventory and exits `3` on successful capture, deliberately preserving `migrationPermitted: false`. Neither this command nor its `quarantineLegacyCredentialSnapshot` API creates an owner, credential, binding, proof, grant, or migration record, and neither can establish that the JSON writer was drained. The offline importer rehashes this copy and requires a schema-v9 owner-key-bound proof for every historical credential. It cannot prove writer drain or authorize the one-writer cutover.
+
+```sh
+node services/passkey-backup-owner-authority/scripts/quarantine-legacy-credentials.mjs \
+  /absolute/private/credentials.json /absolute/private/authority.sqlite \
+  /absolute/private/quarantine EXPECTED_LOWERCASE_SHA256_HEX
+```
+
+The additional [sealed cutover verifier](docs/legacy-cutover.md) compares the
+quarantined image with schema-v7/8/9 public credential rows, exact counters and
+historical user handles, metadata, wallet-key scopes, and empty tombstones. It
+flags conflicting source digests, missing/extra rows and ambiguous owner
+aliasing. A separate redacted `proofMetadata` section compares retained
+schema-v8/9 proof/challenge rows and binding commitments with the sealed source
+in one SQLite read transaction. It remains read-only and always denies
+migration, even when both public representation and proof metadata match:
+the report cannot replay WebAuthn signatures or prove a drained one-writer
+cutover.
+
+The offline [cutover contract](docs/legacy-cutover.md) also has a read-only
+candidate manifest verifier. It requires canonical private
+`cutover-<sha256>.json` bytes and an independently supplied digest, compares
+the sealed source with the exact SQLite public rows, binds the seven protected
+route path/scope pairs and an externally expected owner-image digest, and rejects a
+different public cohort. Its report always has `migrationPermitted: false` and
+the CLI exits `3` even for a matching candidate. It does not verify an image
+signature or reviewer approval, retire the JSON writer, import a credential,
+or admit production startup.
+
+`src/legacy-import.js` adds a separate offline candidate. The read-only
+`inspectSealedLegacyImport` checks a private SHA-pinned schema-3/4 image against
+schema-v9 proof and owner rows and returns a redacted preflight commitment.
+`importSealedLegacyCredentialCohort` requires that caller-supplied
+commitment, rechecks it under `BEGIN IMMEDIATE`, then atomically inserts every
+historical public credential, exact metadata and wallet-key scope, immutable
+owner bindings and one durable receipt. Each imported authenticator starts at
+its verified post-assertion counter. An empty tombstone, missing or v8-era
+proof, owner alias, ID collision, changed state, partial import and replay all
+fail closed. Manifest version 2 binds the resulting receipt; version 1 rejects
+an imported cohort whose receipt it omits. Tests cover schema-3/4 images,
+two credentials on one key, rollback, an uncertain commit and two-process
+replay. This importer has no production HTTP route or startup admission. It
+cannot prove the JSON writer was drained, attribute an empty tombstone, or
+authenticate an image or reviewer signature. Do not invoke it on a live
+cohort.
+
+`src/legacy-retirement-verifier.js` adds a separate **read-only** readback of
+the existing JSON writer's one-way retirement artifacts. Given independently
+recorded source and cutover-manifest digests, it requires the private live
+schema-3/4 JSON file to equal the exact sealed image, the exact retirement
+marker bytes to bind both digests, and the private writer-lease artifact to
+remain present and bound to that canonical file. It rejects missing, changed,
+substituted or public files. The CLI below exits `3` even when the artifacts
+match, because a marker/lease readback cannot authenticate reviewer approval,
+the running image or the old writer's operational drain, and does not admit the
+SQLite service. It must never be used as a shortcut to enable recovery.
+
+```sh
+node services/passkey-backup-owner-authority/scripts/verify-retired-json-writer.mjs \
+  /absolute/private/credentials.json \
+  /absolute/private/legacy-<source-sha256>.json \
+  <source-sha256> <reviewed-cutover-manifest-sha256>
+```
+
+Schema v9 retains the internal `issueLegacyCutoverChallenge`,
+`claimLegacyCutoverChallenge`, `consumeLegacyCutoverClaim` and
+`verifyAndConsumeLegacyCutoverClaim` methods for a
+two-assertion cutover preparation. Issuance binds one sealed source digest and
+public credential cohort to a live random-owner session, credential counter,
+RP, platform, nonce and two distinct challenges. Claim is a single-use SQLite
+transition before asynchronous verification; consumption rechecks the exact
+claimed response hashes, sealed source, session, generation and owner counter
+under the writer lock. Unproven rows are capped at 128 globally and eight per
+owner.
+Challenges expire within two minutes; unverified rows remain replay tombstones
+until expiry even if the session is revoked. Verified rows and their challenge
+metadata remain retained after expiry for audit. The table holds metadata and
+response hashes only.
+The server-owned WebAuthn adapter now verifies both signed assertions against
+the SHA-pinned historical public key and current SQLite owner public key before
+the verified path rechecks the claim, compares and advances the owner
+authenticator counter, and atomically writes an immutable proof-metadata row.
+An unverified burn has no such row; a v7 state-2 row cannot acquire one during
+v9 migration or by a later proof insert. Startup and offline readers check the
+row against the retained challenge, counters, source and response digests, and
+both challenge hashes. Its SHA-256 commitment is a metadata consistency digest,
+not a cryptographic signature transcript or reusable migration token. Verified
+rows remain for audit after expiry and are never accepted as live authority.
+They do not consume the pending challenge quota, so the retained proof table
+requires cohort-scale storage and query qualification before admission.
+The challenge methods return `migrationPermitted: false`; the separate offline
+importer commits public metadata only and also denies production admission.
+Neither has a production HTTP route or authorizes cutover.
+
+## Concrete integration gates (not implemented)
+
+- Independently review the cryptographic verifier: the optional WebAuthn adapter verifies existing-owner assertions, enrollment, and internal v5 claimed registration/assertion with exact challenge, RP, configured platform origin, UV/UP, stored COSE key, counter and backup flags. Its first-owner path is opt-in and checks Ed25519/secp256k1 wallet proof plus the app-attestation verifier result. The optional Apple adapter checks the pinned Apple App Attestation root, certificate signatures/validity, nonce, P-256 key, app ID, zero counter, production AAGUID and approved bundle version. It hardwires the pinned-root fraud-receipt verifier and has no production listener wiring. The bundled Apple sample has expired leaf validity and passes only at its documented historical time; its raw-challenge hash convention is different from our native SHA-256 ceremony. Live Apple receipt/provider qualification, SR25519 bootstrap-proof verification, live Google decode, native wallet-signature/provider vectors and admitted production HTTP composition remain open. Independently qualify native iOS18+ GPM and Android PRF without raising existing app OS minima.
+- Coordinate the existing JSON credential store and this authority. **Do not deploy two independent writable sources of credential/owner/counter/revocation truth.** The grant-bound mutation primitive above is the owner-side transaction candidate, not a deployed integration. The minimal intended integration is one transactional store owning public credential rows and lifecycle generations, with the challenge service reading/writing through that same transaction boundary. Preserve legacy public keys, exact user handles, counters, owner-subject hashes and tombstones. Existing legacy hashes cannot simply be replaced with hashes of new random subjects; a reviewed verified-credential migration/alias design and compatible challenge checks are required. Current core deliberately offers no import, raw owner reassignment or Google recovery shortcut.
+- Admit the one-writer candidate only after a proven historical import and reviewed startup cutover manifest. Its local HTTP tests cover all seven route contracts, exact-body grants, challenge claims and session invalidation, but it remains deliberately unavailable for production. Registration challenge accepts only a previously proven storage-key binding. Merely returning this core's introspection response to the old JSON service is insufficient: an old in-flight registration or assertion could otherwise finish after a different store's revocation.
+- Complete production HTTP identity and operations: strict HTTPS deployment, reviewed proxy address policy, no redirects, request-body/token logging disabled across proxies/APM, capacity monitoring and backpressure, and a startup check that rejects a writable JSON store or a mismatched sealed import. The candidate locally bounds bodies, paths, duplicate headers, requests and timeouts, but its in-memory peer limit is not production abuse isolation. Keep response caching disabled. Do not expose `consumeGrant` through a generic handler.
+- Enrollment acceptance must additionally prove successful client-side decryption of the existing backup and a verified new-credential DEK-wrapper round trip before marking that recovery route usable. This core cannot observe plaintext or PRF and does not provide that proof. Removing the final recovery route needs explicit user confirmation and a verified surviving recovery path or an intentional no-recovery state. Revoking server metadata alone cannot revoke a DEK already learned by a credential holder: credential-compromise handling requires client-side DEK rotation and new immutable backup generations, with safe retirement of old wrappers/copies. `completeEnrollment` and `revokeCredential` do not satisfy those mobile acceptance requirements.
+- Native recovery uses Google Drive appData on both platforms under the same GCP application/project storage scope. Stable owner namespace is metadata only. Keep random DEK and PRF/HKDF-derived credential wrappers client-side, authenticated to exact owner/credential/RP/envelope context. Enrollment must create/verify a compatible wrapper without losing existing usable copies; immutable backup generations and a verified head/manifest prevent rollback or destructive replace. iCloud may be an extra copy. None of those storage/key workflows is implemented by this metadata core.
+- Run independent security review, pinned runtime/container and power-loss/storage qualification, encrypted backup/restore rehearsal, production association/origin evidence and replacement-device end-to-end tests. This directory is not deployment-ready or approval to enable passkey recovery.
+
+## Local checks
+
+```sh
+npm test --prefix services/passkey-backup-owner-authority
+npm run lint:syntax --prefix services/passkey-backup-owner-authority
+```
+
+Tests use temporary private databases and synthetic public credentials. Real separate-process races and forced process exits test single-use and SQLite journal recovery; simulated after-commit I/O failures test poison behavior. They do not claim actual WebAuthn/provider verification, power-loss durability, Drive operations, or existing challenge-store atomic integration.
