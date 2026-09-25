@@ -7,6 +7,10 @@ credential store and all revocation state.
 
 ## Entry Gate
 
+- If `/data/passkey-backup/.credentials.json.retired` exists, stop this JSON
+  rollback. Its retained writer lease and marker fence the old authority after
+  a one-way cutover. Do not remove either file or start an older image that
+  ignores the marker; use the reviewed SQLite-authority forward-recovery plan.
 - Record the incident or release identifier, rollback owner, storage owner,
   monitoring owner, start time, current immutable image reference, and reason.
 - Select a last-known-good image only as the full
