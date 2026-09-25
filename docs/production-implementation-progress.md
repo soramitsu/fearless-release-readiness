@@ -25,18 +25,22 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `1093b133ddf4d0c00751d99ae79059f2e8e0dda1` and
+candidates are `da0331fcb39d119f34fc26ff433ea0020cdbc607` and
 `db4beab4dc18684e1dbad0ba58c244359f8967fe`, respectively, on
 [Android PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 and [iOS PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
 Both branches are clean and pushed but still require independent review.
-Android's exact-head account JVM suite passed 343/343; default and scoped
+Android's exact-head account JVM suite passed 345/345; default and scoped
 Detekt and the pinned Utils/WebSocket source verifier passed. Its receive-side
 watch proof rejects mismatched key/address pairs and mixed custody before
-read-only planning. The exact diff scan `3d9e0c53-27e6-4303-afbe-9349c0a3f51d`
-found zero reportable issues. Branch Flow, exact-head IAS and full Android
-CI passed, including API 30/31/36 migration and restart checks and the
-source-bound complete AAB native-payload verifier.
+read-only planning, and accepts only the existing strict V4R2 TON JSON address
+shape. The exact new source diff scan
+`7bc49c66-2a97-4b66-979d-7020051d3124` found zero reportable issues
+across all three changed production files.
+The preceding `1093b133` head passed Branch Flow, IAS and full Android CI,
+including API 30/31/36 migration and restart checks and the source-bound
+complete AAB native-payload verifier. The new exact-head Branch Flow passed;
+Android CI and IAS are running.
 The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
@@ -3268,7 +3272,11 @@ The complete owner suite passed **277/277** locally, including that new case;
 syntax lint and the diff check passed. This removes a permanent quota trap
 for a growing historical cohort, but does not qualify proof-table size,
 production disk monitoring, empty historical tombstones, writer cutover or
-live recovery.
+live recovery. Root commit `482ef0ced4f5c76fe1f2b6438a840ca02f9a5e46`
+is pushed; its exact-range security diff scan
+`ca068521-720f-4a47-b1ce-d5f2ede28c8f` sealed complete with zero reportable
+findings for the changed authority source. Protected CI for this new root head
+and independent human security review still remain required.
 
 ## Next active work
 
