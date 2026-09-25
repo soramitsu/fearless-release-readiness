@@ -26,13 +26,13 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are `2587da972b4ef5525efdeb8c3dc03e3e6ad3a58a` and
-`8198f520809bb2754cf8d904313876ee149818ae`, respectively. Both clean app
+`658ff359aa98ed927ec8fc666013c17f091707ae`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
 328/328 with default and focused scoped Detekt; the earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
 passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec and
-receive-projection Release suites passed 18/18 on iOS 18.1 arm64, including the
+receive-projection Release suites passed 19/19 on iOS 18.1 arm64, including the
 shared display-metadata byte vector. The preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
@@ -3070,6 +3070,18 @@ two SwiftLint findings and import-order finding match the parent exactly.
 This source equivalence does not prove original-key restoration or provider
 interoperability. Both app branches are pushed, but their new-head hosted CI,
 independent review and signed-device acceptance remain open.
+
+The follow-up iOS source `658ff359aa98ed927ec8fc666013c17f091707ae`
+proves that Android IDs 10/11 cannot be silently mapped into iOS metadata ID 4:
+the Android selected chain and chain-selector filter are independent wallet
+display preferences, whereas ID 4 is iOS Core Data's network-management
+filter and its explicit empty value decodes as `.chain("")`. A regression
+projects all three independently and retains both `.unmappedMetadata(3)` and
+`.transactionalInstallerUnavailable`. The exact iOS 18.1 arm64 Release
+semantic/projection run passed **19/19**; changed Swift files pass strict
+SwiftLint and SwiftFormat. Wallet-bound foreign-preference persistence and an
+atomic installer/readback are required before either value can be restored.
+No recovery path was enabled.
 
 The legacy JSON passkey writer now checks an adjacent durable retirement
 marker at startup and at every owned-lease check, including the last check
