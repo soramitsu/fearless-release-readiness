@@ -26,14 +26,15 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are `2587da972b4ef5525efdeb8c3dc03e3e6ad3a58a` and
-`658ff359aa98ed927ec8fc666013c17f091707ae`, respectively. Both clean app
+`27e25de0a11d5af1c8b1f5421cdf7c09c528793c`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
 328/328 with default and focused scoped Detekt; the earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
 passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec and
-receive-projection Release suites passed 19/19 on iOS 18.1 arm64, including the
-shared display-metadata byte vector. The preceding journal source passed 11/11 and
+receive-projection Release suites passed 21/21 on iOS 18.1 arm64, including the
+shared display-metadata byte vector and wallet-bound foreign-preference sidecar
+projection. The preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
@@ -3089,6 +3090,17 @@ semantic/projection run passed **19/19**; changed Swift files pass strict
 SwiftLint and SwiftFormat. Wallet-bound foreign-preference persistence and an
 atomic installer/readback are required before either value can be restored.
 No recovery path was enabled.
+
+The next iOS source `27e25de0a11d5af1c8b1f5421cdf7c09c528793c`
+adds prospective read-only sidecar records for Android metadata IDs 10/11.
+It binds each record to the 16-byte portable wallet ID and to a fresh iOS
+destination meta ID only after the receive journal verifies the exact semantic
+cohort. It preserves absent versus explicitly empty values and never conflates
+them with iOS network-management filter ID 4. The final-source iOS 18.1 arm64
+Release semantic/projection suites passed **21/21**; strict SwiftLint,
+SwiftFormat and diff checks passed. `unmappedMetadata` and
+`transactionalInstallerUnavailable` remain, since no durable sidecar store,
+atomic cohort installer or readback exists. The code does not enable recovery.
 
 The legacy JSON passkey writer now checks an adjacent durable retirement
 marker at startup and at every owned-lease check, including the last check
