@@ -70,13 +70,18 @@ export function verifyLegacyCutoverManifest({ manifestPath, expectedManifestSha2
   catch { deny(); }
   exact(manifest, ['schemaVersion', 'source', 'owner', 'candidate']);
   exact(manifest.source, ['sha256', 'schemaVersion', 'storageKeys', 'credentials', 'tombstones']);
-  exact(manifest.owner, ['schemaVersion', 'publicRowsSha256', 'bindings', 'historicalMetadata', 'verifiedProofs']);
+  if (![1, 2].includes(manifest.schemaVersion)) deny();
+  exact(manifest.owner, manifest.schemaVersion === 2
+    ? ['schemaVersion', 'publicRowsSha256', 'bindings', 'historicalMetadata',
+      'verifiedProofs', 'importReceiptSha256']
+    : ['schemaVersion', 'publicRowsSha256', 'bindings', 'historicalMetadata', 'verifiedProofs']);
   exact(manifest.candidate, ['ownerImageSha256', 'protectedRoutesSha256']);
   if (!Buffer.from(`${JSON.stringify(canonical(manifest), null, 2)}\n`, 'utf8').equals(bytes) ||
-      manifest.schemaVersion !== 1 ||
       !SHA256_HEX.test(manifest.source.sha256) ||
       ![3, 4].includes(manifest.source.schemaVersion) ||
-      manifest.owner.schemaVersion !== 8 ||
+      ![8, 9].includes(manifest.owner.schemaVersion) ||
+      (manifest.schemaVersion === 2 && (manifest.owner.schemaVersion !== 9 ||
+        !SHA256_HEX.test(manifest.owner.importReceiptSha256))) ||
       !SHA256_HEX.test(manifest.owner.publicRowsSha256)) deny();
   for (const value of [manifest.source.storageKeys, manifest.source.credentials,
     manifest.source.tombstones, manifest.owner.bindings,
@@ -98,15 +103,19 @@ export function verifyLegacyCutoverManifest({ manifestPath, expectedManifestSha2
     deny('cutover_manifest_state_mismatch');
   }
   if (!report.publicRepresentationExact) deny('cutover_manifest_public_cohort_mismatch');
+  if (manifest.schemaVersion === 2
+    ? !sameDigest(report.importReceiptSha256, manifest.owner.importReceiptSha256)
+    : report.importReceiptSha256 !== null) deny('cutover_manifest_receipt_mismatch');
   return Object.freeze({ schemaVersion: 1, mode: 'read-only',
     manifestSha256: expectedManifestSha256, sourceSha256: manifest.source.sha256,
     sourceAndTargetMatched: true,
     retainedProofMetadataComplete: report.proofMetadata.sourceAndBindingMetadataComplete,
+    durableImportReceiptBound: manifest.schemaVersion === 2,
     migrationPermitted: false,
     blockers: Object.freeze([
       'manifest_signature_and_running_image_unverified',
       'legacy_writer_drain_and_retirement_unverified',
-      'historical_cohort_import_receipt_missing',
+      ...(manifest.schemaVersion === 1 ? ['historical_cohort_import_receipt_missing'] : []),
       'webAuthn_proof_provenance_and_tombstones_unresolved',
       'production_startup_admission_missing',
     ]) });

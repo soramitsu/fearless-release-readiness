@@ -27,6 +27,13 @@ export function downgradeStoreFixture(path, version) {
   try {
     db.exec(`
       BEGIN IMMEDIATE;
+      DROP TRIGGER legacy_import_receipt_no_update;
+      DROP TRIGGER legacy_import_receipt_no_delete;
+      DROP TRIGGER legacy_import_source_no_new_binding;
+      DROP TRIGGER legacy_import_source_no_new_proof;
+      DROP TRIGGER legacy_import_proof_v2_insert;
+      DROP TRIGGER legacy_import_owner_key_no_update;
+      DROP TABLE legacy_import_receipts;
       DROP TRIGGER legacy_cutover_verified_proof_insert;
       DROP TRIGGER legacy_cutover_verified_proof_no_update;
       DROP TRIGGER legacy_cutover_verified_proof_no_delete;

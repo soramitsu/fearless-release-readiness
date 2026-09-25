@@ -13,7 +13,7 @@ function deny(code) {
   throw error;
 }
 
-function readSealedSource(path, expectedSha256) {
+export function readSealedSource(path, expectedSha256) {
   const before = readPrivateLegacySnapshotBytes(path);
   const actual = createHash('sha256').update(before).digest();
   if (!timingSafeEqual(actual, Buffer.from(expectedSha256, 'hex'))) deny('cutover_snapshot_mismatch');
@@ -56,7 +56,7 @@ export function readSealedLegacyCredential({ legacySnapshotPath, expectedSourceS
 }
 
 /**
- * Compare a privately quarantined JSON image with schema-v7/v8 SQLite without
+ * Compare a privately quarantined JSON image with schema-v7/v8/v9 SQLite without
  * opening either store for writing. Public representation and retained proof
  * metadata are reported separately; neither can authorize an owner link.
  * The return value can never authorize import, startup, or recovery.
@@ -71,12 +71,14 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   }
   const source = readSealedSource(legacySnapshotPath, expectedSourceSha256);
   const target = readOwnerCredentialSnapshot(ownerPath);
-  if (![7, 8].includes(target.schemaVersion)) deny('cutover_owner_schema_mismatch');
+  if (![7, 8, 9].includes(target.schemaVersion)) deny('cutover_owner_schema_mismatch');
   const comparedTargetRowsSha256 = createHash('sha256')
     .update('FP_LEGACY_PUBLIC_STATE_V1\0')
     .update(JSON.stringify([target.owners, target.credentials, target.storageBindings,
       target.legacyCredentialMetadata, target.credentialScopes]))
     .digest('hex');
+  const importReceiptSha256 = target.legacyImportReceipts[0]?.source_sha256 === expectedSourceSha256
+    ? target.legacyImportReceipts[0].receipt_sha256 : null;
 
   const bindings = new Map(target.storageBindings.map((row) => [row.storage_key, row]));
   const credentials = new Map(target.credentials.map((row) => [row.id, row]));
@@ -282,11 +284,12 @@ export function verifySealedLegacyCutover({ legacySnapshotPath, ownerPath, expec
   return Object.freeze({ schemaVersion: 1, mode: 'read-only', migrationPermitted: false,
     publicRepresentationExact: counts.discrepancies === 0,
     sourceSha256: expectedSourceSha256, comparedTargetRowsSha256,
+    importReceiptSha256,
     sourceSchemaVersion: source.needsMigration ? 3 : 4,
     ownerSchemaVersion: target.schemaVersion, counts: Object.freeze(counts),
     diagnostics: Object.freeze(diagnostics), omittedDiagnostics,
     proofMetadata: Object.freeze({
-      sourceAndBindingMetadataComplete: target.schemaVersion === 8 && counts.sourceCredentials > 0 &&
+      sourceAndBindingMetadataComplete: target.schemaVersion >= 8 && counts.sourceCredentials > 0 &&
         proofCounts.ownerAlignedProofs === counts.sourceCredentials &&
         proofCounts.anchoredStorageKeys === counts.sourceStorageKeys - counts.sourceTombstones &&
         proofCounts.discrepancies === 0,

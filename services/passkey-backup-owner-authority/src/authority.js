@@ -697,20 +697,25 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
           owner_device_type: ownerEvidence.deviceType,
           owner_backed_up: Number(ownerEvidence.backedUp),
           verified_at: tx.now,
+          proof_version: 2,
+          owner_public_key_sha256: sha256Hex(Buffer.from(ownerCredential.public_key, 'base64url')),
+          owner_public_key: ownerCredential.public_key,
         };
         const proofSha256 = legacyCutoverProofCommitment(proof);
         tx.run(`INSERT INTO legacy_cutover_verified_proofs (
           challenge_id,proof_sha256,source_sha256,owner,legacy_credential_id,owner_credential_id,
           legacy_body_sha256,owner_body_sha256,legacy_challenge_sha256,owner_challenge_sha256,
           legacy_new_counter,owner_new_counter,legacy_device_type,legacy_backed_up,
-          owner_device_type,owner_backed_up,verified_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          owner_device_type,owner_backed_up,verified_at,proof_version,
+          owner_public_key_sha256,owner_public_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         proof.challenge_id, proofSha256, proof.source_sha256, proof.owner,
         proof.legacy_credential_id, proof.owner_credential_id,
         proof.legacy_body_sha256, proof.owner_body_sha256,
         proof.legacy_challenge_sha256, proof.owner_challenge_sha256,
         proof.legacy_new_counter, proof.owner_new_counter,
         proof.legacy_device_type, proof.legacy_backed_up,
-        proof.owner_device_type, proof.owner_backed_up, proof.verified_at);
+        proof.owner_device_type, proof.owner_backed_up, proof.verified_at,
+        proof.proof_version, proof.owner_public_key_sha256, proof.owner_public_key);
         if (tx.run('UPDATE legacy_cutover_challenges SET state=2 WHERE id=? AND state=1', row.id)
           .changes !== 1) deny();
         return Object.freeze({ schemaVersion: 1, challengeId: row.id,

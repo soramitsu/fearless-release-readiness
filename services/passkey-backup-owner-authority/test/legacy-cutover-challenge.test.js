@@ -136,7 +136,7 @@ test('a v7 consumed claim migrates as unverified and cannot acquire a proof by d
   assert.equal(row(item.path, issued.challengeId).state, 2);
   const db = new DatabaseSync(item.path);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 9);
     assert.equal(db.prepare('SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n, 0);
     const old = row(item.path, issued.challengeId);
     assert.throws(() => db.prepare(`INSERT INTO legacy_cutover_verified_proofs (
@@ -148,10 +148,10 @@ test('a v7 consumed claim migrates as unverified and cannot acquire a proof by d
       old.legacy_credential_id, old.owner_credential_id, old.legacy_body_sha256,
       old.owner_body_sha256, digest(issued.legacyChallenge), digest(issued.ownerChallenge),
       8, old.owner_credential_counter, 'multiDevice', 1, 'multiDevice', 1,
-      old.expires - 1000), /invalid legacy cutover proof/);
+      old.expires - 1000), /v2 owner key proof required|invalid legacy cutover proof/);
     assert.equal(db.prepare('SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n, 0);
   } finally { db.close(); }
-  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 9);
   migrated.close();
 });
 
@@ -359,7 +359,7 @@ test('revoking the owner session retains a claimed replay tombstone across resta
   assert.equal(row(item.path, challenge.challengeId).state, 1);
   item.core.close();
   const reopened = item.open();
-  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 9);
   denied(() => reopened.claimLegacyCutoverChallenge(item.owner.sessionToken, claimInput));
   denied(() => reopened.consumeLegacyCutoverClaim(item.owner.sessionToken, {
     ...claimInput, legacySnapshotPath: item.legacySnapshotPath,

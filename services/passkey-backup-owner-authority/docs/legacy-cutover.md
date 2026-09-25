@@ -3,7 +3,7 @@
 This is a design for a future, reviewed migration. **No live credential route is
 converted or admitted by this document.** The current challenge HTTP process
 writes schema-4 JSON after separate grant introspection; the owner authority
-uses schema-8 SQLite. Its local HTTP candidate requires explicit test admission
+uses schema-9 SQLite. Its local HTTP candidate requires explicit test admission
 and rejects production construction. The read-only reconciliation
 report always denies migration. Its two file snapshots are sequential and are
 not proof of ownership or an atomic cross-store view.
@@ -93,14 +93,15 @@ commit the owner link and historical credential cohort atomically.
    conflicting owner hash, missing proof, changed snapshot or an owner binding
    already claimed by another namespace. Never initialize an empty database to
    bypass failure.
-2. SQLite schema v8 has storage-key→random-owner binding and capacity for
+2. SQLite schema v9 has storage-key→random-owner binding and capacity for
    complete historical public metadata and zero-credential tombstones. It
    preserves credential-scoped historical user handles in `credentials` rather
    than replacing them with `owners.user_handle`, and records explicit owner-wide
    or wallet-key credential scope. No legacy row or owner link
-   has been imported. A future reviewed importer must verify the proof and
-   source digest, then import a proven cohort and its proof commitment in one
-   durable SQLite transaction with collision and counter checks. Retain an
+   has been imported into a deployed authority. The offline candidate importer
+   verifies proof and source digest, then imports a proven nonempty cohort
+   and its proof commitments in one durable SQLite transaction with collision
+   and counter checks. Retain an
    encrypted, immutable pre-cutover snapshot for audit and forward recovery.
    Import is not a Google-account operation.
 
@@ -117,7 +118,7 @@ commit the owner link and historical credential cohort atomically.
    `legacy-<sha256>.json` image against its independently supplied digest and
    compares **every** source storage key, empty tombstone, credential ID,
    COSE public key, historical user handle, counter, device/backup/revocation
-   state, AAGUID, transports, platform and wallet-key scope with schema-v8
+   state, AAGUID, transports, platform and wallet-key scope with schema-v8/9
    SQLite. When a retained verified proof exists, the target credential counter
    must equal that proof's post-assertion counter, not the older sealed-source
    counter. Restoring the old counter would reopen a cloned-authenticator replay
@@ -130,7 +131,7 @@ commit the owner link and historical credential cohort atomically.
    `publicRepresentationExact: true` means the target public fields match the
    sealed image, except that a proven credential must carry its verified
    post-assertion counter. It is **not** an owner proof. A separate
-   `proofMetadata` section compares retained schema-v8
+   `proofMetadata` section compares retained schema-v8/9
    challenge/proof metadata with the exact sealed source and each binding's
    commitment in the same pinned SQLite read transaction. Every source
    credential needs a matching proof aligned to the binding owner; one proof
@@ -154,6 +155,28 @@ commit the owner link and historical credential cohort atomically.
    node services/passkey-backup-owner-authority/scripts/verify-sealed-legacy-cutover.mjs \
      /private/quarantine/legacy-<sha256>.json /private/authority.sqlite <sha256>
    ```
+
+   Schema v9 adds an offline candidate importer, separate from the HTTP
+   service. `inspectSealedLegacyImport` compares the exact sealed image with
+   one pinned SQLite read transaction and returns a redacted commitment to
+   that pre-import public state. Every credential must have a schema-v9 proof
+   bound to the exact owner public key, sealed source, historical key and
+   owner generation. All credentials under one historical owner hash must
+   resolve to one random owner, with no reverse alias. An unproven empty
+   tombstone, missing proof, v8-era proof, existing binding or credential ID
+   fails closed. `importSealedLegacyCredentialCohort` requires a caller-supplied
+   preflight commitment, rechecks it under `BEGIN IMMEDIATE`, and
+   inserts all bindings, public credential rows, exact AAGUID/transports/
+   platform metadata, wallet-key scopes and one immutable receipt in one
+   transaction. It starts each imported credential at its verified
+   post-assertion counter. A precommit fault rolls everything back; an
+   uncertain postcommit outcome must be reconciled by reading the receipt.
+   Replay cannot add a second binding or receipt. The caller still must
+   establish that the JSON writer has stopped and the sealed image is the
+   final cohort and that the commitment was independently reviewed; this
+   library cannot prove those operational facts. No
+   production process calls the importer or admits its receipt as a startup
+   signal.
 3. The local HTTP composition candidate must use that same SQLite database as the **sole**
    credential and grant writer for all seven protected routes. The exact raw
    request-body grant and registration/counter/revocation change must commit
@@ -197,13 +220,15 @@ protected-route SHA-256). The route digest is SHA-256 over UTF-8
 JSON keys, two-space indentation and one final newline; its basename is
 `cutover-<sha256>.json` for its exact bytes. The caller must obtain the
 expected manifest and image digests independently; this verifier cannot
-establish their authenticity.
+establish their authenticity. Version 2 additionally requires the exact
+schema-v9 `importReceiptSha256`. Version 1 rejects an imported cohort whose
+receipt it does not bind.
 Even a match exits `3` with `migrationPermitted: false`: this check does not
 verify a reviewer signature, running image, drained old writer, WebAuthn
-transcripts or a durable import receipt. It is not accepted by the retirement
-primitive or production startup. The v8 proof limits (128 globally/eight per
-owner), unproven empty tombstones and missing historical-cohort importer remain
-blocking design work.
+transcripts or receipt provenance. It is not accepted by the retirement
+primitive or production startup. The proof limits (128 globally/eight per
+owner), unproven empty tombstones, writer drain, reviewed startup admission
+and exact signed upgrade acceptance remain blocking work.
 
 Before admission, exercise in-flight assertion-versus-revoke, registration-
 versus-revoke, duplicate counter, final-route removal, wrong owner/storage key,

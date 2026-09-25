@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync } from 
 import { dirname, isAbsolute } from 'node:path';
 import { AuthorityError, base64, deny, hash, opaque } from './validation.js';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 
 export function legacyCutoverAssertionChallenge(row, role) {
@@ -27,7 +27,23 @@ export function legacyCutoverProofCommitment(proof) {
     proof.legacy_new_counter, proof.owner_new_counter,
     proof.legacy_device_type, proof.legacy_backed_up,
     proof.owner_device_type, proof.owner_backed_up, proof.verified_at];
+  if (proof.proof_version === 2) {
+    fields.push(proof.owner_public_key_sha256, proof.owner_public_key);
+    return createHash('sha256').update(`FP_LEGACY_CUTOVER_VERIFIED_V2\0${JSON.stringify(fields)}`).digest('hex');
+  }
   return createHash('sha256').update(`FP_LEGACY_CUTOVER_VERIFIED_V1\0${JSON.stringify(fields)}`).digest('hex');
+}
+export function legacyImportReceiptCommitment(receipt) {
+  const fields = [receipt.source_sha256, receipt.source_schema_version,
+    receipt.storage_keys, receipt.credentials, receipt.proof_set_sha256,
+    receipt.binding_set_sha256, receipt.public_rows_sha256, receipt.imported_at];
+  return createHash('sha256').update(`FP_LEGACY_IMPORT_RECEIPT_V1\0${JSON.stringify(fields)}`).digest('hex');
+}
+export function legacyImportProofSetSha256(rows) {
+  return createHash('sha256').update(`FP_LEGACY_IMPORT_PROOFS_V1\0${JSON.stringify(rows)}`).digest('hex');
+}
+export function legacyImportBindingSetSha256(rows) {
+  return createHash('sha256').update(`FP_LEGACY_IMPORT_BINDINGS_V1\0${JSON.stringify(rows)}`).digest('hex');
 }
 const BACKUP_HEAD_SCHEMA = `
 CREATE TABLE backup_operations (
@@ -269,6 +285,11 @@ CREATE TABLE legacy_cutover_verified_proofs (
  owner_device_type TEXT NOT NULL CHECK(owner_device_type IN ('singleDevice','multiDevice')),
  owner_backed_up INTEGER NOT NULL CHECK(owner_backed_up IN (0,1)),
  verified_at INTEGER NOT NULL CHECK(verified_at>=0),
+ proof_version INTEGER NOT NULL DEFAULT 1 CHECK(proof_version IN (1,2)),
+ owner_public_key_sha256 TEXT CHECK(owner_public_key_sha256 IS NULL OR length(owner_public_key_sha256)=64),
+ owner_public_key TEXT,
+ CHECK((proof_version=1 AND owner_public_key_sha256 IS NULL AND owner_public_key IS NULL) OR
+       (proof_version=2 AND owner_public_key_sha256 IS NOT NULL AND owner_public_key IS NOT NULL)),
  CHECK(legacy_device_type='multiDevice' OR legacy_backed_up=0),
  CHECK(owner_device_type='multiDevice' OR owner_backed_up=0)
 ) STRICT;
@@ -295,9 +316,44 @@ BEGIN SELECT RAISE(ABORT,'immutable legacy cutover proof'); END;
 CREATE TRIGGER legacy_cutover_verified_proof_no_delete BEFORE DELETE ON legacy_cutover_verified_proofs
 BEGIN SELECT RAISE(ABORT,'immutable legacy cutover proof'); END;
 `;
+const LEGACY_IMPORT_RECEIPT_SCHEMA = `
+CREATE TABLE legacy_import_receipts (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64),
+ source_schema_version INTEGER NOT NULL CHECK(source_schema_version IN (3,4)),
+ storage_keys INTEGER NOT NULL CHECK(storage_keys>0),
+ credentials INTEGER NOT NULL CHECK(credentials>0),
+ proof_set_sha256 TEXT NOT NULL CHECK(length(proof_set_sha256)=64),
+ binding_set_sha256 TEXT NOT NULL CHECK(length(binding_set_sha256)=64),
+ public_rows_sha256 TEXT NOT NULL CHECK(length(public_rows_sha256)=64),
+ imported_at INTEGER NOT NULL CHECK(imported_at>=0),
+ receipt_sha256 TEXT NOT NULL UNIQUE CHECK(length(receipt_sha256)=64)
+) STRICT;
+CREATE TRIGGER legacy_import_receipt_no_update BEFORE UPDATE ON legacy_import_receipts
+BEGIN SELECT RAISE(ABORT,'immutable legacy import receipt'); END;
+CREATE TRIGGER legacy_import_receipt_no_delete BEFORE DELETE ON legacy_import_receipts
+BEGIN SELECT RAISE(ABORT,'immutable legacy import receipt'); END;
+CREATE TRIGGER legacy_import_source_no_new_binding BEFORE INSERT ON storage_bindings
+WHEN EXISTS (SELECT 1 FROM legacy_import_receipts WHERE source_sha256=NEW.source_sha256)
+BEGIN SELECT RAISE(ABORT,'sealed legacy import source'); END;
+CREATE TRIGGER legacy_import_source_no_new_proof BEFORE INSERT ON legacy_cutover_verified_proofs
+WHEN EXISTS (SELECT 1 FROM legacy_import_receipts WHERE source_sha256=NEW.source_sha256)
+BEGIN SELECT RAISE(ABORT,'sealed legacy import source'); END;
+CREATE TRIGGER legacy_import_proof_v2_insert BEFORE INSERT ON legacy_cutover_verified_proofs
+BEGIN
+ SELECT RAISE(ABORT,'v2 owner key proof required') WHERE NEW.proof_version!=2 OR NOT EXISTS (
+  SELECT 1 FROM credentials c WHERE c.id=NEW.owner_credential_id AND c.owner=NEW.owner
+    AND c.public_key=NEW.owner_public_key
+ );
+END;
+CREATE TRIGGER legacy_import_owner_key_no_update
+BEFORE UPDATE OF public_key,user_handle ON credentials
+WHEN EXISTS (SELECT 1 FROM legacy_cutover_verified_proofs p WHERE p.owner_credential_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'immutable proven owner key'); END;
+`;
 const SCHEMA = `
-CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=8)) STRICT;
-INSERT INTO meta VALUES(1,0,0,8);
+CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=9)) STRICT;
+INSERT INTO meta VALUES(1,0,0,9);
 CREATE TABLE owners (
  subject TEXT PRIMARY KEY, namespace TEXT UNIQUE NOT NULL, user_handle TEXT UNIQUE NOT NULL,
  wallet_binding TEXT UNIQUE NOT NULL, generation INTEGER NOT NULL CHECK(generation>=0), created INTEGER NOT NULL
@@ -337,7 +393,8 @@ ${PENDING_CHALLENGE_SCHEMA}
 ${KEY_ROTATION_SCHEMA}
 ${LEGACY_CUTOVER_CHALLENGE_SCHEMA}
 ${LEGACY_CUTOVER_VERIFIED_PROOF_SCHEMA}
-PRAGMA user_version=8;
+${LEGACY_IMPORT_RECEIPT_SCHEMA}
+PRAGMA user_version=9;
 `;
 const MIGRATE_V1_TO_V2 = `
 ${BACKUP_HEAD_SCHEMA}
@@ -398,13 +455,25 @@ DROP TABLE meta;
 ALTER TABLE meta_v7 RENAME TO meta;
 PRAGMA user_version=7;
 `;
-const MIGRATE_V7_TO_V8 = `
+const MIGRATE_V7_TO_V9 = `
 ${LEGACY_CUTOVER_VERIFIED_PROOF_SCHEMA}
-CREATE TABLE meta_v8 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=8)) STRICT;
-INSERT INTO meta_v8 SELECT id,wall,observed,8 FROM meta WHERE id=1 AND version=7;
+${LEGACY_IMPORT_RECEIPT_SCHEMA}
+CREATE TABLE meta_v9 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=9)) STRICT;
+INSERT INTO meta_v9 SELECT id,wall,observed,9 FROM meta WHERE id=1 AND version=7;
 DROP TABLE meta;
-ALTER TABLE meta_v8 RENAME TO meta;
-PRAGMA user_version=8;
+ALTER TABLE meta_v9 RENAME TO meta;
+PRAGMA user_version=9;
+`;
+const MIGRATE_V8_TO_V9 = `
+ALTER TABLE legacy_cutover_verified_proofs ADD COLUMN proof_version INTEGER NOT NULL DEFAULT 1 CHECK(proof_version IN (1,2));
+ALTER TABLE legacy_cutover_verified_proofs ADD COLUMN owner_public_key_sha256 TEXT;
+ALTER TABLE legacy_cutover_verified_proofs ADD COLUMN owner_public_key TEXT;
+${LEGACY_IMPORT_RECEIPT_SCHEMA}
+CREATE TABLE meta_v9 (id INTEGER PRIMARY KEY CHECK(id=1), wall INTEGER NOT NULL CHECK(wall>=0), observed INTEGER NOT NULL CHECK(observed>=0), version INTEGER NOT NULL CHECK(version=9)) STRICT;
+INSERT INTO meta_v9 SELECT id,wall,observed,9 FROM meta WHERE id=1 AND version=8;
+DROP TABLE meta;
+ALTER TABLE meta_v9 RENAME TO meta;
+PRAGMA user_version=9;
 `;
 
 function validateLegacyCohortSchema(db) {
@@ -521,6 +590,7 @@ function validateLegacyCutoverVerifiedProofSchema(db) {
   const proofs = db.prepare('SELECT * FROM legacy_cutover_verified_proofs').all();
   if (proofs.length > 128) deny('store_invalid');
   for (const proof of proofs) {
+    if (proof.proof_version === 2) base64(proof.owner_public_key, 1, 6144);
     const row = db.prepare('SELECT * FROM legacy_cutover_challenges WHERE id=?').get(proof.challenge_id);
     if (!row || row.state !== 2 || proof.verified_at >= row.expires ||
         proof.verified_at < row.expires - 120_000 ||
@@ -535,10 +605,62 @@ function validateLegacyCutoverVerifiedProofSchema(db) {
           legacyCutoverAssertionChallenge(row, 'OWNER')).digest('hex') ||
         !SHA256_HEX.test(proof.proof_sha256) ||
         proof.proof_sha256 !== legacyCutoverProofCommitment(proof) ||
+        (proof.proof_version !== undefined &&
+          (proof.proof_version === 2
+            ? (!SHA256_HEX.test(proof.owner_public_key_sha256) ||
+              proof.owner_public_key_sha256 !== createHash('sha256').update(
+                Buffer.from(proof.owner_public_key ?? '', 'base64url')).digest('hex') ||
+              db.prepare('SELECT public_key FROM credentials WHERE id=?').get(
+                proof.owner_credential_id)?.public_key !== proof.owner_public_key)
+            : (proof.proof_version !== 1 || proof.owner_public_key_sha256 !== null ||
+              proof.owner_public_key !== null))) ||
         ((row.legacy_counter !== 0 || proof.legacy_new_counter !== 0) &&
           proof.legacy_new_counter <= row.legacy_counter) ||
         ((row.owner_credential_counter !== 0 || proof.owner_new_counter !== 0) &&
           proof.owner_new_counter <= row.owner_credential_counter)) deny('store_invalid');
+  }
+}
+
+function validateLegacyImportReceiptSchema(db) {
+  db.prepare(`SELECT proof_version,owner_public_key_sha256,owner_public_key
+    FROM legacy_cutover_verified_proofs LIMIT 0`).all();
+  db.prepare(`SELECT id,source_sha256,source_schema_version,storage_keys,credentials,
+    proof_set_sha256,binding_set_sha256,public_rows_sha256,imported_at,receipt_sha256
+    FROM legacy_import_receipts LIMIT 0`).all();
+  for (const name of ['legacy_import_receipt_no_update', 'legacy_import_receipt_no_delete',
+    'legacy_import_source_no_new_binding', 'legacy_import_source_no_new_proof',
+    'legacy_import_proof_v2_insert', 'legacy_import_owner_key_no_update']) {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name=?").get(name)) {
+      deny('store_invalid');
+    }
+  }
+  const receipts = db.prepare('SELECT * FROM legacy_import_receipts').all();
+  if (receipts.length > 1) deny('store_invalid');
+  for (const receipt of receipts) {
+    if (![receipt.source_sha256, receipt.proof_set_sha256, receipt.binding_set_sha256,
+      receipt.public_rows_sha256, receipt.receipt_sha256].every((value) => SHA256_HEX.test(value)) ||
+        receipt.receipt_sha256 !== legacyImportReceiptCommitment(receipt)) deny('store_invalid');
+    const bindings = db.prepare(`SELECT storage_key,owner,legacy_owner_hash,source_sha256,proof_sha256
+      FROM storage_bindings WHERE source_sha256=? ORDER BY storage_key`).all(receipt.source_sha256);
+    const bindingRows = bindings.map((row) => [row.storage_key, row.owner,
+      row.legacy_owner_hash, row.source_sha256, row.proof_sha256]);
+    const proofs = db.prepare(`SELECT p.legacy_credential_id,p.proof_sha256
+      FROM legacy_cutover_verified_proofs p WHERE p.source_sha256=?
+      ORDER BY p.legacy_credential_id`).all(receipt.source_sha256);
+    const proofRows = proofs.map((row) => [row.legacy_credential_id, row.proof_sha256]);
+    if (bindings.length !== receipt.storage_keys || proofs.length !== receipt.credentials ||
+        legacyImportBindingSetSha256(bindingRows) !== receipt.binding_set_sha256 ||
+        legacyImportProofSetSha256(proofRows) !== receipt.proof_set_sha256 ||
+        db.prepare(`SELECT count(*) AS n FROM legacy_cutover_verified_proofs p
+          JOIN legacy_cutover_challenges h ON h.id=p.challenge_id
+          JOIN storage_bindings b ON b.storage_key=h.storage_key AND b.owner=p.owner
+          JOIN legacy_credential_metadata m ON m.credential_id=p.legacy_credential_id
+            AND m.storage_key=h.storage_key
+          JOIN credentials c ON c.id=m.credential_id AND c.owner=p.owner
+          JOIN credential_scopes s ON s.credential_id=c.id AND s.scope='storage'
+            AND s.storage_key=h.storage_key
+          WHERE p.source_sha256=? AND b.source_sha256=?`).get(
+          receipt.source_sha256, receipt.source_sha256).n !== receipt.credentials) deny('store_invalid');
   }
 }
 
@@ -651,7 +773,13 @@ export class AuthorityStore {
         if (!create && migrate && oldVersion === 7 &&
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 7) {
           validateLegacyCutoverChallengeSchema(this.#db);
-          this.#db.exec(MIGRATE_V7_TO_V8);
+          this.#db.exec(MIGRATE_V7_TO_V9);
+          oldVersion = 9;
+        }
+        if (!create && migrate && oldVersion === 8 &&
+            this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version === 8) {
+          validateLegacyCutoverVerifiedProofSchema(this.#db);
+          this.#db.exec(MIGRATE_V8_TO_V9);
         }
         if (this.#db.prepare('PRAGMA user_version').get().user_version !== SCHEMA_VERSION ||
             this.#db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== SCHEMA_VERSION ||
@@ -665,6 +793,7 @@ export class AuthorityStore {
         validateKeyRotationSchema(this.#db);
         validateLegacyCutoverChallengeSchema(this.#db);
         validateLegacyCutoverVerifiedProofSchema(this.#db);
+        validateLegacyImportReceiptSchema(this.#db);
         this.#db.exec('COMMIT');
       } catch (error) {
         this.#db.exec('ROLLBACK');
@@ -752,7 +881,7 @@ export function readOwnerCredentialSnapshot(path) {
     // through an fd alias might otherwise omit an uncheckpointed sidecar.
     if (db.prepare('PRAGMA journal_mode').get().journal_mode !== 'delete') deny('store_invalid');
     const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-    if (![2, 3, 4, 5, 6, 7, SCHEMA_VERSION].includes(schemaVersion) ||
+    if (![2, 3, 4, 5, 6, 7, 8, SCHEMA_VERSION].includes(schemaVersion) ||
         db.prepare('SELECT version FROM meta WHERE id=1').get()?.version !== schemaVersion ||
         db.prepare('PRAGMA quick_check').get().quick_check !== 'ok' ||
         db.prepare('PRAGMA foreign_key_check').all().length) deny('store_invalid');
@@ -762,6 +891,7 @@ export function readOwnerCredentialSnapshot(path) {
     if (schemaVersion >= 6) validateKeyRotationSchema(db);
     if (schemaVersion >= 7) validateLegacyCutoverChallengeSchema(db);
     if (schemaVersion >= 8) validateLegacyCutoverVerifiedProofSchema(db);
+    if (schemaVersion >= 9) validateLegacyImportReceiptSchema(db);
     const owners = db.prepare('SELECT subject,user_handle,generation FROM owners ORDER BY subject').all()
       .map((row) => Object.freeze({ ...row }));
     const credentials = db.prepare('SELECT id,owner,public_key,user_handle,counter,device_type,backed_up,revoked FROM credentials ORDER BY id').all()
@@ -779,14 +909,13 @@ export function readOwnerCredentialSnapshot(path) {
     // credentials and bindings. Offline comparison must not join snapshots
     // taken from different SQLite states. This is never a migration grant.
     const legacyCutoverChallenges = schemaVersion >= 7
-      ? db.prepare(`SELECT id,source_sha256,snapshot_name,storage_key,legacy_owner_hash,
-        legacy_credential_id,legacy_public_key_sha256,legacy_counter,legacy_user_handle,
-        legacy_scope,owner,rp_id,platform,state FROM legacy_cutover_challenges ORDER BY id`).all()
+      ? db.prepare(`SELECT * FROM legacy_cutover_challenges ORDER BY id`).all()
         .map((row) => Object.freeze({ ...row })) : [];
     const legacyCutoverVerifiedProofs = schemaVersion >= 8
-      ? db.prepare(`SELECT challenge_id,proof_sha256,source_sha256,owner,
-        legacy_credential_id,legacy_new_counter,legacy_device_type,legacy_backed_up
-        FROM legacy_cutover_verified_proofs ORDER BY challenge_id`).all()
+      ? db.prepare(`SELECT * FROM legacy_cutover_verified_proofs ORDER BY challenge_id`).all()
+        .map((row) => Object.freeze({ ...row })) : [];
+    const legacyImportReceipts = schemaVersion >= 9
+      ? db.prepare('SELECT * FROM legacy_import_receipts ORDER BY id').all()
         .map((row) => Object.freeze({ ...row })) : [];
     db.exec('COMMIT');
     assertNoSqliteSidecars(path);
@@ -799,7 +928,8 @@ export function readOwnerCredentialSnapshot(path) {
       legacyCredentialMetadata: Object.freeze(legacyCredentialMetadata),
       credentialScopes: Object.freeze(credentialScopes),
       legacyCutoverChallenges: Object.freeze(legacyCutoverChallenges),
-      legacyCutoverVerifiedProofs: Object.freeze(legacyCutoverVerifiedProofs) });
+      legacyCutoverVerifiedProofs: Object.freeze(legacyCutoverVerifiedProofs),
+      legacyImportReceipts: Object.freeze(legacyImportReceipts) });
   } catch {
     try { db?.exec('ROLLBACK'); } catch { /* connection may not have begun */ }
     deny('store_unavailable');

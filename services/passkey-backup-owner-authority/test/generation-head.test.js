@@ -238,7 +238,7 @@ test('explicit v5 migration conservatively fences a historical revoked credentia
   assert.equal(commit(migrated, restored.sessionToken, { ...next, keyEpoch: '2' }).descriptor.keyEpoch, '2');
   const db = new DatabaseSync(path);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 9);
     assert.equal(db.prepare('SELECT minimum_epoch FROM key_rotation_floors WHERE owner=?').get(owner.subject).minimum_epoch, 2);
     assert.throws(() => db.prepare('UPDATE key_rotation_floors SET minimum_epoch=1 WHERE owner=?').run(owner.subject),
       /rotation floor cannot decrease/);

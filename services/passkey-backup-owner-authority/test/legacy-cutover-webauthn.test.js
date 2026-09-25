@@ -459,7 +459,7 @@ test('verified metadata survives expiry and restart but remains non-authorizing'
     .get(item.issued.challengeId).proof_sha256), result.proofSha256);
   item.core.close();
   const reopened = item.open();
-  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 8);
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 9);
   await denied(reopened.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
     'authorization_failed');
   assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);

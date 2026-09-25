@@ -68,7 +68,7 @@ async function fixture(t) {
     owner: { bindings: compared.counts.targetBindings,
       historicalMetadata: compared.counts.targetHistoricalMetadata,
       publicRowsSha256: compared.comparedTargetRowsSha256,
-      schemaVersion: 8, verifiedProofs: compared.proofMetadata.counts.retainedProofs },
+      schemaVersion: 9, verifiedProofs: compared.proofMetadata.counts.retainedProofs },
     schemaVersion: 1,
     source: { credentials: compared.counts.sourceCredentials,
       schemaVersion: compared.sourceSchemaVersion, sha256: sourceSha256,
