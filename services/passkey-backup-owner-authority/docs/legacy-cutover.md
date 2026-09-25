@@ -171,6 +171,16 @@ commit the owner link and historical credential cohort atomically.
    disablement and compatible fixes, never wallet reset or JSON/database
    downgrade over newer counters or revocations.
 
+The candidate JSON service now has a source-level retirement fence. After a
+separately proven import and reviewed manifest, its offline retirement
+primitive can hold the old writer lease, compare the private schema-3/4 bytes
+with an independently recorded SHA-256 digest, and publish a durable no-replace
+marker bound to the manifest digest. New JSON writer startup and pre-publish
+checks reject that marker. The primitive has **not** been run on a deployed
+store and does not verify the manifest, import records, old image version or
+SQLite readiness; production admission must establish all of those first.
+The legacy marker and surviving lease must not be cleared as a rollback.
+
 Before admission, exercise in-flight assertion-versus-revoke, registration-
 versus-revoke, duplicate counter, final-route removal, wrong owner/storage key,
 expired/replayed proof, changed source digest, interrupted import and restart,

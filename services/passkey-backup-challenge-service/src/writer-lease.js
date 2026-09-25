@@ -66,6 +66,7 @@ export function acquireCredentialWriterLease(credentialStoreFile) {
   }
   let lockPath;
   let ownerPath;
+  let retirementMarkerPath;
   let parentIdentity;
   let directoryIdentity;
   let ownerIdentity;
@@ -78,10 +79,13 @@ export function acquireCredentialWriterLease(credentialStoreFile) {
     const canonicalFile = join(directory, basename(credentialStoreFile));
     lockPath = join(directory, `.${basename(canonicalFile)}.writer-lease`);
     ownerPath = join(lockPath, 'owner.json');
+    retirementMarkerPath = join(directory, `.${basename(canonicalFile)}.retired`);
+    if (existingFileStat(retirementMarkerPath)) throw unavailable();
     mkdirSync(lockPath, { mode: 0o700 });
     acquired = true;
     directoryIdentity = lstatSync(lockPath);
     privateDirectory(lockPath);
+    if (existingFileStat(retirementMarkerPath)) throw unavailable();
     const file = existingFileStat(canonicalFile);
     if (file && (!file.isFile() || file.isSymbolicLink() || file.nlink !== 1)) throw unavailable();
     const initialFileIdentity = snapshotIdentity(file);
@@ -102,6 +106,7 @@ export function acquireCredentialWriterLease(credentialStoreFile) {
     const assertOwned = () => {
       if (released) throw unavailable();
       try {
+        if (existingFileStat(retirementMarkerPath)) throw unavailable();
         if (!sameIdentity(privateDirectory(directory), parentIdentity)) throw unavailable();
         if (!sameIdentity(privateDirectory(lockPath), directoryIdentity)) throw unavailable();
         const current = lstatSync(ownerPath);
@@ -118,7 +123,7 @@ export function acquireCredentialWriterLease(credentialStoreFile) {
         } finally { closeSync(fd); }
       } catch { throw unavailable(); }
     };
-    return Object.freeze({ lockPath, canonicalFile, initialFileIdentity, assertOwned,
+    return Object.freeze({ lockPath, canonicalFile, retirementMarkerPath, initialFileIdentity, assertOwned,
       assertInitialFile() {
         assertOwned();
         try {

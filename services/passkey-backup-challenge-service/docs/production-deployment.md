@@ -150,6 +150,22 @@ snapshot to bypass this fence. Restart one instance and verify credential
 state before restoring traffic. This lease protects a local single-writer
 deployment; it does not authorize the separate owner SQLite cutover.
 
+For a future reviewed one-writer cutover, this JSON writer now rejects the
+adjacent `.<credential-file>.retired` marker at startup and on every lease
+check, including immediately before an atomic credential-file replacement.
+The offline `scripts/retire-json-credential-writer.mjs` primitive requires the
+exact schema-3/4 source digest and a separately reviewed cutover-manifest
+digest. It takes the exclusive legacy writer lease, verifies the unchanged
+private source bytes, writes and fsyncs a no-replace marker, and intentionally
+**leaves the lease in place**. An active writer, wrong digest, substituted
+source or pre-existing marker fails closed. A crash after taking the lease may
+leave a stale fence requiring operator review; no PID or timer clears it.
+This primitive is not a migration verifier and must not be invoked until the
+historical credentials have an independently reviewed, proof-bound import and
+the SQLite startup gate is ready. Its marker is not permission to start the
+SQLite service, and an older JSON image lacking this check remains unsafe for
+cutover. The current deployment remains on the JSON writer.
+
 ## Immutable Image Publication and Container Contract
 
 Production images are published only by

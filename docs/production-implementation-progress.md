@@ -60,6 +60,13 @@ general TON sends, production-service repairs and store/device acceptance
 remain open. No local or CI result substitutes for independent review,
 replacement-device recovery or capped funded evidence.
 
+The JSON writer source now recognizes a durable retirement marker before
+startup and before each write. An offline one-way primitive can bind a private
+schema-3/4 snapshot digest and a cutover-manifest digest while retaining the
+exclusive writer lease. This code is not deployed or invoked against the live
+store. It neither proves historical import nor admits the SQLite authority;
+those service gates remain open.
+
 ## Current source checkpoint — 2026-09-24
 
 The shipping-manifest audit now selects the clean Android Utils checkout at
@@ -3063,6 +3070,20 @@ two SwiftLint findings and import-order finding match the parent exactly.
 This source equivalence does not prove original-key restoration or provider
 interoperability. Both app branches are pushed, but their new-head hosted CI,
 independent review and signed-device acceptance remain open.
+
+The legacy JSON passkey writer now checks an adjacent durable retirement
+marker at startup and at every owned-lease check, including the last check
+before an atomic credential-file rename. An offline retirement primitive can
+take the sole writer lease after drain, verify exact private schema-3/4 source
+bytes against an independently recorded SHA-256 digest, write a no-replace
+marker bound to a cutover-manifest digest, fsync it, and leave the lease in
+place. Wrong digests, an active writer and an existing marker fail closed.
+The final-source challenge-service suite passed **130/130**, including the
+mid-write marker regression; syntax lint and the diff check passed. No live
+marker was published. This
+source primitive does not validate the manifest, import historical credentials,
+verify the owner proof or authorize SQLite startup; those must be completed
+and reviewed before any operator cutover.
 
 The site association source remains on review-pending PR #49 and its preview check
 passed. A direct live verification of `https://fearlesswallet.io` still fails:

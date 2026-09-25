@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import {
   chmodSync, existsSync, fsyncSync, mkdtempSync, readFileSync, renameSync,
@@ -11,6 +12,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { createPasskeyBackupChallengeService } from '../src/service.js';
 import { createServer as createChallengeServer } from '../src/server.js';
+import { retireJsonCredentialWriter } from '../src/retire-writer.js';
 import { createPasskeyChallengeStore, readCredentialStoreSnapshot } from '../src/store.js';
 
 const storeUrl = new URL('../src/store.js', import.meta.url).href;
@@ -42,6 +44,98 @@ function fixture(t) {
     requireDurable: true, productionMode: true, recoveryEnabled: 'false' });
   return { file, lock, open };
 }
+
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+test('a digest-bound retirement permanently fences the JSON credential writer', (t) => {
+  const { file, lock, open } = fixture(t);
+  const incumbent = open();
+  incumbent.close();
+  const before = readFileSync(file);
+  const digest = sha256(before);
+  const manifestDigest = sha256('reviewed cutover manifest fixture');
+  const report = retireJsonCredentialWriter({ credentialStoreFile: file,
+    expectedSourceSha256: digest, cutoverManifestSha256: manifestDigest });
+  assert.deepEqual(report, { schemaVersion: 1, credentialStoreSha256: digest,
+    cutoverManifestSha256: manifestDigest, retired: true });
+  assert.equal(existsSync(lock), true);
+  const marker = join(dirname(file), '.credentials.json.retired');
+  assert.deepEqual(JSON.parse(readFileSync(marker, 'utf8')), {
+    schemaVersion: 1, credentialStoreSha256: digest, cutoverManifestSha256: manifestDigest,
+  });
+  assert.deepEqual(readFileSync(file), before);
+  assert.throws(open, { code: 'credential_store_unavailable' });
+  assert.throws(() => retireJsonCredentialWriter({ credentialStoreFile: file,
+    expectedSourceSha256: digest, cutoverManifestSha256: manifestDigest }),
+  { code: 'credential_store_unavailable' });
+});
+
+test('retirement refuses an active writer or a changed source without publishing a marker', (t) => {
+  const { file, lock, open } = fixture(t);
+  const incumbent = open();
+  const digest = sha256(readFileSync(file));
+  const marker = join(dirname(file), '.credentials.json.retired');
+  const args = { credentialStoreFile: file, expectedSourceSha256: digest,
+    cutoverManifestSha256: sha256('manifest') };
+  assert.throws(() => retireJsonCredentialWriter(args), { code: 'credential_store_unavailable' });
+  assert.equal(existsSync(marker), false);
+  incumbent.close();
+  assert.throws(() => retireJsonCredentialWriter({ ...args,
+    expectedSourceSha256: sha256('wrong source') }),
+  { code: 'credential_writer_retirement_failed' });
+  assert.equal(existsSync(marker), false);
+  assert.equal(existsSync(lock), false);
+  const restarted = open();
+  restarted.close();
+});
+
+test('a retirement marker blocks a fresh writer even without a surviving lease', (t) => {
+  const { file, lock, open } = fixture(t);
+  const incumbent = open();
+  incumbent.close();
+  writeFileSync(join(dirname(file), '.credentials.json.retired'), 'incomplete\n', { mode: 0o600 });
+  assert.throws(open, { code: 'credential_store_unavailable' });
+  assert.equal(existsSync(lock), false);
+});
+
+test('a marker appearing after startup poisons the incumbent before its next write', (t) => {
+  const { file, lock, open } = fixture(t);
+  const incumbent = open();
+  const before = readFileSync(file);
+  writeFileSync(join(dirname(file), '.credentials.json.retired'), 'pending cutover\n', { mode: 0o600 });
+  assert.throws(() => incumbent.persistCredentials(new Map(), new Map()),
+    { code: 'credential_store_unavailable' });
+  assert.deepEqual(readFileSync(file), before);
+  assert.equal(incumbent.poisoned, true);
+  assert.throws(() => incumbent.close(), { code: 'credential_store_unavailable' });
+  assert.equal(existsSync(lock), true);
+});
+
+test('a marker appearing during temporary-file fsync blocks the JSON replacement', (t) => {
+  const { file, lock } = fixture(t);
+  const seeded = createPasskeyChallengeStore({ credentialStoreFile: file,
+    requireDurable: true, productionMode: false });
+  seeded.close();
+  const before = readFileSync(file);
+  let placed = false;
+  const incumbent = createPasskeyChallengeStore({ credentialStoreFile: file,
+    requireDurable: true, productionMode: true, recoveryEnabled: 'false', fileOperations: {
+      fsyncSync(fd) {
+        fsyncSync(fd);
+        if (!placed) {
+          placed = true;
+          writeFileSync(join(dirname(file), '.credentials.json.retired'), 'cutover\n', { mode: 0o600 });
+        }
+      },
+    } });
+  assert.throws(() => incumbent.persistCredentials(new Map(), new Map()),
+    { code: 'credential_store_unavailable' });
+  assert.equal(placed, true);
+  assert.deepEqual(readFileSync(file), before);
+  assert.equal(incumbent.poisoned, true);
+  assert.throws(() => incumbent.close(), { code: 'credential_store_unavailable' });
+  assert.equal(existsSync(lock), true);
+});
 
 async function childWriter(t, file) {
   const script = `import { createPasskeyChallengeStore } from ${JSON.stringify(storeUrl)};
