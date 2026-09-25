@@ -15,7 +15,7 @@ soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merg
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test
-# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	0986721e5cb24e0177a067cecc443c1ec4b7d532
+# reviewed_pr_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260	1093b133ddf4d0c00751d99ae79059f2e8e0dda1
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302424772	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	build-and-test	github-actions	15368	github-actions	183293217	.github/workflows/android-ci.yml
 # required_check_provenance_pin	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	Validate IAS candidate; trusted develop dispatch may hand off	github-actions	15368	github-actions	323721421	.github/workflows/android-internal-app-sharing.yml
@@ -30,14 +30,14 @@ soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	merged	valid
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
-# reviewed_pr_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	1303	ddb3b9e00d78f83f33c7bc75adb19deebbf39dea
+# reviewed_pr_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	1303	08bacaccf75ef9a8ae57d3f3015dc078a6fed112
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	continuous-integration/jenkins/pr-merge	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
 soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	merged	validate,build,continuous-integration/jenkins/pr-merge
 # The September integration candidate contains the prior consolidated source plus
 # migration, TON, transport and final signing guards. Draft is not approval.
-# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	024664259740547bd25611f5bacd3238fa9b4333
+# reviewed_pr_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304	db4beab4dc18684e1dbad0ba58c244359f8967fe
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	validate	github-actions	15368	github-actions	302420486	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	release-contracts	github-actions	15368	github-actions	320731655	.github/workflows/ios-release-safety.yml
 # required_check_provenance_pin	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	build	github-actions	15368	github-actions	7452438	.github/workflows/codecov.yml
@@ -62,7 +62,7 @@ soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	devel
 # required_check_provenance_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	build	github-actions	15368	github-actions	302043666	.github/workflows/ci.yml
 # required_check_provenance_pin	soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	Vercel	commit-status	35613825	vercel[bot]	-	https://vercel.com
 soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	merged	validate,build,Vercel
-# reviewed_pr_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	49	3b2b04f071e0afc264d2d350941d6fa3afc0f4db
+# reviewed_pr_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	49	fb824cf23ee4bb606f4a5168242da701b6ec78ac
 # required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	validate	github-actions	15368	github-actions	302043667	.github/workflows/branch-flow.yml
 # required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	build	github-actions	15368	github-actions	302043666	.github/workflows/ci.yml
 # required_check_provenance_pin	soramitsu/fearless-site-web	fix/app-association-publication	develop	Vercel	commit-status	35613825	vercel[bot]	-	https://vercel.com
@@ -192,7 +192,7 @@ soramitsu/fearless-utils-Android	codex/guarded-mutation-source	codex/legacy-wall
 soramitsu/shared-features-spm	codex/ios-authorized-rpc-transport	codex/ios-production-dependency-source	merged	native-compatibility,authorized-rpc,continuous-integration/jenkins/pr-merge
 
 # iOS XCM discovery/quotation must not require wallet signing material.
-# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	84	04c0d25190b748b3cc219c8d33630cb48f679d3e
+# reviewed_pr_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	84	4323032511ee788b178aa3f9ed05e2518ee21c74
 # required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	native-compatibility	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
 # required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	authorized-rpc	github-actions	15368	github-actions	364058745	.github/workflows/ios-production-source.yml
 # required_check_provenance_pin	soramitsu/shared-features-spm	codex/ios-xcm-read-only	codex/ios-authorized-rpc-transport	continuous-integration/jenkins/pr-merge	commit-status	-	-	-	https://jenkins.soramitsu.co.jp

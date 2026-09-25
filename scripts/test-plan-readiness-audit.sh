@@ -6271,18 +6271,18 @@ write_root_readiness_scripts() {
     "soramitsu/fearless-Android	codex/android-universal-wallet-readiness	develop	merged	validate,build-and-test" \
     $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-xcm-evidence-release-commit\tdevelop\t1258\t38fb2f3b328e3a041c15e253b0abafe405ef8314' \
     "soramitsu/fearless-Android	codex/android-xcm-evidence-release-commit	develop	merged	validate,build-and-test" \
-    $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260\t9f5fd7e909f95d458eed30eef2625ba7ffc90d61' \
+    $'# reviewed_pr_pin\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260\t1093b133ddf4d0c00751d99ae79059f2e8e0dda1' \
     "soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	merged	validate,build-and-test,Validate IAS candidate; trusted develop dispatch may hand off" \
     "soramitsu/fearless-iOS	codex/ios-universal-wallet-readiness	develop	merged	validate,build,continuous-integration/jenkins/pr-merge" \
     "soramitsu/fearless-iOS	codex/ios-transaction-builder-ci-gate	develop	merged	validate,build,continuous-integration/jenkins/pr-merge" \
-    $'# reviewed_pr_pin\tsoramitsu/fearless-iOS\tcodex/ios-production-consolidated-20260731\tdevelop\t1303\tddb3b9e00d78f83f33c7bc75adb19deebbf39dea' \
+    $'# reviewed_pr_pin\tsoramitsu/fearless-iOS\tcodex/ios-production-consolidated-20260731\tdevelop\t1303\t08bacaccf75ef9a8ae57d3f3015dc078a6fed112' \
     "soramitsu/fearless-iOS	codex/ios-production-consolidated-20260731	develop	merged	validate,build,continuous-integration/jenkins/pr-merge" \
     $'# reviewed_pr_pin\tsoramitsu/shared-features-spm\tcodex/ios-shared-features-delta-20260731\tdevelop\t81\t43e999ee10e64b5dd740b4695ed9766866e2168d' \
     "soramitsu/shared-features-spm	codex/ios-shared-features-delta-20260731	develop	merged	continuous-integration/jenkins/pr-merge" \
     "soramitsu/fearless-wallet-web	codex/web-bitcoin-broadcast-evidence	develop	merged	validate,verify" \
     "soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	merged	validate,verify" \
     "soramitsu/fearless-site-web	codex/site-todo-debt-baseline-hardening	develop	merged	validate,build,Vercel" \
-	    $'# reviewed_pr_pin\tsoramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\t49\t3b2b04f071e0afc264d2d350941d6fa3afc0f4db' \
+	    $'# reviewed_pr_pin\tsoramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\t49\tfb824cf23ee4bb606f4a5168242da701b6ec78ac' \
 	    "soramitsu/fearless-site-web	fix/app-association-publication	develop	merged	validate,build,Vercel" \
     "tonswap-org/ton-indexer	hotfix/production-smoke-diagnostics	master	merged	validate,verify" \
     "solswap-io/solswap-indexer	hotfix/production-smoke-diagnostics	master	merged	validate,verify" \
@@ -26953,7 +26953,7 @@ perl -0pi -e 's#base/resources\.pb fearless-public fearless-attack project_id#ba
 expect_failure "Android IAS Firebase project-ID mutation anchor removed" "fearless-Android IAS project-ID-anchored Firebase mutation regression"
 
 reset_fixture
-perl -0pi -e 's/0986721e5cb24e0177a067cecc443c1ec4b7d532/1986721e5cb24e0177a067cecc443c1ec4b7d532/' "$workspace/config/release-readiness-prs.tsv"
+perl -0pi -e 's/1093b133ddf4d0c00751d99ae79059f2e8e0dda1/2093b133ddf4d0c00751d99ae79059f2e8e0dda1/' "$workspace/config/release-readiness-prs.tsv"
 expect_failure "current Android migration PR review pin drifted" "root release PR readiness consolidated Android production immutable review pin"
 
 reset_fixture

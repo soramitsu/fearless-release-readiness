@@ -34,8 +34,9 @@ Android's exact-head account JVM suite passed 343/343; default and scoped
 Detekt and the pinned Utils/WebSocket source verifier passed. Its receive-side
 watch proof rejects mismatched key/address pairs and mixed custody before
 read-only planning. The exact diff scan `3d9e0c53-27e6-4303-afbe-9349c0a3f51d`
-found zero reportable issues. Branch Flow passed; Android CI and IAS are
-running for this head. The earlier backup JVM suite passed 292/292.
+found zero reportable issues. Branch Flow and exact-head IAS passed; Android
+CI is running API 36 after passing API 30/31 migration and restart checks.
+The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
 passed 116/116 on the preceding XCM head. The preceding iOS semantic-codec,
@@ -50,10 +51,16 @@ chain-specific watches. The preceding diff scan
 `ce118e0e-f508-414f-b44f-8ef4664c696c` and exact latest diff scan
 `653bd1c8-6909-4c6e-bf98-2c9340edf73e` closed their changed source
 inventories with zero reportable findings. The current head passed hosted
-validation; its build and release-contract checks are running.
+validation, Release Safety and release contracts; its hosted build is running.
 The preceding journal source passed 11/11 and native first-owner PRF source
 passed 17/17. Protected qualification, independent human security approval
 and signed distribution acceptance remain outstanding.
+
+The root review-pin table has been refreshed against actual PR heads for
+Android #1260, iOS #1303/#1304, site #49 and shared-features #84. These are
+candidate identities only; every PR still needs its independent current-head
+review and protected-branch checks. The iOS #1303 successor is already an
+ancestor of the September iOS candidate.
 
 The latest Android source captures an app-owned, read-only
 V1/V2/V3 cohort after original-source proof and exact wallet-scoped and global
