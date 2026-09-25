@@ -25,16 +25,19 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `2587da972b4ef5525efdeb8c3dc03e3e6ad3a58a` and
-`27e25de0a11d5af1c8b1f5421cdf7c09c528793c`, respectively. Both clean app
-trees are on review branches. Android's current account JVM suite passed
-328/328 with default and focused scoped Detekt; the earlier backup JVM suite passed 292/292.
+candidates are `54bb334c267f84409868ffd214d86cf672a5ce24` and
+`1f8efb18ac00bc4bf5ee9b763f74fa6b4a462918`, respectively. Both source
+commits are on review branches. Android's current account JVM suite passed
+337/337, the focused Room case passed 1/1 on an API 34 emulator, and default
+and six-file scoped Detekt passed. The pinned Utils/WebSocket source verifier
+passed 9/9. The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
-passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec and
-receive-projection Release suites passed 21/21 on iOS 18.1 arm64, including the
-shared display-metadata byte vector and wallet-bound foreign-preference sidecar
-projection. The preceding journal source passed 11/11 and
+passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec,
+asset-presentation and receive-projection Release suites passed **23/23** on
+iOS 18.1 arm64, including the shared 126-byte vector, strict raw-byte
+ordering and the retained receive-install blockers. The preceding journal
+source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
@@ -43,11 +46,15 @@ Protected qualification,
 independent human security approval and signed distribution acceptance remain
 outstanding. The latest Android source captures an app-owned, read-only
 V1/V2/V3 cohort after original-source proof and exact wallet-scoped and global
-secret-namespace checks. It preserves two exact wallet display preferences in
-optional FPWMSM01 metadata IDs 10/11 and checks their source twice. Asset-row
-presentation remains blocked. It has no installed replacement-key proof or recovery
-integration. Its exact pinned Utils and WebSocket source check passes; the
-new-head hosted IAS/build jobs and independent review remain pending.
+secret-namespace checks. It preserves exact selected-chain and filter values
+in FPWMSM01 metadata IDs 10/11, and now maps explicit wallet asset-row
+presentation into versioned ID 12. The source is captured and rechecked under
+the cross-store lock; raw SQLite text bytes, types, bounds, ordering and
+tri-state enabled values fail closed on mismatch. Its full 126-byte fixture
+has SHA-256 `842124d8aa738dc490b5f1366470f9e3183158514236b3c6ba4758bb927a66ab`.
+It has no installed replacement-key proof or recovery integration. The
+new-head hosted IAS/build jobs, API 30/31/36 migration coverage and independent
+review remain pending.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -3066,6 +3073,21 @@ commit/tree source verifier passed in a clean detached checkout. The live
 checkout's verifier still encounters a preserved, pre-existing ignored
 legacy-audit file.
 
+Android source `54bb334c267f84409868ffd214d86cf672a5ce24` extends the
+read-only exporter with FPWMSM01 metadata ID 12 for explicit wallet asset-row
+presentation. It captures rows under the cross-store lock, rejects SQL type
+coercion and nonexact UTF-8 source bytes, enforces the 32 KiB bound, and
+rechecks the normalized rows after original-source proof. The codec preserves
+generic empty account IDs, scoped rows, tri-state enabled values, signed sort
+indices and present-empty names; both platforms assert the same 126-byte
+fixture and SHA-256. The final-source account JVM suite passed **337/337**,
+the focused actual Room query passed **1/1** on an API 34 emulator, default and
+six-file scoped Detekt passed, and pinned Utils/WebSocket verification passed
+**9/9**. Branch Flow passed on the pushed head; Android CI and Internal App
+Sharing are still running. API 30/31/36 migration/device qualification and
+recipient receive installation remain open. The exporter is not wired to
+production backup and recovery stays disabled.
+
 iOS source `8198f520809bb2754cf8d904313876ee149818ae` accepts those two
 metadata IDs with the same strict UTF-8 and 2,048-byte bounds. It projects
 both values without collapsing present-empty into absent, rejects malformed
@@ -3101,6 +3123,21 @@ Release semantic/projection suites passed **21/21**; strict SwiftLint,
 SwiftFormat and diff checks passed. `unmappedMetadata` and
 `transactionalInstallerUnavailable` remain, since no durable sidecar store,
 atomic cohort installer or readback exists. The code does not enable recovery.
+
+iOS source `1f8efb18ac00bc4bf5ee9b763f74fa6b4a462918` validates and
+projects Android asset-row metadata ID 12 without discarding its generic empty
+account ID, signed sort index, nullable enabled value or present-empty name.
+Its parser enforces strict UTF-8 and raw-byte ordering, including canonically
+equivalent Unicode strings with different encodings. It asserts Android's
+exact 126-byte vector and SHA-256, rejects malformed and oversized rows, and
+keeps `unmappedMetadata` and `transactionalInstallerUnavailable` in the
+read-only receive plan. The exact-source iOS 18.1 arm64 Release simulator
+semantic, asset-presentation and projection suites passed **23/23**, with zero
+failures or skips. Strict SwiftLint, repository-compatible SwiftFormat,
+standalone typecheck, project syntax and diff checks passed. A separate
+read-only diff review found no actionable issue. The app branch is pushed and
+its live worktree is clean; hosted CI and independent human security review
+remain open. No receiver storage or recovery enablement was added.
 
 The legacy JSON passkey writer now checks an adjacent durable retirement
 marker at startup and at every owned-lease check, including the last check

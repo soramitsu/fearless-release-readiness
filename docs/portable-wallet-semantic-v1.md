@@ -13,7 +13,8 @@ The outer `FPWMLE01` envelope remains version 1. Its new pair is source format
 origin `1` Android or `2` iOS. Existing origin-specific local-opaque pairs
 remain valid but are never portable. The semantic payload has at most 262,084
 bytes: the 256 KiB `FPBKAEAD` plaintext ceiling less its 44-byte header and the
-16-byte `FPWMLE01` header. All integers are unsigned big-endian. Text uses
+16-byte `FPWMLE01` header. Unsigned integers are big-endian; the one signed
+`i32` below is big-endian two's-complement. Text uses
 strict UTF-8, with a `u16` byte length and at most 2,048 bytes. Unknown IDs,
 duplicate IDs, noncanonical order, truncation and trailing bytes are errors.
 
@@ -29,7 +30,7 @@ wallet:
     u32 sourcePosition (historical value; ties are permitted)
     u8 initialized in {0,1}
     text name (may be empty)
-    u8 metadataCount in 0...11
+    u8 metadataCount in 0...12
     metadata[metadataCount], ascending unique ID
     u16 slotCount in 1...1412
     slot[slotCount], ascending by role then unsigned UTF-8 key bytes
@@ -67,6 +68,37 @@ favorites, 128 watch identities and 1,024 auxiliary sources per wallet.
 | 9 | Can export Ethereum mnemonic: canonical single-byte boolean. |
 | 10 | Android selected chain ID: raw strict UTF-8, at most 2,048 bytes. Present with an empty value is distinct from absent. The receiving app must not silently substitute another selected chain when this preference is represented. |
 | 11 | Android chain-selector filter: raw strict UTF-8, at most 2,048 bytes. Present with an empty value is distinct from absent. A receiving app must preserve or explicitly reject an unsupported filter value. |
+| 12 | Android asset-row presentation: versioned list below, emitted only for explicit presentation rows. It is scoped to the containing portable wallet, not to an Android numeric wallet ID. |
+
+Metadata ID 12 is `u8 version=1, u16 count in 1...65535`, followed by that
+many rows. Each row is `text chainId, text assetId, u16 accountIdLength,
+accountId[accountIdLength], u8 enabled, i32 sortIndex, u8 markedNotNeed,
+u8 chainAccountNamePresent`, then `text chainAccountName` only when the last
+byte is `1`. Both IDs are nonempty strict UTF-8 of at most 2,048 bytes.
+`accountIdLength` is 0...128; empty account IDs represent Android's generic
+asset rows and are distinct from account-scoped rows. `enabled` is exactly
+`0` for null, `1` for false or `2` for true. `markedNotNeed` and the
+name-presence byte are canonical booleans. A present empty chain-account name
+differs from an absent one. Rows are unique and strictly ascending by unsigned
+UTF-8 bytes of `chainId`, then `assetId`, then unsigned raw `accountId` bytes.
+Unicode names are not normalized: canonically equivalent spellings with
+different UTF-8 bytes remain distinct keys and follow that byte ordering.
+The item is absent if no persisted asset row has explicit presentation
+(`enabled != null`, `sortIndex != Int.MAX_VALUE`, `markedNotNeed = true`, or
+`chainAccountName != null`). The receiving app must preserve these exact
+values in wallet-bound storage or reject installation; silently discarding
+them changes the wallet's accepted asset presentation. The entire metadata
+value remains subject to the 32 KiB bound.
+
+The cross-platform ID 12 fixture has two rows: generic `sora/dot` with
+`enabled=true`, `sortIndex=-2`, `markedNotNeed=true`, and a present empty
+chain-account name; then account ID `0180` with `enabled=false`, default
+sort index, and name `Main`. Its 53-byte value is
+`0100020004736f72610003646f74000002fffffffe010100000004736f72610003646f7400020180017fffffff000100044d61696e`.
+Inside a one-wallet watch record with IDs 10=`sora` and 11=empty, the full
+126-byte `FPWMSM01` record is
+`4650574d534d3031010001000033333333333333333333333333333333000000000100057761746368030a0004736f72610b00000c00350100020004736f72610003646f74000002fffffffe010100000004736f72610003646f7400020180017fffffff000100044d61696e000108000430303030020700010916000102`,
+SHA-256 `842124d8aa738dc490b5f1366470f9e3183158514236b3c6ba4758bb927a66ab`.
 
 String lists and visibility maps have at most 128 entries. The list order is
 preserved, including duplicates if the source itself contains them; the map
