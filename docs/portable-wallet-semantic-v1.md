@@ -29,7 +29,7 @@ wallet:
     u32 sourcePosition (historical value; ties are permitted)
     u8 initialized in {0,1}
     text name (may be empty)
-    u8 metadataCount in 0...9
+    u8 metadataCount in 0...11
     metadata[metadataCount], ascending unique ID
     u16 slotCount in 1...1412
     slot[slotCount], ascending by role then unsigned UTF-8 key bytes
@@ -65,6 +65,8 @@ favorites, 128 watch identities and 1,024 auxiliary sources per wallet.
 | 7 | Asset filter options: ordered string list. |
 | 8 | Zero-balance assets hidden: canonical single-byte boolean. |
 | 9 | Can export Ethereum mnemonic: canonical single-byte boolean. |
+| 10 | Android selected chain ID: raw strict UTF-8, at most 2,048 bytes. Present with an empty value is distinct from absent. The receiving app must not silently substitute another selected chain when this preference is represented. |
+| 11 | Android chain-selector filter: raw strict UTF-8, at most 2,048 bytes. Present with an empty value is distinct from absent. A receiving app must preserve or explicitly reject an unsupported filter value. |
 
 String lists and visibility maps have at most 128 entries. The list order is
 preserved, including duplicates if the source itself contains them; the map
@@ -151,5 +153,16 @@ The multi-root vector SHA-256 is
 `784647ca5aa76953d4d19404d7fe78c461b9df329a2dd698cc8b5cc18b49d22c`.
 The full nine-metadata vector SHA-256 is
 `181f843dcbafbd0ba151a7476b1f63c3a6060df9c9fd45055869ff8383608b16`.
-These vectors must be exercised independently by both platform codecs before
-the format is promoted from candidate status.
+The optional Android display-metadata vector uses one EVM watch wallet with
+metadata ID 10 set to `sora` and ID 11 present with an empty value. Its exact
+70-byte encoding is:
+
+```
+4650574d534d3031010001000033333333333333333333333333333333000000000100057761746368020a0004736f72610b0000000108000430303030020700010916000102
+```
+
+Its SHA-256 is
+`e8959e6aa11fd339fd92ddd65798beda0b6443fe1d1be60f6ad219e2d26c3477`.
+Both platform codecs now exercise these vectors independently. The format
+remains a candidate until capture, destination mapping, transactional install,
+original-key signing/export and cross-device recovery pass their release gates.

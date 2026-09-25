@@ -25,13 +25,15 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `a74da1e0e78f1957fe4ee5f28240a3c92013a9f4` and
-`98816e2f2cec251f92eeff49a2d0bd7152f96534`, respectively. Both clean app
+candidates are `2587da972b4ef5525efdeb8c3dc03e3e6ad3a58a` and
+`8198f520809bb2754cf8d904313876ee149818ae`, respectively. Both clean app
 trees are on review branches. Android's current account JVM suite passed
-322/322 with forced scoped Detekt; the earlier backup JVM suite passed 292/292.
+328/328 with default and focused scoped Detekt; the earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
-passed 116/116 on the exact current head. The preceding journal source passed 11/11 and
+passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec and
+receive-projection Release suites passed 18/18 on iOS 18.1 arm64, including the
+shared display-metadata byte vector. The preceding journal source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
 mobile heads found no reportable finding; its iOS callback-binding
@@ -40,7 +42,9 @@ Protected qualification,
 independent human security approval and signed distribution acceptance remain
 outstanding. The latest Android source captures an app-owned, read-only
 V1/V2/V3 cohort after original-source proof and exact wallet-scoped and global
-secret-namespace checks. It has no installed replacement-key proof or recovery
+secret-namespace checks. It preserves two exact wallet display preferences in
+optional FPWMSM01 metadata IDs 10/11 and checks their source twice. Asset-row
+presentation remains blocked. It has no installed replacement-key proof or recovery
 integration. Its exact pinned Utils and WebSocket source check passes; the
 new-head hosted IAS/build jobs and independent review remain pending.
 
@@ -3032,6 +3036,33 @@ Utils/WebSocket source verification and a clean detached exact-head release
 source-tree check passed. The in-place source-tree check still encounters an
 unrelated pre-existing ignored legacy-audit document, which was preserved.
 This adds no upload, backup-complete state or enabled recovery.
+
+The next Android source `2587da972b4ef5525efdeb8c3dc03e3e6ad3a58a`
+captures the persisted selected-chain and chain-selector-filter strings under
+the cross-store lock, distinguishes absent from present-empty, rejects malformed
+or oversized text, and resamples them after source proof. Both are optional
+FPWMSM01 metadata IDs 10/11; other asset-row presentation still blocks export.
+Its exact-source account suite passed **328/328**, default and five-file forced
+Detekt passed, and the pinned Utils/WebSocket source check passed. The wider
+seven-file forced Detekt findings are exactly the prior-head baseline, 32/32
+with none introduced. The independent Android codec asserts the exact 70-byte
+watch-wallet vector and SHA-256 recorded in the shared contract. The exact
+commit/tree source verifier passed in a clean detached checkout. The live
+checkout's verifier still encounters a preserved, pre-existing ignored
+legacy-audit file.
+
+iOS source `8198f520809bb2754cf8d904313876ee149818ae` accepts those two
+metadata IDs with the same strict UTF-8 and 2,048-byte bounds. It projects
+both values without collapsing present-empty into absent, rejects malformed
+and noncanonical input, and asserts the same exact 70-byte vector. Its receive
+plan still blocks installation while destination metadata mapping is absent.
+The final-source iOS 18.1 arm64 Release semantic-codec and projection suites
+passed **18/18**, with no failures or skips. Strict SwiftLint and SwiftFormat
+passed on the new codec/projection test surface; the older semantic test file's
+two SwiftLint findings and import-order finding match the parent exactly.
+This source equivalence does not prove original-key restoration or provider
+interoperability. Both app branches are pushed, but their new-head hosted CI,
+independent review and signed-device acceptance remain open.
 
 The site association source remains on review-pending PR #49 and its preview check
 passed. A direct live verification of `https://fearlesswallet.io` still fails:
