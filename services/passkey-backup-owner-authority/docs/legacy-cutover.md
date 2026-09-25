@@ -204,6 +204,17 @@ store and does not verify the manifest, import records, old image version or
 SQLite readiness; production admission must establish all of those first.
 The legacy marker and surviving lease must not be cleared as a rollback.
 
+An offline read-only retirement-artifact verifier now compares the final
+private JSON store byte-for-byte with the sealed source, validates the exact
+retirement marker's source/manifest digests, and checks that the private
+writer-lease artifact still names the canonical legacy file. Its report is
+redacted and always says `migrationPermitted: false` and
+`productionAdmission: false`; the CLI exits `3` on a match. A missing marker,
+lease, private file or matching byte cohort fails. This gives the operator a
+repeatable fence readback after a separately reviewed retirement, but it
+cannot prove who created the marker, whether all requests were drained,
+which image is running, or that the imported cohort is safe to serve.
+
 The read-only `verify-legacy-cutover-manifest.mjs` candidate check now accepts
 a private canonical `cutover-<sha256>.json` image, its independent expected
 digest, the exact sealed JSON path, SQLite path and expected owner-image digest.

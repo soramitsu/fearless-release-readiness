@@ -62,7 +62,7 @@ the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
 candidate now covers all seven protected routes. Its opt-in first-owner
 wallet proof still lacks real platform attestation. An offline, proof-bound
 schema-3/4 public credential importer and immutable SQLite receipt now pass
-the 273-test owner suite, but production startup admission, retired-writer drain,
+the 276-test owner suite, but production startup admission, retired-writer drain,
 live cutover,
 deployment and native Drive/PRF recovery remain unintegrated. The root source gate selects the consolidated
 mobile worktrees and site-association PR #49. The complete frozen route
@@ -3218,6 +3218,18 @@ not changed; its owner controls the `optimizations` branch.
 ## Completion record
 
 No subgoal is complete yet. No new build has been uploaded or deployed, no production feature has been enabled, and no funded transaction has been submitted by this implementation run.
+
+The non-deployed owner authority now has a read-only retirement-artifact
+verifier and operator CLI. It requires the private retired JSON store to equal
+the sealed source byte-for-byte, the marker to bind the exact source and
+cutover-manifest digests, and the surviving private writer-lease artifact to
+name the canonical store. Missing, changed, substituted and public artifacts
+fail. The CLI still exits `3` on a match and never admits production startup;
+it cannot authenticate who retired the writer, prove request drain, or replace
+the missing independently reviewed image/startup gate. The complete owner
+suite passed **276/276**, syntax lint and diff checks passed. The preceding
+root head's three hosted checks passed before this change; the new exact head
+requires its own CI and review.
 
 ## Next active work
 

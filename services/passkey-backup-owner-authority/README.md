@@ -161,6 +161,24 @@ cannot prove the JSON writer was drained, attribute an empty tombstone, or
 authenticate an image or reviewer signature. Do not invoke it on a live
 cohort.
 
+`src/legacy-retirement-verifier.js` adds a separate **read-only** readback of
+the existing JSON writer's one-way retirement artifacts. Given independently
+recorded source and cutover-manifest digests, it requires the private live
+schema-3/4 JSON file to equal the exact sealed image, the exact retirement
+marker bytes to bind both digests, and the private writer-lease artifact to
+remain present and bound to that canonical file. It rejects missing, changed,
+substituted or public files. The CLI below exits `3` even when the artifacts
+match, because a marker/lease readback cannot authenticate reviewer approval,
+the running image or the old writer's operational drain, and does not admit the
+SQLite service. It must never be used as a shortcut to enable recovery.
+
+```sh
+node services/passkey-backup-owner-authority/scripts/verify-retired-json-writer.mjs \
+  /absolute/private/credentials.json \
+  /absolute/private/legacy-<source-sha256>.json \
+  <source-sha256> <reviewed-cutover-manifest-sha256>
+```
+
 Schema v9 retains the internal `issueLegacyCutoverChallenge`,
 `claimLegacyCutoverChallenge`, `consumeLegacyCutoverClaim` and
 `verifyAndConsumeLegacyCutoverClaim` methods for a
