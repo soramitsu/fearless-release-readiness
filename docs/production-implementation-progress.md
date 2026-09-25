@@ -26,7 +26,7 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are `1093b133ddf4d0c00751d99ae79059f2e8e0dda1` and
-`7b8695777da5b4a2b2f68da0f994c7ba0c93ae6c`, respectively, on
+`db4beab4dc18684e1dbad0ba58c244359f8967fe`, respectively, on
 [Android PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 and [iOS PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
 Both branches are clean and pushed but still require independent review.
@@ -42,12 +42,15 @@ passed 116/116 on the preceding XCM head. The preceding iOS semantic-codec,
 asset-presentation and receive-projection Release suites passed **23/23** on
 iOS 18.1 arm64, including the shared 126-byte vector, strict raw-byte
 ordering and the retained receive-install blockers. The exact current iOS
-receive/presentation suites passed **20/20** and the focused watch-identity
-suite passed **3/3** on an iOS 18.1 arm64 Release simulator. The latter covers
-Substrate, EVM, raw and legacy JSON TON, mismatches, duplicate identity and
-mixed custody. The exact diff scan `ce118e0e-f508-414f-b44f-8ef4664c696c`
-closed all changed source files with zero reportable findings. iOS Release
-Safety, release contracts and validation passed; hosted build is running.
+receive/presentation suites passed **22/22** and the final-tree focused
+watch-identity suite passed **4/4** on an iOS 18.1 arm64 Release simulator.
+The latter covers Substrate, EVM, raw and legacy JSON TON, mismatches,
+duplicate identity, mixed custody and canonical approved-genesis enforcement for
+chain-specific watches. The preceding diff scan
+`ce118e0e-f508-414f-b44f-8ef4664c696c` and exact latest diff scan
+`653bd1c8-6909-4c6e-bf98-2c9340edf73e` closed their changed source
+inventories with zero reportable findings. The current head passed hosted
+validation; its build and release-contract checks are running.
 The preceding journal source passed 11/11 and native first-owner PRF source
 passed 17/17. Protected qualification, independent human security approval
 and signed distribution acceptance remain outstanding.
@@ -66,7 +69,9 @@ remain pending. iOS now verifies public watch identities in its read-only
 receive plan, while keeping `unprovenWatchIdentities` and
 `transactionalInstallerUnavailable` blockers. Its shared 126-byte structural
 vector remains unchanged; that synthetic vector is intentionally not an
-installable watch identity.
+installable watch identity. Chain-specific watches require a canonical
+genesis ID from the reviewed Substrate inventory; an unapproved or named
+universal chain cannot be interpreted as a generic Substrate watch.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
