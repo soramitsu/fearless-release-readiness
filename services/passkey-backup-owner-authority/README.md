@@ -138,7 +138,7 @@ The offline [cutover contract](docs/legacy-cutover.md) also has a read-only
 candidate manifest verifier. It requires canonical private
 `cutover-<sha256>.json` bytes and an independently supplied digest, compares
 the sealed source with the exact SQLite public rows, binds the seven protected
-route names and an externally expected owner-image digest, and rejects a
+route path/scope pairs and an externally expected owner-image digest, and rejects a
 different public cohort. Its report always has `migrationPermitted: false` and
 the CLI exits `3` even for a matching candidate. It does not verify an image
 signature or reviewer approval, retire the JSON writer, import a credential,

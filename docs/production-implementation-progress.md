@@ -69,7 +69,7 @@ those service gates remain open.
 
 A separate read-only cutover-manifest candidate verifier now binds canonical
 private manifest bytes to the sealed JSON source, exact SQLite public-row
-commitment, seven protected route names and an independently supplied owner
+commitment, seven protected route path/scope pairs and an independently supplied owner
 image digest. It never authorizes migration or writer retirement. The importer,
 durable receipt, reviewer/image attestation, retired-writer drain proof, v8
 proof-capacity limit and empty-tombstone policy remain open.

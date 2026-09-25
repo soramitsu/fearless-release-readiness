@@ -42,11 +42,12 @@ function sameDigest(left, right) {
     timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 }
 
-/** The exact seven protected challenge-service paths, independent of iteration order. */
+/** The exact seven protected path/scope pairs, independent of iteration order. */
 export function protectedRouteInventorySha256() {
   const routes = Object.keys(SCOPES).sort();
   if (routes.length !== 7) deny('cutover_route_inventory_changed');
-  return sha256(Buffer.from(`FP_OWNER_PROTECTED_ROUTES_V1\0${routes.join('\n')}\n`, 'utf8'));
+  const rows = routes.map((route) => `${route} ${SCOPES[route]}`);
+  return sha256(Buffer.from(`FP_OWNER_PROTECTED_ROUTES_V1\0${rows.join('\n')}\n`, 'utf8'));
 }
 
 /**

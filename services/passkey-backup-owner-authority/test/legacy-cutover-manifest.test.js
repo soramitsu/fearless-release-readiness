@@ -83,6 +83,8 @@ async function fixture(t) {
 
 test('candidate manifest binds exact source, public rows, routes and image without admitting migration', async (t) => {
   const item = await fixture(t);
+  assert.equal(protectedRouteInventorySha256(),
+    '11a8e0d89bfd6fbeba2d1e4b26b0d5e419df97b84d2daaa0d5f70fe5c213805e');
   const sourceBefore = readFileSync(item.args.legacySnapshotPath);
   const ownerBefore = readFileSync(item.path);
   const report = verifyLegacyCutoverManifest(item.args);

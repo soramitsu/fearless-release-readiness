@@ -185,9 +185,19 @@ The read-only `verify-legacy-cutover-manifest.mjs` candidate check now accepts
 a private canonical `cutover-<sha256>.json` image, its independent expected
 digest, the exact sealed JSON path, SQLite path and expected owner-image digest.
 It pins the source schema/counts, the SQLite public-row commitment and counts,
-the seven protected challenge-route names and the candidate image digest.
+the seven protected challenge-route path/scope pairs and the candidate image digest.
 It rechecks the sealed source and target through the existing offline verifier
 and reports whether public representation and retained proof metadata match.
+The closed version-1 object has `source` (SHA-256, schema version and exact
+storage-key/credential/tombstone counts), `owner` (schema version, public-row
+SHA-256 and binding/metadata/proof counts), and `candidate` (owner-image and
+protected-route SHA-256). The route digest is SHA-256 over UTF-8
+`FP_OWNER_PROTECTED_ROUTES_V1`, a NUL, then seven lexically sorted
+`path scope` lines with a final newline. The file uses recursively sorted
+JSON keys, two-space indentation and one final newline; its basename is
+`cutover-<sha256>.json` for its exact bytes. The caller must obtain the
+expected manifest and image digests independently; this verifier cannot
+establish their authenticity.
 Even a match exits `3` with `migrationPermitted: false`: this check does not
 verify a reviewer signature, running image, drained old writer, WebAuthn
 transcripts or a durable import receipt. It is not accepted by the retirement
