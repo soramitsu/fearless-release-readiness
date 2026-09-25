@@ -26,17 +26,18 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 
 The program remains incomplete. The latest pushed Android and iOS source
 candidates are `54bb334c267f84409868ffd214d86cf672a5ce24` and
-`1f8efb18ac00bc4bf5ee9b763f74fa6b4a462918`, respectively. Both source
+`bf486f7fd967563004d427b98d35b2df1116f1c2`, respectively. Both source
 commits are on review branches. Android's current account JVM suite passed
 337/337, the focused Room case passed 1/1 on an API 34 emulator, and default
 and six-file scoped Detekt passed. The pinned Utils/WebSocket source verifier
 passed 9/9. The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
-passed 116/116 on the preceding XCM head. The exact current iOS semantic-codec,
+passed 116/116 on the preceding XCM head. The preceding iOS semantic-codec,
 asset-presentation and receive-projection Release suites passed **23/23** on
 iOS 18.1 arm64, including the shared 126-byte vector, strict raw-byte
-ordering and the retained receive-install blockers. The preceding journal
+ordering and the retained receive-install blockers. The exact current iOS
+journal-bound sidecar Release suites passed **4/4** on iOS 18.1 arm64. The preceding journal
 source passed 11/11 and
 the preceding native first-owner PRF source passed 17/17. Hosted checks for
 the new iOS head remain in progress. An internal diff review of the preceding
@@ -59,8 +60,10 @@ review remain pending.
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
 candidate now covers all seven protected routes. Its opt-in first-owner
-wallet proof still lacks real platform attestation; verified legacy migration,
-production startup admission, live cutover,
+wallet proof still lacks real platform attestation. An offline, proof-bound
+schema-3/4 public credential importer and immutable SQLite receipt now pass
+the 273-test owner suite, but production startup admission, retired-writer drain,
+live cutover,
 deployment and native Drive/PRF recovery remain unintegrated. The root source gate selects the consolidated
 mobile worktrees and site-association PR #49. The complete frozen route
 inventory/unified manifest, transaction-byte/fee/hash/receipt qualification,
@@ -78,9 +81,10 @@ those service gates remain open.
 A separate read-only cutover-manifest candidate verifier now binds canonical
 private manifest bytes to the sealed JSON source, exact SQLite public-row
 commitment, seven protected route path/scope pairs and an independently supplied owner
-image digest. It never authorizes migration or writer retirement. The importer,
-durable receipt, reviewer/image attestation, retired-writer drain proof, v8
-proof-capacity limit and empty-tombstone policy remain open.
+image digest. It never authorizes migration or writer retirement. A proof-bound
+offline importer and durable receipt now exist in non-deployed source. Reviewer/image
+attestation, retired-writer drain proof, proof-capacity remediation and
+empty-tombstone ownership remain open.
 
 ## Current source checkpoint — 2026-09-24
 
@@ -3172,6 +3176,44 @@ release gates. The Android app-owned exporter returns a fresh, caller-owned
 buffer because first-generation preparation erases exported plaintext after
 encryption; that internal exporter is not connected to the production backup
 workflow. Iroha remains entirely with its owner on `optimizations`.
+
+## Current source checkpoint — 2026-09-25
+
+The non-deployed owner authority is pushed at root source
+`5ccdb9df98080908381ff2638f716ee8559f90c0` before this progress update.
+Its schema-v9 offline importer takes a sealed schema-3/4 JSON cohort only after
+an exact public-row commitment and owner-public-key-bound proof. A single SQLite
+transaction retains public credential metadata and assertion counters with an
+immutable import receipt; changed preflight state, collision and replay fail
+closed. Migrated v8 proofs are preserved as v1 but cannot authorize import.
+Manifest v2 binds the receipt, while v1 rejects an imported cohort. The full
+owner suite passed **273/273**, including 12 importer cases and 23 schema
+migration cases. Production startup remains closed: neither manifest version
+admits migration or the owner HTTP service. The deployed JSON writer has not
+been retired. Writer drain, unproven empty tombstones, proof-capacity bounds,
+independent review and service/device acceptance remain open.
+
+The iOS candidate is pushed at `bf486f7fd967563004d427b98d35b2df1116f1c2`
+on [PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
+Its journal-bound prospective sidecar now retains Android metadata ID 12 as
+exact bytes even if IDs 10/11 are absent, and rejects canonically equivalent
+Unicode substitutions with different UTF-8 bytes. The exact-source iOS 18.1
+arm64 Release simulator sidecar suites passed **4/4**, with zero failures or
+skips in the result bundle; strict SwiftLint, SwiftFormat and diff checks pass.
+The preceding semantic/asset suites passed 23/23 on the previous source head.
+The generic Release simulator attempt failed at existing x86_64 IrohaCrypto
+link symbols; the arm64 app link and test build passed. No sidecar is installed,
+and `unmappedMetadata` plus `transactionalInstallerUnavailable` still block
+recovery. A separate Codex Security diff scan is in progress; independent human
+review and current-head hosted CI remain required.
+
+Android remains at `54bb334c267f84409868ffd214d86cf672a5ce24` on
+[PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260), with its
+prior exact-source 337/337 account JVM and 1/1 Room evidence. The unified
+shipping manifest has not been issued because its signed artifacts, enabled
+policy and device evidence do not exist. Both mobile recovery paths and new
+transfer execution remain disabled pending the full release gates. Iroha was
+not changed; its owner controls the `optimizations` branch.
 
 ## Completion record
 
