@@ -25,27 +25,34 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `54bb334c267f84409868ffd214d86cf672a5ce24` and
-`bf486f7fd967563004d427b98d35b2df1116f1c2`, respectively. Both source
-commits are on review branches. Android's current account JVM suite passed
-337/337, the focused Room case passed 1/1 on an API 34 emulator, and default
-and six-file scoped Detekt passed. The pinned Utils/WebSocket source verifier
-passed 9/9. The earlier backup JVM suite passed 292/292.
+candidates are `1093b133ddf4d0c00751d99ae79059f2e8e0dda1` and
+`7b8695777da5b4a2b2f68da0f994c7ba0c93ae6c`, respectively, on
+[Android PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
+and [iOS PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
+Both branches are clean and pushed but still require independent review.
+Android's exact-head account JVM suite passed 343/343; default and scoped
+Detekt and the pinned Utils/WebSocket source verifier passed. Its receive-side
+watch proof rejects mismatched key/address pairs and mixed custody before
+read-only planning. The exact diff scan `3d9e0c53-27e6-4303-afbe-9349c0a3f51d`
+found zero reportable issues. Branch Flow passed; Android CI and IAS are
+running for this head. The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
 passed 116/116 on the preceding XCM head. The preceding iOS semantic-codec,
 asset-presentation and receive-projection Release suites passed **23/23** on
 iOS 18.1 arm64, including the shared 126-byte vector, strict raw-byte
 ordering and the retained receive-install blockers. The exact current iOS
-journal-bound sidecar Release suites passed **4/4** on iOS 18.1 arm64. The preceding journal
-source passed 11/11 and
-the preceding native first-owner PRF source passed 17/17. Hosted checks for
-the new iOS head remain in progress. An internal diff review of the preceding
-mobile heads found no reportable finding; its iOS callback-binding
-recommendation was fixed before the current journal change.
-Protected qualification,
-independent human security approval and signed distribution acceptance remain
-outstanding. The latest Android source captures an app-owned, read-only
+receive/presentation suites passed **20/20** and the focused watch-identity
+suite passed **3/3** on an iOS 18.1 arm64 Release simulator. The latter covers
+Substrate, EVM, raw and legacy JSON TON, mismatches, duplicate identity and
+mixed custody. The exact diff scan `ce118e0e-f508-414f-b44f-8ef4664c696c`
+closed all changed source files with zero reportable findings. iOS Release
+Safety, release contracts and validation passed; hosted build is running.
+The preceding journal source passed 11/11 and native first-owner PRF source
+passed 17/17. Protected qualification, independent human security approval
+and signed distribution acceptance remain outstanding.
+
+The latest Android source captures an app-owned, read-only
 V1/V2/V3 cohort after original-source proof and exact wallet-scoped and global
 secret-namespace checks. It preserves exact selected-chain and filter values
 in FPWMSM01 metadata IDs 10/11, and now maps explicit wallet asset-row
@@ -53,9 +60,13 @@ presentation into versioned ID 12. The source is captured and rechecked under
 the cross-store lock; raw SQLite text bytes, types, bounds, ordering and
 tri-state enabled values fail closed on mismatch. Its full 126-byte fixture
 has SHA-256 `842124d8aa738dc490b5f1366470f9e3183158514236b3c6ba4758bb927a66ab`.
-It has no installed replacement-key proof or recovery integration. The
-new-head hosted IAS/build jobs, API 30/31/36 migration coverage and independent
-review remain pending.
+It has no installed replacement-key proof or recovery integration. Exact-head
+IAS/build completion, API 30/31/36 migration coverage and independent review
+remain pending. iOS now verifies public watch identities in its read-only
+receive plan, while keeping `unprovenWatchIdentities` and
+`transactionalInstallerUnavailable` blockers. Its shared 126-byte structural
+vector remains unchanged; that synthetic vector is intentionally not an
+installable watch identity.
 
 The deployed JSON challenge service remains a separate credential writer from
 the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
@@ -3207,7 +3218,7 @@ and `unmappedMetadata` plus `transactionalInstallerUnavailable` still block
 recovery. A separate Codex Security diff scan is in progress; independent human
 review and current-head hosted CI remain required.
 
-Android remains at `54bb334c267f84409868ffd214d86cf672a5ce24` on
+At that checkpoint Android was at `54bb334c267f84409868ffd214d86cf672a5ce24` on
 [PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260), with its
 prior exact-source 337/337 account JVM and 1/1 Room evidence. The unified
 shipping manifest has not been issued because its signed artifacts, enabled
@@ -3227,9 +3238,12 @@ name the canonical store. Missing, changed, substituted and public artifacts
 fail. The CLI still exits `3` on a match and never admits production startup;
 it cannot authenticate who retired the writer, prove request drain, or replace
 the missing independently reviewed image/startup gate. The complete owner
-suite passed **276/276**, syntax lint and diff checks passed. The preceding
-root head's three hosted checks passed before this change; the new exact head
-requires its own CI and review.
+suite passed **276/276**, syntax lint and diff checks passed. Root commit
+`0db7724aeb89afd6393eea053ca3e3e37ffd5cfb` passed all three hosted
+checks (`validate`, `verify-owner`, `verify`) on the exact head. Root
+[PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
+still requires independent review, and this progress-document change will
+need its own source-head CI after commit.
 
 ## Next active work
 
