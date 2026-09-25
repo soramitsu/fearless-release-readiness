@@ -34,8 +34,9 @@ Android's exact-head account JVM suite passed 343/343; default and scoped
 Detekt and the pinned Utils/WebSocket source verifier passed. Its receive-side
 watch proof rejects mismatched key/address pairs and mixed custody before
 read-only planning. The exact diff scan `3d9e0c53-27e6-4303-afbe-9349c0a3f51d`
-found zero reportable issues. Branch Flow and exact-head IAS passed; Android
-CI is running API 36 after passing API 30/31 migration and restart checks.
+found zero reportable issues. Branch Flow, exact-head IAS and full Android
+CI passed, including API 30/31/36 migration and restart checks and the
+source-bound complete AAB native-payload verifier.
 The earlier backup JVM suite passed 292/292.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
@@ -50,8 +51,9 @@ duplicate identity, mixed custody and canonical approved-genesis enforcement for
 chain-specific watches. The preceding diff scan
 `ce118e0e-f508-414f-b44f-8ef4664c696c` and exact latest diff scan
 `653bd1c8-6909-4c6e-bf98-2c9340edf73e` closed their changed source
-inventories with zero reportable findings. The current head passed hosted
-validation, Release Safety and release contracts; its hosted build is running.
+inventories with zero reportable findings. The current head passed all hosted
+checks: validation, Release Safety, release contracts, simulator build and
+Jenkins PR merge.
 The preceding journal source passed 11/11 and native first-owner PRF source
 passed 17/17. Protected qualification, independent human security approval
 and signed distribution acceptance remain outstanding.
@@ -71,8 +73,8 @@ the cross-store lock; raw SQLite text bytes, types, bounds, ordering and
 tri-state enabled values fail closed on mismatch. Its full 126-byte fixture
 has SHA-256 `842124d8aa738dc490b5f1366470f9e3183158514236b3c6ba4758bb927a66ab`.
 It has no installed replacement-key proof or recovery integration. Exact-head
-IAS/build completion, API 30/31/36 migration coverage and independent review
-remain pending. iOS now verifies public watch identities in its read-only
+device and store-signed upgrade qualification and independent review remain
+pending. iOS now verifies public watch identities in its read-only
 receive plan, while keeping `unprovenWatchIdentities` and
 `transactionalInstallerUnavailable` blockers. Its shared 126-byte structural
 vector remains unchanged; that synthetic vector is intentionally not an
@@ -85,7 +87,7 @@ the non-deployed SQLite owner authority. A test-admitted, one-writer HTTP
 candidate now covers all seven protected routes. Its opt-in first-owner
 wallet proof still lacks real platform attestation. An offline, proof-bound
 schema-3/4 public credential importer and immutable SQLite receipt now pass
-the 276-test owner suite, but production startup admission, retired-writer drain,
+the 277-test owner suite, but production startup admission, retired-writer drain,
 live cutover,
 deployment and native Drive/PRF recovery remain unintegrated. The root source gate selects the consolidated
 mobile worktrees and site-association PR #49. The complete frozen route
@@ -3256,6 +3258,17 @@ checks (`validate`, `verify-owner`, `verify`) on the exact head. Root
 [PR #1](https://github.com/soramitsu/fearless-release-readiness/pull/1)
 still requires independent review, and this progress-document change will
 need its own source-head CI after commit.
+
+The non-deployed owner authority now excludes retained verified cutover proofs
+from the 128-global/eight-owner pending challenge quota. Unverified claims
+still count until expiry, and proof replay/counter and sealed-source checks
+remain unchanged. A real signed-proof test fills all eight pending slots after
+one proof, rejects a ninth and confirms that the proof remains immutable.
+The complete owner suite passed **277/277** locally, including that new case;
+syntax lint and the diff check passed. This removes a permanent quota trap
+for a growing historical cohort, but does not qualify proof-table size,
+production disk monitoring, empty historical tombstones, writer cutover or
+live recovery.
 
 ## Next active work
 

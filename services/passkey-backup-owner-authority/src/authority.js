@@ -536,8 +536,14 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
               source.legacyOwnerHash, source.sourceSha256) ||
             tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE owner=? AND source_sha256!=?',
               owner.subject, source.sourceSha256)) deny('cutover_identity_collision');
-        if (tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges').n >= 128 ||
-            tx.query('SELECT count(*) AS n FROM legacy_cutover_challenges WHERE owner=?', owner.subject).n >= 8 ||
+        // A verified proof retains its challenge forever for reconciliation.
+        // Count only rows without a proof against the outstanding challenge
+        // quota, or a fully proven historical cohort would permanently exhaust
+        // the 128-global/eight-owner admission capacity.
+        if (tx.query(`SELECT count(*) AS n FROM legacy_cutover_challenges c WHERE NOT EXISTS
+          (SELECT 1 FROM legacy_cutover_verified_proofs p WHERE p.challenge_id=c.id)`).n >= 128 ||
+            tx.query(`SELECT count(*) AS n FROM legacy_cutover_challenges c WHERE c.owner=? AND NOT EXISTS
+              (SELECT 1 FROM legacy_cutover_verified_proofs p WHERE p.challenge_id=c.id)`, owner.subject).n >= 8 ||
             tx.query('SELECT 1 FROM legacy_cutover_challenges WHERE legacy_credential_id=?',
               source.legacyCredentialId) ||
             tx.query('SELECT 1 FROM legacy_cutover_verified_proofs WHERE legacy_credential_id=?',

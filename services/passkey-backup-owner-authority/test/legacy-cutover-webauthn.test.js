@@ -42,7 +42,8 @@ function signedResponse(challenge, authenticator, userHandle, credentialId, opti
   return rest;
 }
 
-async function fixture(t, { onVerify, wrongSourceKey = false, twoLegacyCredentials = false, fault } = {}) {
+async function fixture(t, { onVerify, wrongSourceKey = false, twoLegacyCredentials = false,
+  extraLegacyIds = [], fault } = {}) {
   const adapter = { ...fakeVerifier(),
     async legacyCutoverAssertion(input) {
       const evidence = await realVerifier.legacyCutoverAssertion(input);
@@ -81,6 +82,13 @@ async function fixture(t, { onVerify, wrongSourceKey = false, twoLegacyCredentia
         aaguid: '00000000-0000-0000-0000-000000000000', registrationPlatform: 'android',
         transports: ['internal'] }] : [])] }],
   };
+  for (const id of extraLegacyIds) {
+    source.credentialOwnersById.push({ credentialId: id, storageKey,
+      ownerSubjectHash: hash('signed-cutover-source-owner') });
+    source.credentialsByStorageKey[0].credentials.push({
+      ...source.credentialsByStorageKey[0].credentials[0], id,
+    });
+  }
   const sourceBytes = Buffer.from(`${JSON.stringify(source)}\n`);
   const expectedSourceSha256 = sha256(sourceBytes);
   const legacySnapshotPath = join(item.dir, `legacy-${expectedSourceSha256}.json`);
@@ -124,6 +132,25 @@ test('two signed, role-separated assertions verify and consume only a read-only 
     credential.id === item.ownerCredential.id ? { ...credential, counter: 2 } : credential));
   assert.deepEqual(after.storageBindings, []);
   assert.deepEqual(readFileSync(item.input.legacySnapshotPath), item.sourceBytes);
+});
+
+test('retained signed proofs do not permanently consume pending cutover capacity', async (t) => {
+  const extraLegacyIds = Array.from({ length: 9 }, (_, index) => b64(90 + index));
+  const item = await fixture(t, { extraLegacyIds });
+  await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  for (const credentialId of extraLegacyIds.slice(0, 8)) {
+    assert.equal(item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, {
+      schemaVersion: 1, legacySnapshotPath: item.input.legacySnapshotPath,
+      expectedSourceSha256: item.input.expectedSourceSha256, storageKey, credentialId,
+    }).legacyCredentialId, credentialId);
+  }
+  assert.throws(() => item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, {
+    schemaVersion: 1, legacySnapshotPath: item.input.legacySnapshotPath,
+    expectedSourceSha256: item.input.expectedSourceSha256, storageKey,
+    credentialId: extraLegacyIds[8],
+  }), (error) => error.code === 'rate_limited');
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 1);
 });
 
 test('offline proof diagnostics bind signed metadata to the sealed source without admitting migration', async (t) => {

@@ -71,6 +71,8 @@ Platform on a challenge is an **untrusted requested policy selection** until the
 
 Malformed credential/unknown-credential requests and wrong-owner enrollment attempts are rejected before claiming the pending ceremony. Once a well-formed eligible response is admitted, its challenge is durably claimed before asynchronous verification; failed signatures burn it. There is no claim restoration on timeout/crash. Anonymous creation has a durable global 60/minute and 256-outstanding cap; per-owner enrollment is capped at eight, active sessions at 32/owner and 100,000 globally, credentials/tombstones at 32/owner, grants at 64/session and 100,000 globally, owners at 100,000. An HTTP layer must also add per-peer/device abuse controls, bounded bodies, deadlines, capacity monitoring and backpressure; the global cap alone is not public-service abuse isolation.
 
+The legacy cutover ceremony admits at most 128 unproven challenge rows globally and eight per owner. A retained, immutable signed proof no longer consumes that pending quota; otherwise the first 128 successful proofs would permanently block later historical credentials. Unverified consumed rows still count until expiry and pruning. The proof table itself is retained for reconciliation, so deployment needs disk-capacity monitoring and cohort-scale load qualification before admission.
+
 ## Seven-route grant binding and protocol fence
 
 The core does not remove or bypass any current challenge/lifecycle protection. `issueGrant(session, request)` only accepts the exact seven method/path/scope pairs currently defined by the challenge service. The request is a closed object:
