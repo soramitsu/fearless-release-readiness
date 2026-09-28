@@ -25,44 +25,47 @@ Started 2026-09-22. The Codex goal is full implementation of the user-approved A
 ## Current checkpoint
 
 The program remains incomplete. The latest pushed Android and iOS source
-candidates are `56ca84b0983a1f7dd12d4974d32bd84e8bb24c5b` and
-`db4beab4dc18684e1dbad0ba58c244359f8967fe`, respectively, on
+candidates are `5e8b36a96c07e5fd28ac9761d497896a3cbdeae8` and
+`9415f7f7b8f37b1807229655c300f7d40e32d7fe`, respectively, on
 [Android PR #1260](https://github.com/soramitsu/fearless-Android/pull/1260)
 and [iOS PR #1304](https://github.com/soramitsu/fearless-iOS/pull/1304).
-Both branches are clean and pushed but still require independent review.
-Android's exact-head account JVM suite passed 347/347; default and scoped
-Detekt passed. Its receive-side watch proof rejects mismatched key/address
-pairs and mixed custody before read-only planning, accepts only the existing
-strict V4R2 TON JSON address shape, and requires chain-watch raw genesis IDs
-to match a reviewed Substrate policy. The default empty policy denies incoming
-chain watches during staging and journal replay. The predecessor TON scan
-`7bc49c66-2a97-4b66-979d-7020051d3124` and the exact successor scan
-`41c9cfa8-04cd-4ead-b05d-dbbe92e1cf1c` found zero reportable issues;
-the latter covered both changed production files. The pinned Utils/WebSocket
-source verifier passed on the predecessor.
-The preceding `1093b133` head passed Branch Flow, IAS and full Android CI,
-including API 30/31/36 migration and restart checks and the source-bound
-complete AAB native-payload verifier. The `da0331f` Branch Flow passed, while
-its Android CI was cancelled after the successor push. The successor's
-exact-head hosted checks are running; earlier green runs remain supporting
-evidence only.
-The earlier backup JVM suite passed 292/292.
+Both published candidates still require independent review. Android's latest
+account JVM suite passed **352/352** and backup suite **292/292**, with no
+failures, errors or skips. Default Detekt passed. Forced analysis of the five
+Kotlin files in the coroutine fix reports the same 32 existing findings as the
+prior-head comparison, with none introduced. Three redundant pre-IO-context
+cancellation checks were removed. Both plaintext exporters now retain cleanup
+ownership until delivery succeeds; cancellation during return dispatch erases
+the completed buffer. Deterministic tests cover cancelled and successful delivery.
+
+The preceding `b97098031` receiving-policy source passed all hosted Android CI,
+IAS validation and Branch Flow checks. It binds `FPWCAI01` v2 to the compiled
+87-entry Substrate inventory across staging/replay/projection, preserving 17
+disabled historical identities and exact v1 bytes/interpretation. Its five-file
+immutable diff scan `d312253a-9010-48f9-8b1c-36d640806d7b` found no
+reportable issues; it was a parent-agent review, not independent approval.
+The latest coroutine change received a separate agent inspection and parent
+review and requires new-head hosted CI. Earlier CI or scans do not qualify the
+successor. Independent inventory review, transactional installation and device
+recovery acceptance remain open.
 The preceding iOS source-proof and Keychain receive suites passed 70/70 iOS 18.1
 arm64 Release simulator tests; the latest XCM authorization/MainTab suites
 passed 116/116 on the preceding XCM head. The preceding iOS semantic-codec,
 asset-presentation and receive-projection Release suites passed **23/23** on
 iOS 18.1 arm64, including the shared 126-byte vector, strict raw-byte
-ordering and the retained receive-install blockers. The exact current iOS
-receive/presentation suites passed **22/22** and the final-tree focused
-watch-identity suite passed **4/4** on an iOS 18.1 arm64 Release simulator.
-The latter covers Substrate, EVM, raw and legacy JSON TON, mismatches,
-duplicate identity, mixed custody and canonical approved-genesis enforcement for
-chain-specific watches. The preceding diff scan
-`ce118e0e-f508-414f-b44f-8ef4664c696c` and exact latest diff scan
-`653bd1c8-6909-4c6e-bf98-2c9340edf73e` closed their changed source
-inventories with zero reportable findings. The current head passed all hosted
-checks: validation, Release Safety, release contracts, simulator build and
-Jenkins PR merge.
+ordering and the retained receive-install blockers. The preceding iOS watch-source receive/presentation suites passed **22/22**,
+then its focused watch-identity suite passed **4/4** on an iOS 18.1 arm64
+Release simulator. That predecessor passed all hosted checks and its immutable
+diff scan `653bd1c8-6909-4c6e-bf98-2c9340edf73e` found no reportable
+issues. The latest iOS head adds a journal-bound public Core Data projection
+using the released exact-replacement mapper. Its final iOS 18.1 arm64 Release
+run passed **25/25** (nine new projection cases plus 16 existing mapper cases),
+with no failures or skips. It keeps `hasBackup: false` and every receive blocker,
+and rejects unrepresentable watch custody, foreign preferences, root combinations
+and unknown currencies. Source lint/format, project syntax and diff checks pass.
+The exact iOS head now passes all hosted checks, including the simulator build,
+Release Safety, release contracts, validation, Jenkins PR merge and Codecov.
+Independent security review and distribution/device qualification remain open.
 The preceding journal source passed 11/11 and native first-owner PRF source
 passed 17/17. Protected qualification, independent human security approval
 and signed distribution acceptance remain outstanding.
@@ -3290,3 +3293,62 @@ and independent human security review still remain required.
 - Finish Android independent review, green protected CI, hermetic final Release/R8/AAB, API36/16KiB native-device and Play-upgrade qualification. The local unsigned intermediate does not complete device or distribution acceptance.
 - Obtain independent review and green CI for the published iOS key/sign/send boundary; qualify exact signed transaction bytes, fees, hashes, receipts, node changes and distribution artifacts. The 463-test development pass does not satisfy enabled-feature or store/device acceptance.
 - Generate and bind the full route inventory and shared shipping manifest, then finish portable native PRF/Drive recovery and owner/grant issuance. Existing credentials and wallet identities remain preserved.
+
+
+## Durable receiving policy and native storage integration — 2026-09-25
+
+Android `b970980316a7d718ef04109059d843d82d329ede` is pushed on
+PR #1260. Its compiled identity inventory is bound by SHA-256 to every new
+staged after-image, with legacy v1 records kept byte-for-byte compatible. Tests
+cover policy substitution, canonical bundled identities, watch-cohort staging
+and fresh-process replay, invalid-identity rejection before any reservation,
+and legacy source-sidecar upgrade without changing its after-image token.
+The final account suite passed **350/350** and default Detekt passed. Forced
+scoped analysis retains only the four structural findings also present at the
+parent commit. The completed immutable diff scan
+`d312253a-9010-48f9-8b1c-36d640806d7b` has no reportable findings;
+it is not independent human approval. All installation/source blockers remain.
+The inventory needs independent review and a future-version policy strategy;
+transactional installation, installed signing/export and real replacement-device
+acceptance are still required before recovery can be enabled.
+
+
+iOS `9415f7f7b8f37b1807229655c300f7d40e32d7fe` is pushed on
+PR #1304. `IOSReceiveCoreDataProjection` turns a verified journal-bound semantic
+cohort into actual `MetaAccountSelectionModel` records for the released exact
+Core Data mapper. It preserves native Substrate/EVM/TON public identities,
+chain accounts, supported metadata, wallet order and selection; it marks no
+backup complete and retains all receive blockers. Unsupported watch custody,
+Android-specific display fields, root combinations, chain state and currencies
+are rejected rather than discarded. The exact-source Release simulator run
+passed **25/25** with zero failures/skips, including persistence/refetch through
+the real mapper. The initial fixture with an expanded Ed25519 private key was
+correctly rejected; the final fixture uses the released signer's 32-byte seed.
+This does not establish Keychain installation, Android-original-source retention,
+wallet-bound foreign-preference persistence or installed signing/export. Those
+are the next receiver integration requirements; real provider/device acceptance
+and independent review remain mandatory.
+
+
+## Coroutine source correction — 2026-09-28
+
+Android `5e8b36a96c07e5fd28ac9761d497896a3cbdeae8` removes redundant
+`ensureActive` calls before inherited-job `withContext(Dispatchers.IO)` in
+backup generation creation, reconciliation and promotion. Checks around
+synchronous work and callback boundaries remain. A separate source review
+also identified that cancellation on return dispatch could discard a completed
+plaintext export before its caller could erase it. Both draft and semantic
+exporters now retain the buffer outside the context switch and erase it when
+delivery fails. Success transfers the same intact buffer; no replacement job
+or `NonCancellable` export was added.
+
+The final account suite passed **352/352** and the backup suite **292/292**,
+with no failures, errors or skips. Two deterministic tests hold the return
+dispatch and exercise cancelled delivery and successful ownership transfer.
+Default Detekt passed; forced five-file analysis matches the prior source's
+32 findings with no new issue. The fix is pushed to Android PR #1260. The
+root review-pin contract selects this successor and iOS
+`9415f7f7b8f37b1807229655c300f7d40e32d7fe`. Root audit regression case
+4146 passed, confirming that an altered Android pin is rejected; shell syntax
+and diff checks also passed. Full production readiness
+and independent security/distribution/device gates remain incomplete.
