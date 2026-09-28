@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "scope": "sora-nexus-production-readiness",
+  "network": "sora-nexus-mainnet",
+  "chainId": "sora:nexus:global",
+  "toriiBaseUrl": "https://minamoto.sora.org",
+  "mcpUrl": "https://minamoto.sora.org/v1/mcp",
+  "healthUrl": "https://minamoto.sora.org/status",
+  "status": "blocked",
+  "releaseEnabled": false,
+  "blockers": [
+    "nexus-live-health-failing",
+    "route-publication-evidence-missing",
+    "route-canary-evidence-missing",
+    "wallet-live-transfer-smoke-missing"
+  ],
+  "readyVerificationCommands": [
+    "bash scripts/test-nexus-production-evidence-template.sh",
+    "bash scripts/generate-nexus-production-evidence-template.sh --output build/reports/nexus-production-evidence-template.json",
+    "bash scripts/test-nexus-production-evidence-audit.sh",
+    "bash scripts/audit-nexus-production-evidence.sh --require-ready",
+    "IROHA_NEXUS_REQUIRE_PRODUCTION_EVIDENCE=1 IROHA_NEXUS_LIVE_HEALTH=1 bash scripts/audit-iroha-release-readiness.sh",
+    "bash scripts/audit-iroha-wallet-coverage.sh"
+  ],
+  "requiredEvidenceFields": [
+    "routeManifestCommit",
+    "routeManifestSourcePath",
+    "routeManifestHash",
+    "publicationTransactionHash",
+    "publicationAuthority",
+    "publishedAt",
+    "routeCanaryTransactionHash",
+    "routeCanaryCheckedAt",
+    "routeCanarySourceAccount",
+    "routeCanaryDestinationAccount",
+    "routeCanaryAssetId",
+    "routeCanaryAmount",
+    "walletPlatform",
+    "walletCommit",
+    "walletSmokeTransactionHash",
+    "walletSmokeSubmittedAt",
+    "walletSmokeObservedAt",
+    "operator"
+  ],
+  "routePublicationEvidence": [],
+  "routeCanaryEvidence": [],
+  "walletSmokeEvidence": []
+}

@@ -1,0 +1,281 @@
+name: Publish passkey backup image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact 40-character commit currently at protected main
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: passkey-image-publish-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/soramitsu/fearless-passkey-backup
+
+jobs:
+  publish:
+    name: publish immutable image and provenance
+    if: >-
+      github.repository == 'soramitsu/fearless-release-readiness' &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out the selected protected-main revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate exact protected-main source
+        shell: bash
+        env:
+          REQUESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_commit must be exactly 40 lowercase hexadecimal characters" >&2
+            exit 1
+          fi
+          if [[ "$REQUESTED_SOURCE_COMMIT" != "$GITHUB_SHA" ]]; then
+            echo "source_commit does not equal the workflow's protected-main SHA" >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse --verify 'HEAD^{commit}')" != "$GITHUB_SHA" ]]; then
+            echo "checked-out commit does not equal GITHUB_SHA" >&2
+            exit 1
+          fi
+          remote_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 { print $1 }')"
+          if [[ ! "$remote_main" =~ ^[0-9a-f]{40}$ || "$remote_main" != "$GITHUB_SHA" ]]; then
+            echo "protected main moved or could not be resolved exactly; dispatch again" >&2
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "checked-out source is not clean" >&2
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve an attestable prior publication
+        id: resume
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          source_tag="${IMAGE_REPOSITORY}:sha-${GITHUB_SHA}"
+          inspect_error="$(mktemp)"
+          trap 'rm -f "$inspect_error"' EXIT
+          if existing_manifest="$(docker buildx imagetools inspect "$source_tag" 2>"$inspect_error")"; then
+            existing_digest="$(awk '$1 == "Digest:" { print $2; exit }' <<<"$existing_manifest")"
+            if [[ ! "$existing_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "existing source tag did not resolve to a canonical digest" >&2
+              exit 1
+            fi
+            gh attestation verify "oci://${IMAGE_REPOSITORY}@${existing_digest}" \
+              --repo soramitsu/fearless-release-readiness \
+              --signer-workflow soramitsu/fearless-release-readiness/.github/workflows/passkey-image-publish.yml \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref refs/heads/main \
+              --deny-self-hosted-runners > /dev/null
+            echo "resumed=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$existing_digest" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! grep -Eiq 'manifest unknown|not found|name unknown' "$inspect_error"; then
+            echo "registry lookup failed closed for $source_tag" >&2
+            sed -n '1,20p' "$inspect_error" >&2
+            exit 1
+          fi
+          echo "resumed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish exact source
+        id: build
+        if: steps.resume.outputs.resumed != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: services/passkey-backup-challenge-service
+          file: services/passkey-backup-challenge-service/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:staging-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/soramitsu/fearless-release-readiness
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: false
+
+      - name: Verify the published digest
+        id: image
+        shell: bash
+        env:
+          PUBLISHED_DIGEST: ${{ steps.resume.outputs.digest || steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PUBLISHED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "build did not return a canonical sha256 digest" >&2
+            exit 1
+          fi
+          immutable_reference="${IMAGE_REPOSITORY}@${PUBLISHED_DIGEST}"
+          docker buildx imagetools inspect "$immutable_reference" > /dev/null
+          echo "digest=$PUBLISHED_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "reference=$immutable_reference" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        id: attest
+        if: steps.resume.outputs.resumed != 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ env.IMAGE_REPOSITORY }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Create public publication evidence
+        if: steps.resume.outputs.resumed != 'true'
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMMUTABLE_REFERENCE: ${{ steps.image.outputs.reference }}
+          ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          ATTESTATION_BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ATTESTATION_ID" =~ ^[0-9]+$ ]]; then
+            echo "attestation action did not return a canonical numeric ID" >&2
+            exit 1
+          fi
+          expected_url="https://github.com/${GITHUB_REPOSITORY}/attestations/${ATTESTATION_ID}"
+          if [[ "$ATTESTATION_URL" != "$expected_url" ]]; then
+            echo "attestation URL is not bound to this repository and ID" >&2
+            exit 1
+          fi
+          if [[ ! -f "$ATTESTATION_BUNDLE_PATH" || -L "$ATTESTATION_BUNDLE_PATH" ]]; then
+            echo "attestation bundle is missing or unsafe" >&2
+            exit 1
+          fi
+          mkdir -p build/reports
+          bundle_output=build/reports/passkey-image-provenance.sigstore.json
+          cp -- "$ATTESTATION_BUNDLE_PATH" "$bundle_output"
+          bundle_sha256="$(sha256sum "$bundle_output" | awk '{ print $1 }')"
+          published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          export bundle_sha256 published_at
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const evidence = {
+            schemaVersion: 1,
+            kind: 'passkey-backup-image-publication',
+            imageRepository: process.env.IMAGE_REPOSITORY,
+            imageDigest: process.env.IMAGE_DIGEST,
+            immutableReference: process.env.IMMUTABLE_REFERENCE,
+            imageTag: `${process.env.IMAGE_REPOSITORY}:sha-${process.env.GITHUB_SHA}`,
+            sourceRepository: process.env.GITHUB_REPOSITORY,
+            sourceRef: process.env.GITHUB_REF,
+            sourceCommit: process.env.GITHUB_SHA,
+            workflowRunUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            attestationId: process.env.ATTESTATION_ID,
+            attestationUrl: process.env.ATTESTATION_URL,
+            attestationBundleSha256: `sha256:${process.env.bundle_sha256}`,
+            publishedAt: process.env.published_at,
+          };
+          fs.writeFileSync(
+            'build/reports/passkey-image-publication.json',
+            `${JSON.stringify(evidence, null, 2)}\n`,
+            { flag: 'wx', mode: 0o600 },
+          );
+          NODE
+
+      - name: Upload public publication evidence
+        id: evidence
+        if: steps.resume.outputs.resumed != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: passkey-image-publication-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/reports/passkey-image-publication.json
+            build/reports/passkey-image-provenance.sigstore.json
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 9
+          overwrite: false
+
+      - name: Record immutable publication summary
+        shell: bash
+        env:
+          RESUMED: ${{ steps.resume.outputs.resumed }}
+          IMMUTABLE_REFERENCE: ${{ steps.image.outputs.reference }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          EVIDENCE_ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Passkey image publication'
+            echo
+            echo "- Source commit: \`$GITHUB_SHA\`"
+            echo "- Immutable image: \`$IMMUTABLE_REFERENCE\`"
+            if [[ "$RESUMED" == "true" ]]; then
+              echo '- Result: existing source tag and protected-source provenance verified; no registry write'
+            else
+              echo "- Provenance: $ATTESTATION_URL"
+              echo "- Evidence artifact digest: \`$EVIDENCE_ARTIFACT_DIGEST\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Promote the immutable source tag
+        shell: bash
+        env:
+          IMMUTABLE_REFERENCE: ${{ steps.image.outputs.reference }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          source_tag="${IMAGE_REPOSITORY}:sha-${GITHUB_SHA}"
+          inspect_error="$(mktemp)"
+          trap 'rm -f "$inspect_error"' EXIT
+          if current_manifest="$(docker buildx imagetools inspect "$source_tag" 2>"$inspect_error")"; then
+            current_digest="$(awk '$1 == "Digest:" { print $2; exit }' <<<"$current_manifest")"
+            if [[ ! "$current_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "existing source tag did not resolve to a canonical digest" >&2
+              exit 1
+            fi
+            if [[ "$current_digest" != "$IMAGE_DIGEST" ]]; then
+              echo "refusing to overwrite source tag with a different digest" >&2
+              exit 1
+            fi
+            echo "source tag already points to the exact published digest; resume is complete"
+            exit 0
+          fi
+          if ! grep -Eiq 'manifest unknown|not found|name unknown' "$inspect_error"; then
+            echo "registry lookup failed closed for $source_tag" >&2
+            sed -n '1,20p' "$inspect_error" >&2
+            exit 1
+          fi
+          docker buildx imagetools create --tag "$source_tag" "$IMMUTABLE_REFERENCE"
+          promoted_manifest="$(docker buildx imagetools inspect "$source_tag")"
+          promoted_digest="$(awk '$1 == "Digest:" { print $2; exit }' <<<"$promoted_manifest")"
+          if [[ "$promoted_digest" != "$IMAGE_DIGEST" ]]; then
+            echo "promoted source tag does not resolve to the attested image digest" >&2
+            exit 1
+          fi

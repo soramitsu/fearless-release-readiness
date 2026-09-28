@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "status": "ready",
+  "repository": "soramitsu/fearless-release-readiness",
+  "head": "codex/release-readiness-root-owner",
+  "base": "main",
+  "prNumber": 1,
+  "lastReviewed": "2026-09-22",
+  "blocker": null
+}

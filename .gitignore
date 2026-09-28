@@ -3,6 +3,7 @@
 /*
 
 !/.gitignore
+!/.github/
 !/README.md
 !/FEARLESS_PROJECT_PLAN.md
 !/config/
@@ -10,15 +11,21 @@
 !/scripts/
 !/services/
 
-# Only the public passkey challenge service belongs to this repository.
+# Public passkey service source belongs to this repository; local state does not.
 /services/*
 !/services/passkey-backup-challenge-service/
 /services/passkey-backup-challenge-service/build/
 /services/passkey-backup-challenge-service/node_modules/
+!/services/passkey-backup-owner-authority/
+/services/passkey-backup-owner-authority/build/
+/services/passkey-backup-owner-authority/node_modules/
+/services/passkey-backup-owner-authority/state/
+/services/passkey-backup-owner-authority/*.sqlite*
 
 # Local reports, artifacts, nested checkouts, credentials, and device evidence
 # must remain outside this repository even if a parent rule changes later.
 /build/
+/config/release-shipping-manifest.json
 /release/
 /release-evidence/
 /release-worktrees/
@@ -26,3 +33,17 @@
 /.zero*
 /=
 
+# Local temporary files and generated review artifacts
+/tmp/
+/.tmp/
+/tmp-*/
+/.tmp-*/
+*.tmp
+/output/
+/.playwright-cli/
+/playwright-report/
+/test-results/
+/review-output/
+/review-artifacts/
+/UX-REMEDIATION-*.md
+/UX-MANUAL-ACCEPTANCE.md

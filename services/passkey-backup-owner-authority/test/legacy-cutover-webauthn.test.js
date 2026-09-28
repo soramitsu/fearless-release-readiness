@@ -1,0 +1,545 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import test from 'node:test';
+import {
+  authenticationCredential, createAuthenticator,
+} from '../../passkey-backup-challenge-service/test/webauthn-fixture.js';
+import { createWebAuthnVerifier } from '../src/webauthn-verifier.js';
+import { verifySealedLegacyCutover } from '../src/legacy-cutover-verifier.js';
+import { readOwnerCredentialSnapshot } from '../src/store.js';
+import { hash } from '../src/validation.js';
+import { b64, setup, verifier as fakeVerifier } from './fixtures.js';
+
+const storageKey = 'storage:signed-cutover';
+const androidOrigin = `android:apk-key-hash:${Buffer.alloc(32, 0xa5).toString('base64url')}`;
+const originPolicy = { android: [androidOrigin], ios: ['https://fearlesswallet.io'] };
+const realVerifier = createWebAuthnVerifier({ allowedOrigins: originPolicy });
+const sha256 = (value) => createHash('sha256').update(value).digest('hex');
+
+function denied(promise, code = 'verification_failed') {
+  return assert.rejects(promise, (error) => error.code === code, `expected ${code}`);
+}
+
+function database(path, action) {
+  const db = new DatabaseSync(path);
+  try { return action(db); }
+  finally { db.close(); }
+}
+
+function row(path, id) {
+  return database(path, (db) => db.prepare('SELECT * FROM legacy_cutover_challenges WHERE id=?').get(id));
+}
+
+function signedResponse(challenge, authenticator, userHandle, credentialId, options = {}) {
+  const { authenticatorAttachment, ...rest } = authenticationCredential(
+    challenge, authenticator, userHandle,
+    { origin: androidOrigin, flags: 0x1d, counter: 1, credentialId: Buffer.from(credentialId, 'base64url'),
+      ...options });
+  void authenticatorAttachment;
+  return rest;
+}
+
+async function fixture(t, { onVerify, wrongSourceKey = false, twoLegacyCredentials = false,
+  extraLegacyIds = [], fault } = {}) {
+  const adapter = { ...fakeVerifier(),
+    async legacyCutoverAssertion(input) {
+      const evidence = await realVerifier.legacyCutoverAssertion(input);
+      if (onVerify) await onVerify(input);
+      return evidence;
+    },
+  };
+  const item = setup(t, { verifier: adapter, fault });
+  const { owner } = await item.bootstrap();
+  const ownerCredential = readOwnerCredentialSnapshot(item.path).credentials[0];
+  const ownerAuthenticator = createAuthenticator(`cutover-owner-${item.dir}`);
+  const legacyAuthenticator = createAuthenticator(`cutover-legacy-${item.dir}`);
+  const secondLegacyAuthenticator = twoLegacyCredentials
+    ? createAuthenticator(`cutover-second-legacy-${item.dir}`) : null;
+  const sourceAuthenticator = wrongSourceKey
+    ? createAuthenticator(`cutover-other-source-${item.dir}`) : legacyAuthenticator;
+  const legacyId = Buffer.from(legacyAuthenticator.credentialId).toString('base64url');
+  const secondLegacyId = secondLegacyAuthenticator
+    ? Buffer.from(secondLegacyAuthenticator.credentialId).toString('base64url') : null;
+  const legacyUserHandle = hash(`user\0${storageKey}`);
+  database(item.path, (db) => db.prepare('UPDATE credentials SET public_key=?,counter=1 WHERE id=?')
+    .run(Buffer.from(ownerAuthenticator.credentialPublicKey).toString('base64url'), ownerCredential.id));
+  const source = {
+    schemaVersion: 4,
+    credentialOwnersById: [legacyId, ...(secondLegacyId ? [secondLegacyId] : [])].map(
+      (credentialId) => ({ credentialId, storageKey,
+        ownerSubjectHash: hash('signed-cutover-source-owner') })),
+    credentialsByStorageKey: [{ storageKey, ownerSubjectHash: hash('signed-cutover-source-owner'),
+      credentials: [{ id: legacyId,
+        publicKey: Buffer.from(sourceAuthenticator.credentialPublicKey).toString('base64url'),
+        userId: legacyUserHandle, counter: 7, deviceType: 'multiDevice', backedUp: true,
+        aaguid: '00000000-0000-0000-0000-000000000000', registrationPlatform: 'ios',
+        transports: ['internal'] }, ...(secondLegacyAuthenticator ? [{ id: secondLegacyId,
+        publicKey: Buffer.from(secondLegacyAuthenticator.credentialPublicKey).toString('base64url'),
+        userId: legacyUserHandle, counter: 4, deviceType: 'multiDevice', backedUp: true,
+        aaguid: '00000000-0000-0000-0000-000000000000', registrationPlatform: 'android',
+        transports: ['internal'] }] : [])] }],
+  };
+  for (const id of extraLegacyIds) {
+    source.credentialOwnersById.push({ credentialId: id, storageKey,
+      ownerSubjectHash: hash('signed-cutover-source-owner') });
+    source.credentialsByStorageKey[0].credentials.push({
+      ...source.credentialsByStorageKey[0].credentials[0], id,
+    });
+  }
+  const sourceBytes = Buffer.from(`${JSON.stringify(source)}\n`);
+  const expectedSourceSha256 = sha256(sourceBytes);
+  const legacySnapshotPath = join(item.dir, `legacy-${expectedSourceSha256}.json`);
+  writeFileSync(legacySnapshotPath, sourceBytes, { mode: 0o600 });
+  const issued = item.core.issueLegacyCutoverChallenge(owner.sessionToken, {
+    schemaVersion: 1, legacySnapshotPath, expectedSourceSha256, storageKey, credentialId: legacyId,
+  });
+  const input = { schemaVersion: 1, challengeId: issued.challengeId,
+    legacySnapshotPath, expectedSourceSha256,
+    legacyAssertion: signedResponse(issued.legacyChallenge, legacyAuthenticator,
+      legacyUserHandle, legacyId, { counter: 8 }),
+    ownerAssertion: signedResponse(issued.ownerChallenge, ownerAuthenticator,
+      ownerCredential.user_handle, ownerCredential.id, { counter: 2 }),
+  };
+  return { ...item, owner, ownerCredential, ownerAuthenticator, legacyAuthenticator,
+    secondLegacyAuthenticator, legacyId, secondLegacyId, legacyUserHandle,
+    source, sourceBytes, issued, input };
+}
+
+test('two signed, role-separated assertions verify and consume only a read-only cutover claim', async (t) => {
+  const item = await fixture(t);
+  const before = readOwnerCredentialSnapshot(item.path);
+  const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  assert.deepEqual(result, { schemaVersion: 1, challengeId: item.issued.challengeId,
+    state: 'verified-proof-recorded', proofSha256: database(item.path, (db) =>
+      db.prepare('SELECT proof_sha256 FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+        .get(item.issued.challengeId).proof_sha256), expiresAt: item.issued.expiresAt,
+    migrationPermitted: false });
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  const proof = database(item.path, (db) => db.prepare(
+    'SELECT * FROM legacy_cutover_verified_proofs WHERE challenge_id=?').get(item.issued.challengeId));
+  assert.equal(proof.legacy_new_counter, 8);
+  assert.equal(proof.owner_new_counter, 2);
+  assert.equal(proof.source_sha256, item.input.expectedSourceSha256);
+  assert.equal(proof.legacy_body_sha256, row(item.path, item.issued.challengeId).legacy_body_sha256);
+  assert.equal(proof.owner_body_sha256, row(item.path, item.issued.challengeId).owner_body_sha256);
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_failed');
+  const after = readOwnerCredentialSnapshot(item.path);
+  assert.deepEqual(after.credentials, before.credentials.map((credential) =>
+    credential.id === item.ownerCredential.id ? { ...credential, counter: 2 } : credential));
+  assert.deepEqual(after.storageBindings, []);
+  assert.deepEqual(readFileSync(item.input.legacySnapshotPath), item.sourceBytes);
+});
+
+test('retained signed proofs do not permanently consume pending cutover capacity', async (t) => {
+  const extraLegacyIds = Array.from({ length: 9 }, (_, index) => b64(90 + index));
+  const item = await fixture(t, { extraLegacyIds });
+  await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  for (const credentialId of extraLegacyIds.slice(0, 8)) {
+    assert.equal(item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, {
+      schemaVersion: 1, legacySnapshotPath: item.input.legacySnapshotPath,
+      expectedSourceSha256: item.input.expectedSourceSha256, storageKey, credentialId,
+    }).legacyCredentialId, credentialId);
+  }
+  assert.throws(() => item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, {
+    schemaVersion: 1, legacySnapshotPath: item.input.legacySnapshotPath,
+    expectedSourceSha256: item.input.expectedSourceSha256, storageKey,
+    credentialId: extraLegacyIds[8],
+  }), (error) => error.code === 'rate_limited');
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 1);
+});
+
+test('offline proof diagnostics bind signed metadata to the sealed source without admitting migration', async (t) => {
+  const item = await fixture(t);
+  const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const args = { legacySnapshotPath: item.input.legacySnapshotPath, ownerPath: item.path,
+    expectedSourceSha256: item.input.expectedSourceSha256 };
+  const sourceBefore = readFileSync(item.input.legacySnapshotPath);
+  const ownerBefore = readFileSync(item.path);
+  const unbound = verifySealedLegacyCutover(args);
+  assert.equal(unbound.proofMetadata.counts.sourceAlignedProofs, 1);
+  assert.equal(unbound.proofMetadata.counts.ownerAlignedProofs, 0);
+  assert.equal(unbound.proofMetadata.counts.anchoredStorageKeys, 0);
+  assert.equal(unbound.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.ok(unbound.proofMetadata.diagnostics.some((entry) =>
+    entry.kind === 'verified_proof_binding_owner_mismatch'));
+  assert.equal(unbound.migrationPermitted, false);
+  assert.equal(unbound.publicRepresentationExact, false);
+  assert.deepEqual(readFileSync(item.input.legacySnapshotPath), sourceBefore);
+  assert.deepEqual(readFileSync(item.path), ownerBefore);
+
+  database(item.path, (db) => db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+    storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+    item.input.expectedSourceSha256, result.proofSha256, 123));
+  const bound = verifySealedLegacyCutover(args);
+  assert.equal(bound.proofMetadata.counts.sourceAlignedProofs, 1);
+  assert.equal(bound.proofMetadata.counts.ownerAlignedProofs, 1);
+  assert.equal(bound.proofMetadata.counts.anchoredStorageKeys, 1);
+  assert.equal(bound.proofMetadata.counts.discrepancies, 0);
+  assert.equal(bound.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(bound.publicRepresentationExact, false); // Historical credential was not imported.
+  assert.equal(bound.migrationPermitted, false);
+  const redacted = JSON.stringify(bound);
+  for (const secretOrIdentifier of [storageKey, item.owner.subject, item.legacyId,
+    item.legacyUserHandle, result.proofSha256]) {
+    assert.equal(redacted.includes(secretOrIdentifier), false);
+  }
+});
+
+test('sealed comparison rejects a historical credential imported at its pre-proof counter', async (t) => {
+  const item = await fixture(t);
+  const proof = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const historical = item.source.credentialsByStorageKey[0].credentials[0];
+  database(item.path, (db) => {
+    db.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE');
+    try {
+      db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+        storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+        item.input.expectedSourceSha256, proof.proofSha256, 123);
+      db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+        historical.id, item.owner.subject, historical.publicKey, historical.userId,
+        historical.counter, historical.deviceType, Number(historical.backedUp));
+      db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+        historical.id, storageKey, historical.aaguid, JSON.stringify(historical.transports),
+        historical.registrationPlatform);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  });
+  const args = { legacySnapshotPath: item.input.legacySnapshotPath, ownerPath: item.path,
+    expectedSourceSha256: item.input.expectedSourceSha256 };
+  const stale = verifySealedLegacyCutover(args);
+  assert.equal(stale.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(stale.publicRepresentationExact, false);
+  assert.ok(stale.diagnostics.some((entry) => entry.kind === 'credential_public_state_mismatch'));
+  assert.equal(stale.migrationPermitted, false);
+
+  database(item.path, (db) => db.prepare('UPDATE credentials SET counter=? WHERE id=?')
+    .run(historical.counter + 1, historical.id));
+  const current = verifySealedLegacyCutover(args);
+  assert.equal(current.publicRepresentationExact, true);
+  assert.equal(current.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(current.counts.matchedCredentials, 1);
+  assert.equal(current.migrationPermitted, false);
+
+  database(item.path, (db) => db.prepare('UPDATE credentials SET counter=? WHERE id=?')
+    .run(historical.counter + 2, historical.id));
+  const advanced = verifySealedLegacyCutover(args);
+  assert.equal(advanced.publicRepresentationExact, false);
+  assert.ok(advanced.diagnostics.some((entry) => entry.kind === 'credential_public_state_mismatch'));
+});
+
+test('a retained proof for another sealed image cannot make public comparison exact', async (t) => {
+  const item = await fixture(t);
+  const proof = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const historical = item.source.credentialsByStorageKey[0].credentials[0];
+  const alternateBytes = Buffer.from(`${JSON.stringify(item.source, null, 2)}\n`);
+  const alternateDigest = sha256(alternateBytes);
+  const alternatePath = join(item.dir, `legacy-${alternateDigest}.json`);
+  writeFileSync(alternatePath, alternateBytes, { mode: 0o600 });
+  database(item.path, (db) => {
+    db.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE');
+    try {
+      db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+        storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+        alternateDigest, proof.proofSha256, 123);
+      db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+        historical.id, item.owner.subject, historical.publicKey, historical.userId,
+        historical.counter, historical.deviceType, Number(historical.backedUp));
+      db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+        historical.id, storageKey, historical.aaguid, JSON.stringify(historical.transports),
+        historical.registrationPlatform);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  });
+  const report = verifySealedLegacyCutover({ legacySnapshotPath: alternatePath,
+    ownerPath: item.path, expectedSourceSha256: alternateDigest });
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.equal(report.publicRepresentationExact, false);
+  assert.ok(report.diagnostics.some((entry) => entry.kind === 'credential_verified_proof_unaligned'));
+  assert.equal(report.migrationPermitted, false);
+});
+
+test('two signed credentials on one storage key need both owner-aligned proofs but only one binding anchor', async (t) => {
+  const item = await fixture(t, { twoLegacyCredentials: true });
+  const first = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const args = { legacySnapshotPath: item.input.legacySnapshotPath, ownerPath: item.path,
+    expectedSourceSha256: item.input.expectedSourceSha256 };
+  const incomplete = verifySealedLegacyCutover(args);
+  assert.equal(incomplete.proofMetadata.counts.sourceAlignedProofs, 1);
+  assert.equal(incomplete.proofMetadata.counts.missingProofs, 1);
+  assert.equal(incomplete.proofMetadata.sourceAndBindingMetadataComplete, false);
+
+  const issued = item.core.issueLegacyCutoverChallenge(item.owner.sessionToken, {
+    schemaVersion: 1, legacySnapshotPath: item.input.legacySnapshotPath,
+    expectedSourceSha256: item.input.expectedSourceSha256,
+    storageKey, credentialId: item.secondLegacyId,
+  });
+  const second = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, {
+    schemaVersion: 1, challengeId: issued.challengeId,
+    legacySnapshotPath: item.input.legacySnapshotPath,
+    expectedSourceSha256: item.input.expectedSourceSha256,
+    legacyAssertion: signedResponse(issued.legacyChallenge, item.secondLegacyAuthenticator,
+      item.legacyUserHandle, item.secondLegacyId, { counter: 5 }),
+    ownerAssertion: signedResponse(issued.ownerChallenge, item.ownerAuthenticator,
+      item.ownerCredential.user_handle, item.ownerCredential.id, { counter: 3 }),
+  });
+  assert.notEqual(first.proofSha256, second.proofSha256);
+  database(item.path, (db) => db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+    storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+    item.input.expectedSourceSha256, first.proofSha256, 123));
+  const report = verifySealedLegacyCutover(args);
+  assert.equal(report.proofMetadata.counts.retainedProofs, 2);
+  assert.equal(report.proofMetadata.counts.sourceAlignedProofs, 2);
+  assert.equal(report.proofMetadata.counts.ownerAlignedProofs, 2);
+  assert.equal(report.proofMetadata.counts.anchoredStorageKeys, 1);
+  assert.equal(report.proofMetadata.counts.discrepancies, 0);
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, true);
+  assert.equal(report.publicRepresentationExact, false);
+  assert.equal(report.migrationPermitted, false);
+  for (const identifier of [storageKey, item.owner.subject, item.legacyId, item.secondLegacyId]) {
+    assert.equal(JSON.stringify(report).includes(identifier), false);
+  }
+});
+
+test('one anchored proof cannot cover another credential on the same storage key', async (t) => {
+  const item = await fixture(t, { twoLegacyCredentials: true });
+  const first = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  database(item.path, (db) => db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+    storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+    item.input.expectedSourceSha256, first.proofSha256, 123));
+  const report = verifySealedLegacyCutover({ legacySnapshotPath: item.input.legacySnapshotPath,
+    ownerPath: item.path, expectedSourceSha256: item.input.expectedSourceSha256 });
+  assert.equal(report.proofMetadata.counts.anchoredStorageKeys, 1);
+  assert.equal(report.proofMetadata.counts.ownerAlignedProofs, 1);
+  assert.equal(report.proofMetadata.counts.missingProofs, 1);
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.equal(report.migrationPermitted, false);
+});
+
+test('forged binding commitment and different sealed digest or key do not match a signed proof', async (t) => {
+  const cases = ['forged-binding', 'changed-digest', 'changed-storage-key'];
+  for (const scenario of cases) {
+    await t.test(scenario, async (subtest) => {
+      const item = await fixture(subtest);
+      await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+      let args = { legacySnapshotPath: item.input.legacySnapshotPath, ownerPath: item.path,
+        expectedSourceSha256: item.input.expectedSourceSha256 };
+      if (scenario === 'forged-binding') {
+        database(item.path, (db) => db.prepare('INSERT INTO storage_bindings VALUES(?,?,?,?,?,?)').run(
+          storageKey, item.owner.subject, item.source.credentialsByStorageKey[0].ownerSubjectHash,
+          item.input.expectedSourceSha256, sha256('forged unrelated proof'), 123));
+      } else {
+        const changed = structuredClone(item.source);
+        if (scenario === 'changed-storage-key') {
+          const otherKey = 'storage:different-signed-cutover';
+          changed.credentialOwnersById[0].storageKey = otherKey;
+          changed.credentialsByStorageKey[0].storageKey = otherKey;
+          changed.credentialsByStorageKey[0].credentials[0].userId = hash(`user\0${otherKey}`);
+        }
+        const bytes = Buffer.from(`${JSON.stringify(changed)}\n\n`);
+        const digest = sha256(bytes);
+        const path = join(item.dir, `legacy-${digest}.json`);
+        writeFileSync(path, bytes, { mode: 0o600 });
+        args = { legacySnapshotPath: path, ownerPath: item.path, expectedSourceSha256: digest };
+      }
+      const report = verifySealedLegacyCutover(args);
+      const kind = scenario === 'forged-binding' ? 'verified_proof_binding_anchor_missing'
+        : scenario === 'changed-storage-key' ? 'verified_proof_storage_key_mismatch'
+          : 'verified_proof_source_mismatch';
+      assert.ok(report.proofMetadata.diagnostics.some((entry) => entry.kind === kind),
+        JSON.stringify(report.proofMetadata));
+      assert.equal(report.proofMetadata.counts.anchoredStorageKeys, 0);
+      assert.equal(report.migrationPermitted, false);
+    });
+  }
+});
+
+test('offline proof metadata refuses a backup-state change relative to the sealed source', async (t) => {
+  const item = await fixture(t);
+  item.input.legacyAssertion = signedResponse(item.issued.legacyChallenge,
+    item.legacyAuthenticator, item.legacyUserHandle, item.legacyId,
+    { counter: 8, flags: 0x0d }); // Multi-device, not yet backed up.
+  await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  const report = verifySealedLegacyCutover({ legacySnapshotPath: item.input.legacySnapshotPath,
+    ownerPath: item.path, expectedSourceSha256: item.input.expectedSourceSha256 });
+  assert.equal(report.proofMetadata.counts.sourceAlignedProofs, 0);
+  assert.ok(report.proofMetadata.diagnostics.some((entry) =>
+    entry.kind === 'verified_proof_credential_mismatch'));
+  assert.equal(report.proofMetadata.sourceAndBindingMetadataComplete, false);
+  assert.equal(report.migrationPermitted, false);
+});
+
+test('directed signed assertions can omit both user handles', async (t) => {
+  const item = await fixture(t);
+  item.input.legacyAssertion.response.userHandle = null;
+  item.input.ownerAssertion.response.userHandle = null;
+  const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  assert.equal(result.migrationPermitted, false);
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+});
+
+test('a signature made by a different legacy key cannot pass the sealed source key', async (t) => {
+  const item = await fixture(t, { wrongSourceKey: true });
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input));
+  assert.equal(row(item.path, item.issued.challengeId).state, 1);
+});
+
+test('legacy or owner signature, challenge, origin, RP, flags, handle and counter failures burn the claim', async (t) => {
+  const cases = [
+    ['legacy signature', (item) => { item.input.legacyAssertion.response.signature = b64(99, 64); }],
+    ['owner signature', (item) => { item.input.ownerAssertion.response.signature = b64(99, 64); }],
+    ['legacy challenge', (item) => { item.input.legacyAssertion = signedResponse(item.issued.ownerChallenge,
+      item.legacyAuthenticator, item.legacyUserHandle, item.legacyId, { counter: 8 }); }],
+    ['owner challenge', (item) => { item.input.ownerAssertion = signedResponse(item.issued.legacyChallenge,
+      item.ownerAuthenticator, item.ownerCredential.user_handle, item.ownerCredential.id); }],
+    ['origin', (item) => { item.input.legacyAssertion = signedResponse(item.issued.legacyChallenge,
+      item.legacyAuthenticator, item.legacyUserHandle, item.legacyId,
+      { counter: 8, origin: 'https://fearlesswallet.io' }); }],
+    ['RP', (item) => { item.input.ownerAssertion = signedResponse(item.issued.ownerChallenge,
+      item.ownerAuthenticator, item.ownerCredential.user_handle, item.ownerCredential.id,
+      { rpId: 'evil.example' }); }],
+    ['presence', (item) => { item.input.legacyAssertion = signedResponse(item.issued.legacyChallenge,
+      item.legacyAuthenticator, item.legacyUserHandle, item.legacyId, { counter: 8, flags: 0x1c }); }],
+    ['verification', (item) => { item.input.ownerAssertion = signedResponse(item.issued.ownerChallenge,
+      item.ownerAuthenticator, item.ownerCredential.user_handle, item.ownerCredential.id,
+      { flags: 0x19 }); }],
+    ['legacy handle', (item) => { item.input.legacyAssertion.response.userHandle = b64(87); }],
+    ['owner handle', (item) => { item.input.ownerAssertion.response.userHandle = b64(87); }],
+    ['legacy ID', (item) => { item.input.legacyAssertion = signedResponse(item.issued.legacyChallenge,
+      item.legacyAuthenticator, item.legacyUserHandle, b64(86), { counter: 8 }); }],
+    ['owner ID', (item) => { item.input.ownerAssertion = signedResponse(item.issued.ownerChallenge,
+      item.ownerAuthenticator, item.ownerCredential.user_handle, b64(86), { counter: 2 }); }],
+    ['legacy counter', (item) => { item.input.legacyAssertion = signedResponse(item.issued.legacyChallenge,
+      item.legacyAuthenticator, item.legacyUserHandle, item.legacyId, { counter: 7 }); }],
+    ['owner counter', (item) => { item.input.ownerAssertion = signedResponse(item.issued.ownerChallenge,
+      item.ownerAuthenticator, item.ownerCredential.user_handle, item.ownerCredential.id,
+      { counter: 1 }); }],
+  ];
+  for (const [name, mutate] of cases) {
+    await t.test(name, async (subtest) => {
+      const item = await fixture(subtest);
+      mutate(item);
+      await assert.rejects(item.core.verifyAndConsumeLegacyCutoverClaim(
+        item.owner.sessionToken, item.input));
+      assert.equal(row(item.path, item.issued.challengeId).state,
+        name.endsWith('handle') || name.endsWith('ID') ? 0 : 1);
+      await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+        'authorization_failed');
+    });
+  }
+});
+
+test('verified assertions fail at commit when the owner or sealed source changes during verification', async (t) => {
+  for (const [name, change] of [
+    ['counter', (item) => database(item.path, (db) => db.prepare(
+      'UPDATE credentials SET counter=counter+1 WHERE id=?').run(item.ownerCredential.id))],
+    ['revocation', (item) => database(item.path, (db) => db.prepare(
+      'UPDATE credentials SET revoked=1 WHERE id=?').run(item.ownerCredential.id))],
+    ['generation', (item) => item.core.revokeSessions(item.owner.sessionToken)],
+    ['public key', (item) => database(item.path, (db) => db.prepare(
+      'UPDATE credentials SET public_key=? WHERE id=?').run(b64(11), item.ownerCredential.id))],
+    ['source bytes', (item) => writeFileSync(item.input.legacySnapshotPath,
+      Buffer.from('changed sealed source'), { mode: 0o600 })],
+    ['expiry', (item) => { item.clock.mono += 121_000; }],
+  ]) {
+    await t.test(name, async (subtest) => {
+      let item;
+      let changed = false;
+      item = await fixture(subtest, { onVerify(input) {
+        if (input.role === 'OWNER' && !changed) { changed = true; change(item); }
+      } });
+      await assert.rejects(item.core.verifyAndConsumeLegacyCutoverClaim(
+        item.owner.sessionToken, item.input));
+      assert.equal(row(item.path, item.issued.challengeId).state, 1);
+      assert.equal(database(item.path, (db) => db.prepare(
+        'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 0);
+    });
+  }
+});
+
+test('one concurrent verifier wins the durable claim', async (t) => {
+  const item = await fixture(t);
+  const results = await Promise.allSettled([
+    item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+  ]);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 1);
+  assert.equal(readOwnerCredentialSnapshot(item.path).credentials.find(
+    (credential) => credential.id === item.ownerCredential.id).counter, 2);
+});
+
+test('verified metadata survives expiry and restart but remains non-authorizing', async (t) => {
+  const item = await fixture(t);
+  const result = await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  item.clock.mono += 121_000;
+  item.core.beginAuthentication('android'); // Prunes expired unverified claims.
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT proof_sha256 FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+    .get(item.issued.challengeId).proof_sha256), result.proofSha256);
+  item.core.close();
+  const reopened = item.open();
+  assert.equal(readOwnerCredentialSnapshot(item.path).schemaVersion, 9);
+  await denied(reopened.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_failed');
+  assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);
+});
+
+test('a commit crossing expiry retains the signed proof but returns no live authority', async (t) => {
+  let armed = false;
+  let commits = 0;
+  let item;
+  item = await fixture(t, { fault(stage) {
+    if (armed && stage === 'beforeCommit' && ++commits === 3) item.clock.mono += 121_000;
+  } });
+  armed = true;
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_expired');
+  assert.equal(row(item.path, item.issued.challengeId).state, 2);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs WHERE challenge_id=?')
+    .get(item.issued.challengeId).n), 1);
+  assert.equal(readOwnerCredentialSnapshot(item.path).credentials.find(
+    (credential) => credential.id === item.ownerCredential.id).counter, 2);
+  assert.deepEqual(readOwnerCredentialSnapshot(item.path).storageBindings, []);
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'authorization_failed');
+});
+
+test('a failed proof insert rolls back the owner counter CAS and verified state', async (t) => {
+  const item = await fixture(t);
+  database(item.path, (db) => db.exec(`CREATE TRIGGER test_abort_verified_insert
+    BEFORE INSERT ON legacy_cutover_verified_proofs
+    BEGIN SELECT RAISE(ABORT,'injected proof write failure'); END;`));
+  await denied(item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input),
+    'store_unavailable');
+  assert.equal(row(item.path, item.issued.challengeId).state, 1);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT counter FROM credentials WHERE id=?').get(item.ownerCredential.id).counter), 1);
+  assert.equal(database(item.path, (db) => db.prepare(
+    'SELECT count(*) AS n FROM legacy_cutover_verified_proofs').get().n), 0);
+});
+
+test('tampering with a retained proof commitment fails startup and offline reading', async (t) => {
+  const item = await fixture(t);
+  await item.core.verifyAndConsumeLegacyCutoverClaim(item.owner.sessionToken, item.input);
+  item.core.close();
+  database(item.path, (db) => {
+    const trigger = db.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger'
+      AND name='legacy_cutover_verified_proof_no_update'`).get().sql;
+    db.exec('DROP TRIGGER legacy_cutover_verified_proof_no_update');
+    db.prepare('UPDATE legacy_cutover_verified_proofs SET proof_sha256=? WHERE challenge_id=?')
+      .run('f'.repeat(64), item.issued.challengeId);
+    db.exec(trigger);
+  });
+  assert.throws(() => item.open(), (error) => error.code === 'store_unavailable');
+  assert.throws(() => readOwnerCredentialSnapshot(item.path),
+    (error) => error.code === 'store_unavailable');
+});
