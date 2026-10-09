@@ -133,18 +133,18 @@ NODE
 write_fixture() {
   rm -rf "$report_dir" "$bundle_dir" "$workspace_dir"
   mkdir -p "$report_dir" "$workspace_dir/config" "$workspace_dir/scripts" "$workspace_dir/services/passkey-backup-challenge-service" \
-    "$workspace_dir/fearless-Android-production-consolidated-20260731/runtime/src/main/assets" "$workspace_dir/fearless-Android-production-consolidated-20260731/scripts"
+    "$workspace_dir/fearless-Android/runtime/src/main/assets" "$workspace_dir/fearless-Android/scripts"
   printf '%s\n' \
     '# approved XCM routes' \
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb DOT' \
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa KSM' \
-    > "$workspace_dir/fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv"
+    > "$workspace_dir/fearless-Android/runtime/src/main/assets/approved_xcm_routes.tsv"
   printf '%s\n' \
     '# required XCM routes' \
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb DOT' \
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa KSM' \
-    > "$workspace_dir/fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv"
-  printf '%s\n' '{"chains":[]}' > "$workspace_dir/fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json"
+    > "$workspace_dir/fearless-Android/scripts/xcm-required-routes.tsv"
+  printf '%s\n' '{"chains":[]}' > "$workspace_dir/fearless-Android/runtime/src/main/assets/local_chains.json"
   printf '%s\n' '# Fearless Universal Wallet Project Plan' > "$workspace_dir/FEARLESS_PROJECT_PLAN.md"
   printf '%s\n' '#!/usr/bin/env bash' '# Usage: scripts/audit-release-readiness.sh' 'exit 0' > "$workspace_dir/scripts/audit-release-readiness.sh"
   chmod +x "$workspace_dir/scripts/audit-release-readiness.sh"
@@ -412,11 +412,11 @@ JSON
       "slug": "android-xcm-production-evidence",
       "exitCode": 1,
       "logFile": "android-xcm-production-evidence.log",
-      "recommendedAction": "Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android-production-consolidated-20260731/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.",
+      "recommendedAction": "Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.",
       "requiresExternalAction": true,
       "unblockCategory": "route-implementation-and-evidence",
       "externalPrerequisite": "Reviewed per-asset execution semantics and effective production discovery for every advertised Android XCM route, implementation of any required bridge or fee-estimator path, a separately reviewed release enablement change, funded mainnet E2E evidence for the exact effective route set, and Android release-commit binding.",
-      "verificationCommand": "cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv",
+      "verificationCommand": "cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv",
       "evidencePreview": "ready evidence cannot have discovery-only routes remaining"
     },
     {
@@ -634,11 +634,11 @@ SORA Nexus Torii live health check failed for https://minamoto.sora.org/status
 - Slug: \`android-xcm-production-evidence\`
 - Exit code: \`1\`
 - Log: \`android-xcm-production-evidence.log\`
-- Recommended action: Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android-production-consolidated-20260731/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.
+- Recommended action: Keep release ENABLE_PRODUCTION_XCM_TRANSFERS=false until the entire trust and evidence gate is ready. Obtain reviewed per-asset pallet/call, reserve-or-teleport, multilocation, beneficiary, weight, destination-fee, and any bridge execution semantics for every advertised Android XCM route; implement bridge or estimator support before approving those modes. The per-asset schema, loader, validator, registry, and engine representation is now implemented, and all 15 approved single-asset routes are migrated without semantic changes. The current 34 discovery-only destinations cover 59 route assets; 14 of those destinations cover 39 multi-asset routes, and every one remains disabled until its exact reviewed semantics exist. Expand the APK-owned approved_xcm_routes.tsv and scripts/xcm-required-routes.tsv in exact lockstep only after those route semantics are reviewed, and make the production discovery intersection contain every approved route. Then record one funded mainnet E2E transfer per required route in fearless-Android/scripts/xcm-production-evidence.json, including 0x-prefixed 32-byte extrinsicHash, sender, recipient, positive amount, UTC timestamp, environment, operator, and androidCommit matching the release commit, plus finalized origin/destination block hashes and numbers, true origin finality/extrinsic success/destination event success, a positive destination balance delta, distinct public HTTPS proof URLs, verificationMethod=canonical-rpc-and-explorer, verifiedAt, and an independentVerifier distinct from operator. Regenerate the canonical live effective report and validate it with the ready evidence, then run the all-routes metadata gate before a separately reviewed release-flag change.
 - Requires external action: \`true\`
 - Unblock category: \`route-implementation-and-evidence\`
 - External prerequisite: Reviewed per-asset execution semantics and effective production discovery for every advertised Android XCM route, implementation of any required bridge or fee-estimator path, a separately reviewed release enablement change, funded mainnet E2E evidence for the exact effective route set, and Android release-commit binding.
-- Verification command: \`cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv\`
+- Verification command: \`cd fearless-Android && bash scripts/audit-xcm-effective-registry.sh --discovery-url https://raw.githubusercontent.com/soramitsu/shared-features-utils/master/chains/v13/chains.json --require-all-approved --write-report build/reports/xcm-effective-registry-report.json && bash scripts/audit-xcm-production-evidence.sh --effective-registry-report build/reports/xcm-effective-registry-report.json --require-ready && bash scripts/audit-xcm-registry-metadata.sh --require-executable --require-all-routes-executable --require-route-file scripts/xcm-required-routes.tsv --require-gap-file scripts/xcm-discovery-only-routes.tsv\`
 
 Evidence preview:
 
@@ -1171,8 +1171,8 @@ JSON
   printf '%s\n' "ready evidence cannot have discovery-only routes remaining" > "$report_dir/android-xcm-production-evidence.log"
   # Real Android generator export/verify regression: every bundle fixture
   # consumes the production template schema instead of a synthetic copy.
-  bash "$SCRIPT_DIR/../fearless-Android-production-consolidated-20260731/scripts/generate-xcm-production-evidence-template.sh" \
-    --required-route-file "$workspace_dir/fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv" \
+  bash "$SCRIPT_DIR/../fearless-Android/scripts/generate-xcm-production-evidence-template.sh" \
+    --required-route-file "$workspace_dir/fearless-Android/scripts/xcm-required-routes.tsv" \
     --output "$report_dir/android-xcm-production-evidence-template.json" >/dev/null
   cat > "$report_dir/android-xcm-registry-gap-report.json" <<JSON
 {
@@ -1207,7 +1207,7 @@ const fs = require('fs')
 const path = require('path')
 const [workspace, output] = process.argv.slice(2)
 const identity = (source) => {
-  const content = fs.readFileSync(path.join(workspace, 'fearless-Android-production-consolidated-20260731', source))
+  const content = fs.readFileSync(path.join(workspace, 'fearless-Android', source))
   return { source, byteLength: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') }
 }
 const first = {
@@ -1495,10 +1495,10 @@ JSON
   printf '%s\n' "source publication readiness passed" > "$report_dir/source-publication-readiness.log"
   cat > "$workspace_dir/config/source-publication-readiness.tsv" <<'TSV'
 # path	repository	head	base	pull_request
-fearless-Android-production-consolidated-20260731	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260
-fearless-iOS-production-consolidated-20260731	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304
+fearless-Android	soramitsu/fearless-Android	codex/android-production-consolidated-20260731	develop	1260
+fearless-iOS	soramitsu/fearless-iOS	codex/testflight-redesign-2026.8.17	develop	1304
 fearless-wallet-web	soramitsu/fearless-wallet-web	codex/web-bitcoin-canonical-indexer-evidence	develop	1062
-fearless-site-web-app-associations-20260726	soramitsu/fearless-site-web	fix/app-association-publication	develop	49
+fearless-site-web	soramitsu/fearless-site-web	fix/app-association-publication	develop	49
 ../ton-indexer	tonswap-org/ton-indexer	codex/ti-smoke-body-preview-tests	develop	13
 ../solswap-indexer	solswap-io/solswap-indexer	codex/si-smoke-body-preview-tests	develop	16
 ../polkaswap-indexer	sora-xor/polkaswap-indexer	codex/pi-deployment-evidence-gate	develop	1
@@ -1523,10 +1523,10 @@ const path = require('path')
 const [workspace, preflightOutput, output] = process.argv.slice(2)
 const sha = 'a'.repeat(40)
 const configured = [
-  ['fearless-Android-production-consolidated-20260731', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', 1260],
-  ['fearless-iOS-production-consolidated-20260731', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', 1304],
+  ['fearless-Android', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', 1260],
+  ['fearless-iOS', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', 1304],
   ['fearless-wallet-web', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-canonical-indexer-evidence', 'develop', 1062],
-  ['fearless-site-web-app-associations-20260726', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', 49],
+  ['fearless-site-web', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', 49],
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', 13],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', 16],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', 1],
@@ -1555,6 +1555,7 @@ workspaceSource.requiredTrackedFiles = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'config/workspace-repositories.json',
   'docs/passkey-enabled-acceptance.md',
   'docs/release-shipping-manifest.md',
   'docs/source-freeze-20260801.md',
@@ -1572,9 +1573,11 @@ workspaceSource.requiredTrackedFiles = [
   'scripts/run-pinned-yarn.sh',
   'scripts/run-source-publication-quarantine.sh',
   'scripts/run-source-publication-readiness.sh',
+  'scripts/setup-workspace.mjs',
   'scripts/test-pinned-yarn-runner.sh',
   'scripts/test-source-publication-quarantine.sh',
   'scripts/test-source-publication-readiness-audit.sh',
+  'scripts/test-setup-workspace.mjs',
   'scripts/verify-release-unblock-bundle.sh',
   'services/passkey-backup-challenge-service/Dockerfile',
   'services/passkey-backup-challenge-service/package-lock.json',
@@ -3957,7 +3960,7 @@ rewrite_checksums
 expect_failure "Android XCM production evidence template checksum mismatch fixture" "android-xcm-production-evidence.xcmProductionEvidenceTemplateHandoff.templateSha256 does not match artifact checksum"
 
 reset_bundle
-edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmProductionEvidenceTemplateHandoff.readyAuditCommand = 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-production-evidence.sh --require-ready'"
+edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmProductionEvidenceTemplateHandoff.readyAuditCommand = 'cd fearless-Android && bash scripts/audit-xcm-production-evidence.sh --require-ready'"
 rewrite_checksums
 expect_failure "Android XCM production evidence stale ready-audit command fixture" "android-xcm-production-evidence.xcmProductionEvidenceTemplateHandoff.readyAuditCommand mismatch"
 
@@ -4036,7 +4039,7 @@ rewrite_checksums
 expect_failure "Android XCM registry handoff missing fixture" "android-xcm-production-evidence.xcmRegistryHandoff missing"
 
 reset_bundle
-edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmRegistryHandoff.registryAuditCommand = 'cd fearless-Android-production-consolidated-20260731 && bash scripts/audit-xcm-registry-metadata.sh --require-executable'"
+edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmRegistryHandoff.registryAuditCommand = 'cd fearless-Android && bash scripts/audit-xcm-registry-metadata.sh --require-executable'"
 rewrite_checksums
 expect_failure "Android XCM registry command mismatch fixture" "android-xcm-production-evidence.xcmRegistryHandoff.registryAuditCommand mismatch"
 
@@ -4097,7 +4100,7 @@ rewrite_checksums
 expect_failure "Android XCM effective-registry artifact provenance drift fixture" "handoffs/android-xcm-effective-registry-report.json.sourcePath must match report artifact path"
 
 reset_bundle
-edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmRegistryHandoff.effectiveRegistry.auditCommand = 'cd fearless-Android-production-consolidated-20260731 && true'"
+edit_json "manifest.json" "data.blockers.find((blocker) => blocker.slug === 'android-xcm-production-evidence').xcmRegistryHandoff.effectiveRegistry.auditCommand = 'cd fearless-Android && true'"
 rewrite_checksums
 expect_failure "Android XCM effective-registry audit command drift fixture" "android-xcm-production-evidence.xcmRegistryHandoff.effectiveRegistry.auditCommand mismatch"
 
@@ -4189,12 +4192,12 @@ rewrite_checksums
 expect_failure "checksummed Android XCM production-executable tamper fixture" "handoffs/android-xcm-effective-registry-report.json.routes[0].productionExecutable must be false while production transfers are disabled"
 
 reset_bundle
-printf '%s\n' '# stale after bundle export' >> "$workspace_dir/fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json"
+printf '%s\n' '# stale after bundle export' >> "$workspace_dir/fearless-Android/runtime/src/main/assets/local_chains.json"
 rewrite_checksums
 expect_failure "Android XCM stale workspace source fixture" "handoffs/android-xcm-effective-registry-report.json.inputs.bundledRegistry.byteLength does not match workspace source"
 
 reset_bundle
-rm "$workspace_dir/fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json"
+rm "$workspace_dir/fearless-Android/runtime/src/main/assets/local_chains.json"
 expect_failure "Android XCM missing candidate source fixture" "handoffs/android-xcm-effective-registry-report.json.inputs.bundledRegistry workspace source missing"
 
 reset_bundle

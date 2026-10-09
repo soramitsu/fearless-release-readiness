@@ -11,20 +11,20 @@ import { auditReleaseShippingManifest } from './audit-release-shipping-manifest.
 const HEX40 = 'a'.repeat(40);
 const HEX64 = 'b'.repeat(64);
 const sourceRows = [
-  ['fearless-Android-production-consolidated-20260731', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', '1260'],
-  ['fearless-iOS-production-consolidated-20260731', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', '1304'],
+  ['fearless-Android', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', '1260'],
+  ['fearless-iOS', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', '1304'],
   ['fearless-wallet-web', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-canonical-indexer-evidence', 'develop', '1062'],
-  ['fearless-site-web-app-associations-20260726', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', '49'],
+  ['fearless-site-web', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', '49'],
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', '13'],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', '16'],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', '1'],
   ['../iroha', 'hyperledger-iroha/iroha', 'optimizations', 'optimizations', '-'],
 ];
 const dependencyPaths = {
-  'android-utils': 'fearless-utils-Android-production-20260922',
-  'android-websocket': 'fearless-nv-websocket-production-20260922',
-  'ios-shared-features': 'shared-features-spm-production-20260922',
-  'ios-starscream': 'fearless-starscream-production-20260922',
+  'android-utils': 'fearless-utils-Android',
+  'android-websocket': 'fearless-nv-websocket-client',
+  'ios-shared-features': 'shared-features-spm',
+  'ios-starscream': 'fearless-starscream',
 };
 const dependencyRepositories = {
   'android-utils': 'soramitsu/fearless-utils-Android',
@@ -34,21 +34,21 @@ const dependencyRepositories = {
 };
 const filePaths = {
   'passkey-policy': 'config/passkey-backup-production.json',
-  'android-route-manifest': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_route_manifest.json',
-  'android-approved-routes': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv',
-  'android-required-routes': 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv',
-  'android-discovery-gaps': 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv',
-  'android-local-chains': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json',
-  'android-mutation-policy': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_policy.json',
-  'android-mutation-trust': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_trust.json',
-  'android-dependency-verification': 'fearless-Android-production-consolidated-20260731/gradle/verification-metadata.xml',
-  'android-settings-lock': 'fearless-Android-production-consolidated-20260731/settings-gradle.lockfile',
-  'android-buildscript-lock': 'fearless-Android-production-consolidated-20260731/buildscript-gradle.lockfile',
-  'android-app-lock': 'fearless-Android-production-consolidated-20260731/app/gradle.lockfile',
-  'ios-pods-lock': 'fearless-iOS-production-consolidated-20260731/Podfile.lock',
-  'ios-workspace-packages': 'fearless-iOS-production-consolidated-20260731/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved',
-  'ios-project-packages': 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
-  'ios-dependency-packages': 'fearless-iOS-production-consolidated-20260731/Packages/FearlessDependencies/Package.resolved',
+  'android-route-manifest': 'fearless-Android/common/src/main/assets/mutation_route_manifest.json',
+  'android-approved-routes': 'fearless-Android/runtime/src/main/assets/approved_xcm_routes.tsv',
+  'android-required-routes': 'fearless-Android/scripts/xcm-required-routes.tsv',
+  'android-discovery-gaps': 'fearless-Android/scripts/xcm-discovery-only-routes.tsv',
+  'android-local-chains': 'fearless-Android/runtime/src/main/assets/local_chains.json',
+  'android-mutation-policy': 'fearless-Android/common/src/main/assets/mutation_authorization_policy.json',
+  'android-mutation-trust': 'fearless-Android/common/src/main/assets/mutation_authorization_trust.json',
+  'android-dependency-verification': 'fearless-Android/gradle/verification-metadata.xml',
+  'android-settings-lock': 'fearless-Android/settings-gradle.lockfile',
+  'android-buildscript-lock': 'fearless-Android/buildscript-gradle.lockfile',
+  'android-app-lock': 'fearless-Android/app/gradle.lockfile',
+  'ios-pods-lock': 'fearless-iOS/Podfile.lock',
+  'ios-workspace-packages': 'fearless-iOS/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+  'ios-project-packages': 'fearless-iOS/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+  'ios-dependency-packages': 'fearless-iOS/Packages/FearlessDependencies/Package.resolved',
 };
 const ROUTE_ROW = `${'a'.repeat(64)} ${'b'.repeat(64)} DOT\n`;
 const LOCAL_CHAINS = '{}\n';
@@ -102,7 +102,7 @@ function fixture() {
   const root = path.join(sandbox, 'fearless');
   mkdirSync(root);
   git(root, 'init', '-q', '-b', 'codex/release-readiness-root-owner');
-  write(root, '.gitignore', '/config/release-shipping-manifest.json\n/build/\n/fearless-*\n/shared-features-spm-production-20260922/\n');
+  write(root, '.gitignore', '/config/release-shipping-manifest.json\n/build/\n/fearless-*\n/shared-features-spm/\n');
   write(root, 'config/source-publication-readiness.tsv',
     `# synthetic source inventory\n${sourceRows.map((row) => row.join('\t')).join('\n')}\n`);
   write(root, 'config/source-publication-root-owner.json', JSON.stringify({

@@ -407,30 +407,30 @@ const historicalSubstitutionRoot = mkdtempSync(resolve(tmpdir(), 'fearless-taira
 try {
   symlinkSync(resolve(sourceRoot, 'fearless-wallet-web'), resolve(historicalSubstitutionRoot, 'fearless-wallet-web'), 'dir');
   symlinkSync(
-    resolve(sourceRoot, 'fearless-Android-production-consolidated-20260731'),
-    resolve(historicalSubstitutionRoot, 'fearless-Android'),
+    resolve(sourceRoot, 'fearless-Android'),
+    resolve(historicalSubstitutionRoot, 'fearless-Android-retired-fixture'),
     'dir'
   );
   expectFailure(
-    'historical Android checkout cannot replace a missing consolidated candidate',
+    'historical Android checkout cannot replace a missing canonical candidate',
     () => runStaticAudit({ root: historicalSubstitutionRoot, parent: resolve(SCRIPT_DIR, '../..') }),
-    /Android universal-wallet registry is missing or unreadable at .*fearless-Android-production-consolidated-20260731/u
+    /Android universal-wallet registry is missing or unreadable at .*fearless-Android/u
   );
 
   symlinkSync(
-    resolve(sourceRoot, 'fearless-Android-production-consolidated-20260731'),
-    resolve(historicalSubstitutionRoot, 'fearless-Android-production-consolidated-20260731'),
+    resolve(sourceRoot, 'fearless-Android'),
+    resolve(historicalSubstitutionRoot, 'fearless-Android'),
     'dir'
   );
   symlinkSync(
-    resolve(sourceRoot, 'fearless-iOS-production-consolidated-20260731'),
-    resolve(historicalSubstitutionRoot, 'fearless-iOS'),
+    resolve(sourceRoot, 'fearless-iOS'),
+    resolve(historicalSubstitutionRoot, 'fearless-iOS-retired-fixture'),
     'dir'
   );
   expectFailure(
-    'historical iOS checkout cannot replace a missing consolidated candidate',
+    'historical iOS checkout cannot replace a missing canonical candidate',
     () => runStaticAudit({ root: historicalSubstitutionRoot, parent: resolve(SCRIPT_DIR, '../..') }),
-    /iOS universal-wallet registry is missing or unreadable at .*fearless-iOS-production-consolidated-20260731/u
+    /iOS universal-wallet registry is missing or unreadable at .*fearless-iOS/u
   );
 } finally {
   rmSync(historicalSubstitutionRoot, { force: true, recursive: true });

@@ -55,7 +55,7 @@ reviewed execution semantics and independently verified transfers are complete.
 
 Dependency rows alone are insufficient: a clean, wrong checkout can satisfy its
 own manifest row. The Android Utils row selects the separate clean
-`fearless-utils-Android-production-20260922` checkout. Both Android dependency
+`fearless-utils-Android` checkout. Both Android dependency
 commits, repositories and Git trees must match the checked-in
 `config/android-runtime-source-pins.json` in the exact Android source commit.
 Both iOS dependency commits and Git trees must match the checked-in

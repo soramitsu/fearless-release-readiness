@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, '..');
 const EXPECTED_REPOSITORIES = new Map([
-  ['fearless-Android-production-consolidated-20260731', { repository: 'soramitsu/fearless-Android', head: 'codex/android-production-consolidated-20260731', base: 'develop', prNumber: 1260 }],
-  ['fearless-iOS-production-consolidated-20260731', { repository: 'soramitsu/fearless-iOS', head: 'codex/testflight-redesign-2026.8.17', base: 'develop', prNumber: 1304 }],
+  ['fearless-Android', { repository: 'soramitsu/fearless-Android', head: 'codex/android-production-consolidated-20260731', base: 'develop', prNumber: 1260 }],
+  ['fearless-iOS', { repository: 'soramitsu/fearless-iOS', head: 'codex/testflight-redesign-2026.8.17', base: 'develop', prNumber: 1304 }],
   ['fearless-wallet-web', { repository: 'soramitsu/fearless-wallet-web', head: 'codex/web-bitcoin-canonical-indexer-evidence', base: 'develop', prNumber: 1062 }],
-  ['fearless-site-web-app-associations-20260726', { repository: 'soramitsu/fearless-site-web', head: 'fix/app-association-publication', base: 'develop', prNumber: 49 }],
+  ['fearless-site-web', { repository: 'soramitsu/fearless-site-web', head: 'fix/app-association-publication', base: 'develop', prNumber: 49 }],
   ['../ton-indexer', { repository: 'tonswap-org/ton-indexer', head: 'codex/ti-smoke-body-preview-tests', base: 'develop', prNumber: 13 }],
   ['../solswap-indexer', { repository: 'solswap-io/solswap-indexer', head: 'codex/si-smoke-body-preview-tests', base: 'develop', prNumber: 16 }],
   ['../polkaswap-indexer', { repository: 'sora-xor/polkaswap-indexer', head: 'codex/pi-deployment-evidence-gate', base: 'develop', prNumber: 1 }],
@@ -28,6 +28,7 @@ const REQUIRED_WORKSPACE_FILES = [
   'config/release-readiness-prs.tsv',
   'config/source-publication-root-owner.json',
   'config/source-publication-readiness.tsv',
+  'config/workspace-repositories.json',
   'docs/passkey-enabled-acceptance.md',
   'docs/release-shipping-manifest.md',
   'docs/source-freeze-20260801.md',
@@ -45,9 +46,11 @@ const REQUIRED_WORKSPACE_FILES = [
   'scripts/run-pinned-yarn.sh',
   'scripts/run-source-publication-quarantine.sh',
   'scripts/run-source-publication-readiness.sh',
+  'scripts/setup-workspace.mjs',
   'scripts/test-pinned-yarn-runner.sh',
   'scripts/test-source-publication-quarantine.sh',
   'scripts/test-source-publication-readiness-audit.sh',
+  'scripts/test-setup-workspace.mjs',
   'scripts/verify-release-unblock-bundle.sh',
   'services/passkey-backup-challenge-service/Dockerfile',
   'services/passkey-backup-challenge-service/package-lock.json',
@@ -102,15 +105,12 @@ const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SAFE_REF = /^(?![./])(?!.*(?:\.\.|\/\/|@\{|\\))[A-Za-z0-9._/-]+(?<![./])$/u;
 const SHA1 = /^[0-9a-f]{40}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
-// The historical checkouts remain preserved in this workspace but cannot satisfy
-// the source rows above. Only the consolidated paths are audited as candidates.
+// Only the canonical checked-out repositories are audited as source candidates.
 const WORKSPACE_NESTED_REPOSITORIES = [
   'fearless-Android',
   'fearless-iOS',
-  'fearless-Android-production-consolidated-20260731',
-  'fearless-iOS-production-consolidated-20260731',
   'fearless-wallet-web',
-  'fearless-site-web-app-associations-20260726',
+  'fearless-site-web',
 ];
 const SOURCE_PHASES = new Set(['standalone', 'preflight', 'postflight']);
 const MAX_PREFLIGHT_AGE_MS = 6 * 60 * 60 * 1000;
@@ -1300,8 +1300,8 @@ function isAllowedIgnoredPath(source, ignoredPath) {
 
   const cachePrefixes = {
     '.': ['services/passkey-backup-challenge-service/node_modules'],
-    'fearless-Android-production-consolidated-20260731': ['.gradle', '.kotlin', 'buildSrc/.gradle', 'buildSrc/.kotlin'],
-    'fearless-iOS-production-consolidated-20260731': [
+    'fearless-Android': ['.gradle', '.kotlin', 'buildSrc/.gradle', 'buildSrc/.kotlin'],
+    'fearless-iOS': [
       '.build',
       '.bundle',
       'Packages/FearlessDependencies/.build',
@@ -1313,7 +1313,7 @@ function isAllowedIgnoredPath(source, ignoredPath) {
       'vendor/bundle',
     ],
     'fearless-wallet-web': ['node_modules'],
-    'fearless-site-web-app-associations-20260726': ['node_modules'],
+    'fearless-site-web': ['node_modules'],
     '../ton-indexer': ['node_modules'],
     '../solswap-indexer': ['node_modules'],
     '../polkaswap-indexer': ['node_modules'],
@@ -1325,21 +1325,21 @@ function isAllowedIgnoredPath(source, ignoredPath) {
 function isAllowedPostflightGeneratedPath(source, ignoredPath) {
   if (phase !== 'postflight') return false;
 
-  if (source.path === 'fearless-Android-production-consolidated-20260731') {
+  if (source.path === 'fearless-Android') {
     if (matchesPathPrefix(ignoredPath, 'build')) return true;
     return /^(?:app|buildSrc|common|core-api|core-db|feature-[A-Za-z0-9-]+|public-[A-Za-z0-9-]+|runtime(?:-permission)?|test-shared)\/(?:build|coverage)(?:\/|$)/u.test(ignoredPath);
   }
   const outputPrefixes = {
     '.': ['build', 'services/passkey-backup-challenge-service/build'],
-    'fearless-iOS-production-consolidated-20260731': ['build'],
+    'fearless-iOS': ['build'],
     'fearless-wallet-web': ['build', 'coverage', 'dist'],
-    'fearless-site-web-app-associations-20260726': ['.nuxt', '.output'],
+    'fearless-site-web': ['.nuxt', '.output'],
     '../ton-indexer': ['build', 'dist'],
     '../solswap-indexer': ['build', 'dist'],
     '../polkaswap-indexer': ['build', 'dist'],
   }[source.path] ?? [];
   if (outputPrefixes.some((prefix) => matchesPathPrefix(ignoredPath, prefix))) return true;
-  return source.path === 'fearless-iOS-production-consolidated-20260731' && (ignoredPath === 'CIKeys.generated.swift' || ignoredPath === 'R.generated.swift');
+  return source.path === 'fearless-iOS' && (ignoredPath === 'CIKeys.generated.swift' || ignoredPath === 'R.generated.swift');
 }
 
 function isAllowedYarnCacheEntry(value) {
