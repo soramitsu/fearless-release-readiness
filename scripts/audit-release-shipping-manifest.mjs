@@ -16,10 +16,10 @@ const COMMIT = /^[a-f0-9]{40}$/u;
 const DIGEST = /^[a-f0-9]{64}$/u;
 const RELEASE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{7,63}$/u;
 const DEPENDENCIES = new Map([
-  ['android-utils', 'fearless-utils-Android-production-20260922'],
-  ['android-websocket', 'fearless-nv-websocket-production-20260922'],
-  ['ios-shared-features', 'shared-features-spm-production-20260922'],
-  ['ios-starscream', 'fearless-starscream-production-20260922'],
+  ['android-utils', 'fearless-utils-Android'],
+  ['android-websocket', 'fearless-nv-websocket-client'],
+  ['ios-shared-features', 'shared-features-spm'],
+  ['ios-starscream', 'fearless-starscream'],
 ]);
 const DEPENDENCY_REPOSITORIES = new Map([
   ['android-utils', 'soramitsu/fearless-utils-Android'],
@@ -33,21 +33,21 @@ const IOS_SOURCE_CONTRACTS = new Map([
 ]);
 const FILES = new Map([
   ['passkey-policy', 'config/passkey-backup-production.json'],
-  ['android-route-manifest', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_route_manifest.json'],
-  ['android-approved-routes', 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv'],
-  ['android-required-routes', 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv'],
-  ['android-discovery-gaps', 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv'],
-  ['android-local-chains', 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json'],
-  ['android-mutation-policy', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_policy.json'],
-  ['android-mutation-trust', 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_trust.json'],
-  ['android-dependency-verification', 'fearless-Android-production-consolidated-20260731/gradle/verification-metadata.xml'],
-  ['android-settings-lock', 'fearless-Android-production-consolidated-20260731/settings-gradle.lockfile'],
-  ['android-buildscript-lock', 'fearless-Android-production-consolidated-20260731/buildscript-gradle.lockfile'],
-  ['android-app-lock', 'fearless-Android-production-consolidated-20260731/app/gradle.lockfile'],
-  ['ios-pods-lock', 'fearless-iOS-production-consolidated-20260731/Podfile.lock'],
-  ['ios-workspace-packages', 'fearless-iOS-production-consolidated-20260731/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved'],
-  ['ios-project-packages', 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'],
-  ['ios-dependency-packages', 'fearless-iOS-production-consolidated-20260731/Packages/FearlessDependencies/Package.resolved'],
+  ['android-route-manifest', 'fearless-Android/common/src/main/assets/mutation_route_manifest.json'],
+  ['android-approved-routes', 'fearless-Android/runtime/src/main/assets/approved_xcm_routes.tsv'],
+  ['android-required-routes', 'fearless-Android/scripts/xcm-required-routes.tsv'],
+  ['android-discovery-gaps', 'fearless-Android/scripts/xcm-discovery-only-routes.tsv'],
+  ['android-local-chains', 'fearless-Android/runtime/src/main/assets/local_chains.json'],
+  ['android-mutation-policy', 'fearless-Android/common/src/main/assets/mutation_authorization_policy.json'],
+  ['android-mutation-trust', 'fearless-Android/common/src/main/assets/mutation_authorization_trust.json'],
+  ['android-dependency-verification', 'fearless-Android/gradle/verification-metadata.xml'],
+  ['android-settings-lock', 'fearless-Android/settings-gradle.lockfile'],
+  ['android-buildscript-lock', 'fearless-Android/buildscript-gradle.lockfile'],
+  ['android-app-lock', 'fearless-Android/app/gradle.lockfile'],
+  ['ios-pods-lock', 'fearless-iOS/Podfile.lock'],
+  ['ios-workspace-packages', 'fearless-iOS/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved'],
+  ['ios-project-packages', 'fearless-iOS/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'],
+  ['ios-dependency-packages', 'fearless-iOS/Packages/FearlessDependencies/Package.resolved'],
 ]);
 const ARTIFACTS = new Set([
   'android-aab', 'play-distributed-apk', 'apple-delivered-ipa',
@@ -221,7 +221,7 @@ function pinnedJson(root, relative, label) {
 }
 function validateAndroidDependencyPins(root, manifest) {
   const pins = pinnedJson(root,
-    'fearless-Android-production-consolidated-20260731/config/android-runtime-source-pins.json',
+    'fearless-Android/config/android-runtime-source-pins.json',
     'Android runtime source pins');
   keys(pins, ['schemaVersion', 'utils', 'websocket'], 'Android runtime source pins');
   assert.equal(pins.schemaVersion, 1, 'Android runtime source pin schema mismatch');
@@ -238,7 +238,7 @@ function validateAndroidDependencyPins(root, manifest) {
 }
 function sourceContract(root, manifest, role) {
   const [relative, repository] = IOS_SOURCE_CONTRACTS.get(role);
-  const contract = pinnedJson(root, `fearless-iOS-production-consolidated-20260731/${relative}`, `${role} source contract`);
+  const contract = pinnedJson(root, `fearless-iOS/${relative}`, `${role} source contract`);
   assert.equal(contract.schema, 1, `${role} source contract schema mismatch`);
   assert.equal(contract.repository, repository, `${role} source repository mismatch`);
   matches(contract.revision, COMMIT, `${role} source revision`);
@@ -274,10 +274,10 @@ function validateIosDependencyPins(root, manifest) {
         `${kind} ${identity} revision mismatch`);
     }
   }
-  swiftPackageRevision(root, 'fearless-iOS-production-consolidated-20260731/Packages/FearlessUtilsCompat/Package.swift',
+  swiftPackageRevision(root, 'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift',
     /\.package\(url:\s*"https:\/\/github\.com\/soramitsu\/shared-features-spm\.git",\s*revision:\s*"([a-f0-9]{40})"\)/gu,
     'FearlessUtilsCompat shared-features source', shared.revision);
-  swiftPackageRevision(root, 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.pbxproj',
+  swiftPackageRevision(root, 'fearless-iOS/fearless.xcodeproj/project.pbxproj',
     /repositoryURL = "https:\/\/github\.com\/soramitsu\/shared-features-spm\.git";\s*requirement = \{\s*kind = revision;\s*revision = ([a-f0-9]{40});\s*\};/gu,
     'iOS project shared-features source', shared.revision);
   swiftPackageRevision(dependencyDirectory(root, manifest, 'ios-shared-features'), 'Package.swift',

@@ -54,10 +54,10 @@ write_source_config() {
   local target="$1"
   printf '%s\n' \
     $'# path\trepository\thead\tbase\tpull_request' \
-    $'fearless-Android-production-consolidated-20260731\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260' \
-    $'fearless-iOS-production-consolidated-20260731\tsoramitsu/fearless-iOS\tcodex/testflight-redesign-2026.8.17\tdevelop\t1304' \
+    $'fearless-Android\tsoramitsu/fearless-Android\tcodex/android-production-consolidated-20260731\tdevelop\t1260' \
+    $'fearless-iOS\tsoramitsu/fearless-iOS\tcodex/testflight-redesign-2026.8.17\tdevelop\t1304' \
     $'fearless-wallet-web\tsoramitsu/fearless-wallet-web\tcodex/web-bitcoin-canonical-indexer-evidence\tdevelop\t1062' \
-    $'fearless-site-web-app-associations-20260726\tsoramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\t49' \
+    $'fearless-site-web\tsoramitsu/fearless-site-web\tfix/app-association-publication\tdevelop\t49' \
     $'../ton-indexer\ttonswap-org/ton-indexer\tcodex/ti-smoke-body-preview-tests\tdevelop\t13' \
     $'../solswap-indexer\tsolswap-io/solswap-indexer\tcodex/si-smoke-body-preview-tests\tdevelop\t16' \
     $'../polkaswap-indexer\tsora-xor/polkaswap-indexer\tcodex/pi-deployment-evidence-gate\tdevelop\t1' \
@@ -126,6 +126,7 @@ for file in \
   .github/workflows/readiness.yml \
   .gitignore \
   README.md \
+  config/workspace-repositories.json \
   docs/passkey-enabled-acceptance.md \
   docs/release-shipping-manifest.md \
   docs/source-freeze-20260801.md \
@@ -143,9 +144,11 @@ for file in \
   scripts/run-pinned-yarn.sh \
   scripts/run-source-publication-quarantine.sh \
   scripts/run-source-publication-readiness.sh \
+  scripts/setup-workspace.mjs \
   scripts/test-pinned-yarn-runner.sh \
   scripts/test-source-publication-quarantine.sh \
   scripts/test-source-publication-readiness-audit.sh \
+  scripts/test-setup-workspace.mjs \
   scripts/verify-release-unblock-bundle.sh \
   services/passkey-backup-challenge-service/Dockerfile \
   services/passkey-backup-challenge-service/package-lock.json \
@@ -198,10 +201,10 @@ for index in 1 2 3 4 5 6 7 8; do
   printf '%s\n' 'fixture' > "$ROOT/services/passkey-backup-challenge-service/extra-$index.txt"
 done
 printf '%s\n' \
-  '/fearless-Android-production-consolidated-20260731/' \
-  '/fearless-iOS-production-consolidated-20260731/' \
+  '/fearless-Android/' \
+  '/fearless-iOS/' \
   '/fearless-wallet-web/' \
-  '/fearless-site-web-app-associations-20260726/' > "$ROOT/.gitignore"
+  '/fearless-site-web/' > "$ROOT/.gitignore"
 
 "$REAL_GIT" -C "$ROOT" init -q -b codex/root-release
 "$REAL_GIT" -C "$ROOT" config user.name 'Release Test'
@@ -213,10 +216,10 @@ printf '%s\n' \
 "$REAL_GIT" -C "$ROOT" config branch.codex/root-release.remote origin
 "$REAL_GIT" -C "$ROOT" config branch.codex/root-release.merge refs/heads/codex/root-release
 
-init_repo "$ROOT/fearless-Android-production-consolidated-20260731" soramitsu/fearless-Android codex/android-production-consolidated-20260731
-init_repo "$ROOT/fearless-iOS-production-consolidated-20260731" soramitsu/fearless-iOS codex/testflight-redesign-2026.8.17
+init_repo "$ROOT/fearless-Android" soramitsu/fearless-Android codex/android-production-consolidated-20260731
+init_repo "$ROOT/fearless-iOS" soramitsu/fearless-iOS codex/testflight-redesign-2026.8.17
 init_repo "$ROOT/fearless-wallet-web" soramitsu/fearless-wallet-web codex/web-bitcoin-canonical-indexer-evidence
-init_repo "$ROOT/fearless-site-web-app-associations-20260726" soramitsu/fearless-site-web fix/app-association-publication
+init_repo "$ROOT/fearless-site-web" soramitsu/fearless-site-web fix/app-association-publication
 init_repo "$PARENT/ton-indexer" tonswap-org/ton-indexer codex/ti-smoke-body-preview-tests
 init_repo "$PARENT/solswap-indexer" solswap-io/solswap-indexer codex/si-smoke-body-preview-tests
 init_repo "$PARENT/polkaswap-indexer" sora-xor/polkaswap-indexer codex/pi-deployment-evidence-gate
@@ -265,10 +268,10 @@ printf '%s\n' \
   '  : > "$query_marker"' \
   '  case "$repository" in' \
   '    example/fearless-release-orchestration) repo_path="$FIXTURE_ROOT" ;;' \
-  '    soramitsu/fearless-Android) repo_path="$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731" ;;' \
-  '    soramitsu/fearless-iOS) repo_path="$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731" ;;' \
+  '    soramitsu/fearless-Android) repo_path="$FIXTURE_ROOT/fearless-Android" ;;' \
+  '    soramitsu/fearless-iOS) repo_path="$FIXTURE_ROOT/fearless-iOS" ;;' \
   '    soramitsu/fearless-wallet-web) repo_path="$FIXTURE_ROOT/fearless-wallet-web" ;;' \
-  '    soramitsu/fearless-site-web) repo_path="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726" ;;' \
+  '    soramitsu/fearless-site-web) repo_path="$FIXTURE_ROOT/fearless-site-web" ;;' \
   '    tonswap-org/ton-indexer) repo_path="$FIXTURE_PARENT/ton-indexer" ;;' \
   '    solswap-io/solswap-indexer) repo_path="$FIXTURE_PARENT/solswap-indexer" ;;' \
   '    sora-xor/polkaswap-indexer) repo_path="$FIXTURE_PARENT/polkaswap-indexer" ;;' \
@@ -296,10 +299,10 @@ printf '%s\n' \
   '[[ "$mode" != invalid-json ]] || { printf "{"; exit 0; }' \
   'case "$endpoint" in' \
   '  repos/example/fearless-release-orchestration/pulls/77) repository=example/fearless-release-orchestration; repo_path="$FIXTURE_ROOT"; head=codex/root-release; base=main; number=77 ;;' \
-  '  repos/soramitsu/fearless-Android/pulls/1260) repository=soramitsu/fearless-Android; repo_path="$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731"; head=codex/android-production-consolidated-20260731; base=develop; number=1260 ;;' \
-  '  repos/soramitsu/fearless-iOS/pulls/1304) repository=soramitsu/fearless-iOS; repo_path="$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731"; head=codex/testflight-redesign-2026.8.17; base=develop; number=1304 ;;' \
+  '  repos/soramitsu/fearless-Android/pulls/1260) repository=soramitsu/fearless-Android; repo_path="$FIXTURE_ROOT/fearless-Android"; head=codex/android-production-consolidated-20260731; base=develop; number=1260 ;;' \
+  '  repos/soramitsu/fearless-iOS/pulls/1304) repository=soramitsu/fearless-iOS; repo_path="$FIXTURE_ROOT/fearless-iOS"; head=codex/testflight-redesign-2026.8.17; base=develop; number=1304 ;;' \
   '  repos/soramitsu/fearless-wallet-web/pulls/1062) repository=soramitsu/fearless-wallet-web; repo_path="$FIXTURE_ROOT/fearless-wallet-web"; head=codex/web-bitcoin-canonical-indexer-evidence; base=develop; number=1062 ;;' \
-  '  repos/soramitsu/fearless-site-web/pulls/49) repository=soramitsu/fearless-site-web; repo_path="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726"; head=fix/app-association-publication; base=develop; number=49 ;;' \
+  '  repos/soramitsu/fearless-site-web/pulls/49) repository=soramitsu/fearless-site-web; repo_path="$FIXTURE_ROOT/fearless-site-web"; head=fix/app-association-publication; base=develop; number=49 ;;' \
   '  repos/tonswap-org/ton-indexer/pulls/13) repository=tonswap-org/ton-indexer; repo_path="$FIXTURE_PARENT/ton-indexer"; head=codex/ti-smoke-body-preview-tests; base=develop; number=13 ;;' \
   '  repos/solswap-io/solswap-indexer/pulls/16) repository=solswap-io/solswap-indexer; repo_path="$FIXTURE_PARENT/solswap-indexer"; head=codex/si-smoke-body-preview-tests; base=develop; number=16 ;;' \
   '  repos/sora-xor/polkaswap-indexer/pulls/1) repository=sora-xor/polkaswap-indexer; repo_path="$FIXTURE_PARENT/polkaswap-indexer"; head=codex/pi-deployment-evidence-gate; base=develop; number=1 ;;' \
@@ -500,15 +503,15 @@ expect_review_blocked "${COMMON_ENV[@]}" PROMPT_MARKER="$PROMPT_MARKER" \
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config --unset-all core.fsmonitor
 "$REAL_GIT" -C "$ROOT/fearless-wallet-web" config --unset-all diff.external
 
-printf '%s\n' 'dirty' >> "$ROOT/fearless-Android-production-consolidated-20260731/source.txt"
+printf '%s\n' 'dirty' >> "$ROOT/fearless-Android/source.txt"
 expect_failure unstaged 'worktree is not clean (staged=0, unstaged=1' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-Android-production-consolidated-20260731" restore source.txt
+"$REAL_GIT" -C "$ROOT/fearless-Android" restore source.txt
 
-printf '%s\n' 'staged' >> "$ROOT/fearless-iOS-production-consolidated-20260731/source.txt"
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" add source.txt
+printf '%s\n' 'staged' >> "$ROOT/fearless-iOS/source.txt"
+"$REAL_GIT" -C "$ROOT/fearless-iOS" add source.txt
 expect_failure staged 'worktree is not clean (staged=1' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" restore --staged source.txt
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" restore source.txt
+"$REAL_GIT" -C "$ROOT/fearless-iOS" restore --staged source.txt
+"$REAL_GIT" -C "$ROOT/fearless-iOS" restore source.txt
 
 printf '%s\n' 'untracked' > "$ROOT/fearless-wallet-web/untracked.txt"
 expect_failure untracked 'untracked=1' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
@@ -632,17 +635,17 @@ expect_failure iroha-actual-branch-remote-malformed 'authoritative remote head r
 expect_failure iroha-wrong-origin '../iroha: origin repository mismatch: expected hyperledger-iroha/iroha, received attacker/iroha' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
 "$REAL_GIT" -C "$PARENT/iroha" remote set-url origin https://github.com/hyperledger-iroha/iroha.git
 
-"$REAL_GIT" -C "$ROOT/fearless-Android-production-consolidated-20260731" update-index --assume-unchanged source.txt
-printf '%s\n' 'hidden assume-unchanged drift' >> "$ROOT/fearless-Android-production-consolidated-20260731/source.txt"
+"$REAL_GIT" -C "$ROOT/fearless-Android" update-index --assume-unchanged source.txt
+printf '%s\n' 'hidden assume-unchanged drift' >> "$ROOT/fearless-Android/source.txt"
 expect_failure assume-unchanged 'Git index contains assume-unchanged or skip-worktree paths' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-Android-production-consolidated-20260731" update-index --no-assume-unchanged source.txt
-"$REAL_GIT" -C "$ROOT/fearless-Android-production-consolidated-20260731" restore source.txt
+"$REAL_GIT" -C "$ROOT/fearless-Android" update-index --no-assume-unchanged source.txt
+"$REAL_GIT" -C "$ROOT/fearless-Android" restore source.txt
 
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" update-index --skip-worktree source.txt
-printf '%s\n' 'hidden skip-worktree drift' >> "$ROOT/fearless-iOS-production-consolidated-20260731/source.txt"
+"$REAL_GIT" -C "$ROOT/fearless-iOS" update-index --skip-worktree source.txt
+printf '%s\n' 'hidden skip-worktree drift' >> "$ROOT/fearless-iOS/source.txt"
 expect_failure skip-worktree 'Git index contains assume-unchanged or skip-worktree paths' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" update-index --no-skip-worktree source.txt
-"$REAL_GIT" -C "$ROOT/fearless-iOS-production-consolidated-20260731" restore source.txt
+"$REAL_GIT" -C "$ROOT/fearless-iOS" update-index --no-skip-worktree source.txt
+"$REAL_GIT" -C "$ROOT/fearless-iOS" restore source.txt
 
 cp "$ROOT/fearless-wallet-web/.git/info/exclude" "$TMP_DIR/wallet-info-exclude"
 printf '%s\n' 'ignored-generated.ts' >> "$ROOT/fearless-wallet-web/.git/info/exclude"
@@ -652,15 +655,15 @@ rm "$ROOT/fearless-wallet-web/ignored-generated.ts"
 cp "$TMP_DIR/wallet-info-exclude" "$ROOT/fearless-wallet-web/.git/info/exclude"
 
 printf '%s\n' 'external source' > "$TMP_DIR/external-source.txt"
-ln -s "$TMP_DIR/external-source.txt" "$ROOT/fearless-site-web-app-associations-20260726/escaping-source-link"
-"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" add escaping-source-link
+ln -s "$TMP_DIR/external-source.txt" "$ROOT/fearless-site-web/escaping-source-link"
+"$REAL_GIT" -C "$ROOT/fearless-site-web" add escaping-source-link
 expect_failure escaping-tracked-symlink 'tracked symlinks escape the repository root' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" restore --staged escaping-source-link
-rm "$ROOT/fearless-site-web-app-associations-20260726/escaping-source-link"
+"$REAL_GIT" -C "$ROOT/fearless-site-web" restore --staged escaping-source-link
+rm "$ROOT/fearless-site-web/escaping-source-link"
 
-"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" checkout -q --detach
+"$REAL_GIT" -C "$ROOT/fearless-site-web" checkout -q --detach
 expect_failure detached 'HEAD is detached' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-"$REAL_GIT" -C "$ROOT/fearless-site-web-app-associations-20260726" checkout -q fix/app-association-publication
+"$REAL_GIT" -C "$ROOT/fearless-site-web" checkout -q fix/app-association-publication
 
 "$REAL_GIT" -C "$PARENT/ton-indexer" checkout -q -b wrong-branch
 expect_failure wrong-branch 'current branch mismatch' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
@@ -691,11 +694,11 @@ expect_failure cached-upstream-vs-live-remote 'cached upstream origin/codex/pi-d
   "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}" --check-remote --git-bin "$FAKE_GIT" --gh-bin "$FAKE_GH"
 "$REAL_GIT" -C "$PARENT/polkaswap-indexer" update-ref "refs/remotes/origin/$branch" HEAD
 
-mv "$ROOT/fearless-iOS-production-consolidated-20260731" "$ROOT/fearless-iOS-production-consolidated-20260731-real"
-ln -s fearless-iOS-production-consolidated-20260731-real "$ROOT/fearless-iOS-production-consolidated-20260731"
+mv "$ROOT/fearless-iOS" "$ROOT/fearless-iOS-real"
+ln -s fearless-iOS-real "$ROOT/fearless-iOS"
 expect_failure symlink-repo 'repository path must be a real directory' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
-rm "$ROOT/fearless-iOS-production-consolidated-20260731"
-mv "$ROOT/fearless-iOS-production-consolidated-20260731-real" "$ROOT/fearless-iOS-production-consolidated-20260731"
+rm "$ROOT/fearless-iOS"
+mv "$ROOT/fearless-iOS-real" "$ROOT/fearless-iOS"
 
 mv "$ROOT/.git" "$ROOT/.git.saved"
 expect_failure root-unowned 'source has no Git repository owner' "${COMMON_ENV[@]}" "${COMMON_ARGS[@]}"
@@ -706,6 +709,9 @@ expect_failure untracked-required 'required production source is not Git-tracked
 "$REAL_GIT" -C "$ROOT" reset -q FEARLESS_PROJECT_PLAN.md
 
 for required_file in \
+  config/workspace-repositories.json \
+  scripts/setup-workspace.mjs \
+  scripts/test-setup-workspace.mjs \
   services/passkey-backup-owner-authority/src/apple-app-attest-admission.js \
   services/passkey-backup-owner-authority/src/apple-app-attest-receipt.js \
   services/passkey-backup-owner-authority/src/apple-app-attestation-root-ca.pem \
@@ -781,7 +787,7 @@ NODE
 expect_failure wrong-iroha-config-order 'source publication config repository order must be' "${COMMON_ENV[@]}" node "$AUDIT" --test-tool-injection --root "$ROOT" --parent "$PARENT" --config "$BAD_CONFIG" --root-owner-config "$ROOT/config/source-publication-root-owner.json" --release-pr-config "$ROOT/config/release-readiness-prs.tsv"
 
 BAD_CONFIG="$TMP_DIR/traversal.tsv"
-sed 's#^fearless-Android-production-consolidated-20260731#../../escape#' "$ROOT/config/source-publication-readiness.tsv" > "$BAD_CONFIG"
+sed 's#^fearless-Android#../../escape#' "$ROOT/config/source-publication-readiness.tsv" > "$BAD_CONFIG"
 expect_failure traversal-config 'unsupported source publication repo path' "${COMMON_ENV[@]}" node "$AUDIT" --test-tool-injection --root "$ROOT" --parent "$PARENT" --config "$BAD_CONFIG" --root-owner-config "$ROOT/config/source-publication-root-owner.json" --release-pr-config "$ROOT/config/release-readiness-prs.tsv"
 
 BAD_RELEASE="$TMP_DIR/missing-release.tsv"

@@ -16,11 +16,11 @@ Environment:
   PLAN_AUDIT_PARENT  Parent directory containing sibling indexer repos.
   PLAN_AUDIT_ANDROID_ROOT
                      Current Android release-candidate worktree. Defaults to
-                     fearless-Android-production-consolidated-20260731 under
+                     fearless-Android under
                      PLAN_AUDIT_ROOT.
   PLAN_AUDIT_IOS_ROOT
                      Current integrated iOS release-candidate worktree.
-                     Defaults to fearless-iOS-production-consolidated-20260731
+                     Defaults to fearless-iOS
                      under PLAN_AUDIT_ROOT.
   PLAN_AUDIT_IOS_TESTFLIGHT_ROOT
                      Clean iOS release-candidate worktree containing the
@@ -7170,7 +7170,7 @@ root_release_readiness_checks() {
   require_pattern_multiline "$source_publication_test" 'preflight-existing-generated-output.*postflight-yarn-source-injection.*preflight-symlinked-cache.*postflight-clean-head-drift.*stale-preflight-report' "root source publication phase-boundary adversarial fixtures"
   require_pattern_multiline "$source_publication_test" 'postflight-iroha-head-drift.*iroha-unstaged.*iroha-untracked.*iroha-wrong-branch.*iroha-wrong-origin' "root source publication Iroha current-byte adversarial fixtures"
   require_pattern_multiline "$source_publication_test" 'missing-iroha-config.*wrong-iroha-config-identity.*wrong-iroha-config-order' "root source publication Iroha config adversarial fixtures"
-  require_pattern_multiline "$source_publication_quarantine" "const FORBIDDEN_REPOSITORY = '\.\./iroha';[\s\S]*MAINTAINED_REPOSITORIES[\s\S]*'fearless-Android-production-consolidated-20260731'[\s\S]*'fearless-iOS-production-consolidated-20260731'[\s\S]*'fearless-wallet-web'[\s\S]*'fearless-site-web-app-associations-20260726'[\s\S]*'\.\./ton-indexer'[\s\S]*'\.\./solswap-indexer'[\s\S]*'\.\./polkaswap-indexer'" "root source publication quarantine exact seven-repository allow-list and Iroha exclusion"
+  require_pattern_multiline "$source_publication_quarantine" "const FORBIDDEN_REPOSITORY = '\.\./iroha';[\s\S]*MAINTAINED_REPOSITORIES[\s\S]*'fearless-Android'[\s\S]*'fearless-iOS'[\s\S]*'fearless-wallet-web'[\s\S]*'fearless-site-web'[\s\S]*'\.\./ton-indexer'[\s\S]*'\.\./solswap-indexer'[\s\S]*'\.\./polkaswap-indexer'" "root source publication quarantine exact seven-repository allow-list and Iroha exclusion"
   require_pattern_multiline "$source_publication_quarantine" "const parsed = \{ mode: 'dry-run'[\s\S]*arg === '--apply'[\s\S]*arg === '--rollback'[\s\S]*--apply and --rollback are mutually exclusive" "root source publication quarantine dry-run/apply/rollback mode boundary"
   require_pattern_multiline "$source_publication_quarantine" 'source publication config paths must be exactly[\s\S]*forbidden repository selected[\s\S]*root/config overrides and test environment are forbidden in production mode' "root source publication quarantine canonical config/repository boundary"
   require_pattern_multiline "$source_publication_quarantine" 'ignored candidate contains tracked content[\s\S]*ignored candidate contains non-ignored untracked content[\s\S]*candidate is no longer an ignored-only root' "root source publication quarantine ignored-only content reproof"
@@ -7182,17 +7182,17 @@ root_release_readiness_checks() {
   require_pattern_multiline "$release_unblock_export" 'scripts/quarantine-source-publication-outputs\.mjs[\s\S]*scripts/run-source-publication-quarantine\.sh[\s\S]*scripts/test-source-publication-quarantine\.sh' "root release unblock bundle source-publication quarantine ownership handoff"
   require_pattern_multiline "$release_unblock_verify" 'scripts/quarantine-source-publication-outputs\.mjs[\s\S]*scripts/run-source-publication-quarantine\.sh[\s\S]*scripts/test-source-publication-quarantine\.sh' "root release unblock bundle verifier source-publication quarantine ownership handoff"
   require_pattern "$source_publication_test" 'actual passkey service entrypoint src/server\.js is missing' "root source publication actual service inventory check"
-  require_pattern "$source_publication_config" 'fearless-Android-production-consolidated-20260731.*1260' "root source publication Android identity row"
-  require_pattern "$source_publication_config" 'fearless-site-web-app-associations-20260726.*49' "root source publication website identity row"
+  require_pattern "$source_publication_config" 'fearless-Android.*1260' "root source publication Android identity row"
+  require_pattern "$source_publication_config" 'fearless-site-web.*49' "root source publication website identity row"
   require_pattern "$source_publication_config" 'polkaswap-indexer.*1' "root source publication PI identity row"
   require_pattern "$source_publication_config" '\.\./iroha[[:space:]]+hyperledger-iroha/iroha[[:space:]]+optimizations[[:space:]]+optimizations[[:space:]]+-' "root source publication Iroha identity row"
-  require_pattern_multiline "$release_test" 'stablePaths = \["\.","fearless-Android","fearless-iOS","fearless-wallet-web","fearless-site-web-app-associations-20260726","\.\./ton-indexer","\.\./solswap-indexer","\.\./polkaswap-indexer"\][\s\S]*repositories = \[\.\.\.stableSources\.slice\(1\), currentIrohaRow\][\s\S]*sources = \[workspaceSource, \.\.\.repositories\][\s\S]*totals:\{sources:9,\.\.\.sourceTotals\}' "root aggregate audit exact nine-source publication fixture"
+  require_pattern_multiline "$release_test" 'stablePaths = \["\.","fearless-Android","fearless-iOS","fearless-wallet-web","fearless-site-web","\.\./ton-indexer","\.\./solswap-indexer","\.\./polkaswap-indexer"\][\s\S]*repositories = \[\.\.\.stableSources\.slice\(1\), currentIrohaRow\][\s\S]*sources = \[workspaceSource, \.\.\.repositories\][\s\S]*totals:\{sources:9,\.\.\.sourceTotals\}' "root aggregate audit exact nine-source publication fixture"
   require_pattern "$release_audit" 'audit-private-overlay-readiness\.sh' "root aggregate audit private-overlay gate"
   require_pattern "$release_audit" 'ensure-fearless-utils\.sh' "root aggregate audit Android public dependency source guard"
   require_pattern "$release_audit" 'test-public-dependency-upstream-delta-export\.sh' "root aggregate audit Android public dependency handoff self-test gate"
   require_pattern "$release_audit" 'export-public-dependency-upstream-delta\.sh --output build/reports/public-dependency-upstream-delta' "root aggregate audit Android public dependency handoff export gate"
   require_pattern "$release_audit" 'audit-public-artifacts\.sh' "root aggregate audit Android public artifact boundary gate"
-  require_pattern "$release_audit" 'FEARLESS_UTILS_PATH="\$ROOT_DIR/fearless-utils-Android-production-20260922"' "root aggregate audit canonical Android fearless-utils checkout"
+  require_pattern "$release_audit" 'FEARLESS_UTILS_PATH="\$ROOT_DIR/fearless-utils-Android"' "root aggregate audit canonical Android fearless-utils checkout"
   require_pattern "$release_audit" 'FEARLESS_UTILS_COMMIT=1c80a2bf3fa1f996cf1328873e09f282ee29b69e' "root aggregate audit canonical Android fearless-utils commit"
   require_pattern "$release_audit" 'FEARLESS_UTILS_REPOSITORY=soramitsu/fearless-utils-Android' "root aggregate audit canonical Android fearless-utils repository"
   require_pattern "$release_audit" 'audit-public-artifacts\.sh --strict-provenance' "root aggregate audit Android strict public provenance"
@@ -7210,8 +7210,8 @@ root_release_readiness_checks() {
   require_pattern "$release_audit" 'passkey-deployment-evidence' "root aggregate audit passkey deployment evidence summary slug"
   require_pattern "$release_audit" "passkey-production-smoke['\")|]" "root aggregate audit passkey production smoke summary slug"
   require_pattern "$release_audit" 'run_passkey_production_smoke\(\)' "root aggregate audit passkey production smoke runner"
-  require_pattern "$release_audit" 'fearless-site-web-app-associations-20260726/scripts/verify-app-associations\.mjs' "root aggregate audit strict live site association verifier"
-  require_pattern "$release_audit" '--root[[:space:]]*"\$ROOT_DIR/fearless-site-web-app-associations-20260726"' "root aggregate audit strict live site association source root"
+  require_pattern "$release_audit" 'fearless-site-web/scripts/verify-app-associations\.mjs' "root aggregate audit strict live site association verifier"
+  require_pattern "$release_audit" '--root[[:space:]]*"\$ROOT_DIR/fearless-site-web"' "root aggregate audit strict live site association source root"
   require_pattern "$release_audit" '--live-base-url https://fearlesswallet\.io' "root aggregate audit canonical live site association URL"
   require_pattern "$release_audit" 'exact source parity, JSON content types, X-Content-Type-Options: nosniff, and no redirects' "root aggregate audit site association remediation contract"
   require_pattern "$release_audit" 'PASSKEY_BACKUP_BASE_URL="https://backup\.fearlesswallet\.io"' "root aggregate audit passkey production smoke base URL"
@@ -7893,7 +7893,7 @@ root_release_readiness_checks() {
   require_pattern "$release_audit" 'if \(\$0 !~ /\^  - \\\.\\\.\\/iroha /\) invalid = 1' "root aggregate audit external-Iroha-only exact failure-row prefix"
   require_pattern_multiline "$release_audit" 'source_publication_report_has_unsafe_iroha_state\(\)[\s\S]*report\.status !== '\''failed'\''[\s\S]*report\.checkRemote !== true[\s\S]*irohaRows\.length !== 1[\s\S]*unsafeFailures = new Set\([\s\S]*MERGE_HEAD[\s\S]*CHERRY_PICK_HEAD[\s\S]*REVERT_HEAD[\s\S]*BISECT_START[\s\S]*sequencer' "root aggregate audit exact live source-report Git-operation classifier"
   require_pattern_multiline "$release_audit" 'source_publication_report_has_unsafe_iroha_state\(\)[\s\S]*preflightBytes = fs\.readFileSync\(preflightPath\)[\s\S]*preflightSha256 = crypto\.createHash\('\''sha256'\''\)\.update\(preflightBytes\)\.digest\('\''hex'\''\)[\s\S]*report\.schemaVersion !== 3[\s\S]*report\.phase !== '\''postflight'\''[\s\S]*report\.preflightReportSha256 !== preflightSha256[\s\S]*preflight\.schemaVersion !== 3[\s\S]*preflight\.phase !== '\''preflight'\''[\s\S]*preflight\.preflightReportSha256 !== null' "root aggregate audit schema-v3 source-report phase and preflight-byte classifier boundary"
-  require_pattern_multiline "$release_audit" 'source_publication_report_has_unsafe_iroha_state\(\)[\s\S]*expectedSourcePaths = \['\''\.'\''[\s\S]*'\''fearless-Android'\''[\s\S]*'\''fearless-iOS'\''[\s\S]*'\''fearless-wallet-web'\''[\s\S]*'\''fearless-site-web-app-associations-20260726'\''[\s\S]*'\''\.\./ton-indexer'\''[\s\S]*'\''\.\./solswap-indexer'\''[\s\S]*'\''\.\./polkaswap-indexer'\''[\s\S]*'\''\.\./iroha'\''\][\s\S]*identityFields = \[[\s\S]*preflightSources = \[preflight\.workspaceSource[\s\S]*postflightSources = \[report\.workspaceSource[\s\S]*source publication preflight did not pass before release checks[\s\S]*preflightSources\.length === 9 && postflightSources\.length === 9[\s\S]*preflightSource\.path !== expectedSourcePaths\[index\][\s\S]*postflightSource\.path !== expectedSourcePaths\[index\][\s\S]*preflightSource\.status === '\''passed'\''[\s\S]*hasOwn\(preflightSource, field\)[\s\S]*hasOwn\(postflightSource, field\)[\s\S]*preflightSource\[field\] === postflightSource\[field\][\s\S]*postflightSource\.failures\.includes\(preflightContinuityDiagnostic\)[\s\S]*if \(!hasExactPreflightPostflightPair\) process\.exit\(1\)' "root aggregate audit exact nine-row preflight/postflight continuity classifier"
+  require_pattern_multiline "$release_audit" 'source_publication_report_has_unsafe_iroha_state\(\)[\s\S]*expectedSourcePaths = \['\''\.'\''[\s\S]*'\''fearless-Android'\''[\s\S]*'\''fearless-iOS'\''[\s\S]*'\''fearless-wallet-web'\''[\s\S]*'\''fearless-site-web'\''[\s\S]*'\''\.\./ton-indexer'\''[\s\S]*'\''\.\./solswap-indexer'\''[\s\S]*'\''\.\./polkaswap-indexer'\''[\s\S]*'\''\.\./iroha'\''\][\s\S]*identityFields = \[[\s\S]*preflightSources = \[preflight\.workspaceSource[\s\S]*postflightSources = \[report\.workspaceSource[\s\S]*source publication preflight did not pass before release checks[\s\S]*preflightSources\.length === 9 && postflightSources\.length === 9[\s\S]*preflightSource\.path !== expectedSourcePaths\[index\][\s\S]*postflightSource\.path !== expectedSourcePaths\[index\][\s\S]*preflightSource\.status === '\''passed'\''[\s\S]*hasOwn\(preflightSource, field\)[\s\S]*hasOwn\(postflightSource, field\)[\s\S]*preflightSource\[field\] === postflightSource\[field\][\s\S]*postflightSource\.failures\.includes\(preflightContinuityDiagnostic\)[\s\S]*if \(!hasExactPreflightPostflightPair\) process\.exit\(1\)' "root aggregate audit exact nine-row preflight/postflight continuity classifier"
   require_pattern_multiline "$release_audit" 'identityFields = \[[\s\S]*'\''path'\''[\s\S]*'\''repository'\''[\s\S]*'\''head'\''[\s\S]*'\''base'\''[\s\S]*'\''prNumber'\''[\s\S]*'\''prUrl'\''[\s\S]*'\''prState'\''[\s\S]*'\''prHeadSha'\''[\s\S]*'\''repositoryPath'\''[\s\S]*'\''originUrl'\''[\s\S]*'\''originRepository'\''[\s\S]*'\''branch'\''[\s\S]*'\''headSha'\''[\s\S]*'\''upstream'\''[\s\S]*'\''upstreamSha'\''[\s\S]*'\''currentBranchRemoteSha'\''[\s\S]*'\''currentBranchRemotePresent'\''[\s\S]*'\''remoteHeadSha'\''[\s\S]*'\''remoteBranchPresent'\''[\s\S]*\]' "root aggregate audit exact nineteen-field source continuity identity"
   require_pattern_multiline "$release_test" 'wrong-phase Iroha publication proof stays local[\s\S]*plan-unpublished-iroha-wrong-report-phase[\s\S]*wrong-preflight-digest Iroha publication proof stays local[\s\S]*plan-unpublished-iroha-wrong-preflight-digest' "root aggregate audit source-report phase and preflight-digest adversarial scenarios"
   require_pattern_multiline "$release_audit" 'hasCanonicalCounts[\s\S]*unmergedFailure[\s\S]*iroha\.unmergedCount > 0[\s\S]*report\.totals\.unmerged >= iroha\.unmergedCount[\s\S]*iroha\.failures\.includes\(unmergedFailure\)[\s\S]*hasOperation \|\| hasUnmergedIndex' "root aggregate audit canonical unmerged-index classifier"
@@ -8169,7 +8169,7 @@ root_release_readiness_checks() {
   require_pattern "$release_audit" 'all GitHub review conversations resolved including outdated unresolved threads' "root aggregate audit release PR conversation-resolution blocker action"
   require_pattern "$release_audit" 'resolve-release-pr-review-threads\.sh --dry-run' "root aggregate audit release PR thread resolver dry-run blocker action"
   require_pattern "$release_audit" 'merge-release-prs\.sh --dry-run' "root aggregate audit release PR protected merge dry-run blocker action"
-  require_pattern "$release_audit" 'Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift' "root aggregate audit Android public dependency blocker action"
+  require_pattern "$release_audit" 'Restore fearless-utils-Android to the pinned pristine commit with no source drift' "root aggregate audit Android public dependency blocker action"
   require_pattern "$release_audit" 'Android public artifact boundary and handoff bundle' "root aggregate audit Android public dependency handoff blocker action"
   require_pattern "$release_audit" 'Upstream or vendor every carried iOS shared-features/native-crypto delta' "root aggregate audit iOS shared-features delta blocker action"
   require_pattern_multiline "$release_audit" 'requires_external_action_for_slug\(\).{0,500}ios-shared-features-delta' "root aggregate audit iOS external-action classification"
@@ -10601,8 +10601,8 @@ root_release_readiness_checks() {
   require_pattern "$iroha_wallet_audit" 'audit-iroha-production-send-readiness\.sh' "root Iroha wallet coverage production-send aggregate gate"
   require_pattern "$iroha_wallet_audit" 'test-iroha-production-send-readiness-audit\.sh' "root Iroha wallet coverage production-send aggregate self-test gate"
   require_pattern "$iroha_wallet_test" 'missing aggregate Iroha production-send audit' "root Iroha wallet production-send missing-gate adversarial fixture"
-  require_pattern "$iroha_send_audit" 'run_platform "android" "\$ROOT_DIR/fearless-Android-production-consolidated-20260731"' "root Iroha production-send consolidated Android aggregate gate"
-  require_pattern "$iroha_send_audit" 'run_platform "ios" "\$ROOT_DIR/fearless-iOS-production-consolidated-20260731"' "root Iroha production-send consolidated iOS aggregate gate"
+  require_pattern "$iroha_send_audit" 'run_platform "android" "\$ROOT_DIR/fearless-Android"' "root Iroha production-send consolidated Android aggregate gate"
+  require_pattern "$iroha_send_audit" 'run_platform "ios" "\$ROOT_DIR/fearless-iOS"' "root Iroha production-send consolidated iOS aggregate gate"
   require_pattern "$iroha_send_audit" 'run_platform "browser-extension"' "root Iroha production-send browser aggregate gate"
   require_pattern "$iroha_send_audit" 'adversarial self-test' "root Iroha production-send per-platform self-test gate"
   require_pattern "$iroha_send_audit" 'blocked-readiness audit' "root Iroha production-send per-platform blocker gate"
@@ -10837,11 +10837,11 @@ wallet_edge_case_closure_checks() {
 }
 
 main() {
-  local android="${PLAN_AUDIT_ANDROID_ROOT:-$ROOT_DIR/fearless-Android-production-consolidated-20260731}"
-  local ios="${PLAN_AUDIT_IOS_ROOT:-$ROOT_DIR/fearless-iOS-production-consolidated-20260731}"
+  local android="${PLAN_AUDIT_ANDROID_ROOT:-$ROOT_DIR/fearless-Android}"
+  local ios="${PLAN_AUDIT_IOS_ROOT:-$ROOT_DIR/fearless-iOS}"
   local ios_testflight="${PLAN_AUDIT_IOS_TESTFLIGHT_ROOT:-$ios}"
   local web="$ROOT_DIR/fearless-wallet-web"
-  local site="$ROOT_DIR/fearless-site-web-app-associations-20260726"
+  local site="$ROOT_DIR/fearless-site-web"
   local ton="$PARENT_DIR/ton-indexer"
   local solswap="$PARENT_DIR/solswap-indexer"
   local polkaswap="$PARENT_DIR/polkaswap-indexer"

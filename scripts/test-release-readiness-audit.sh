@@ -72,7 +72,7 @@ write_fake_audit_script() {
 
 setup_fixture() {
   rm -rf "$workspace" "$parent/ton-indexer" "$parent/solswap-indexer" "$parent/polkaswap-indexer" "$report_dir" "$bin_dir"
-  mkdir -p "$workspace/scripts" "$workspace/fearless-Android/scripts" "$workspace/fearless-iOS/scripts/deps" "$workspace/fearless-wallet-web/scripts" "$workspace/fearless-site-web-app-associations-20260726/scripts" "$workspace/services/passkey-backup-challenge-service" "$parent/ton-indexer" "$parent/solswap-indexer" "$parent/polkaswap-indexer" "$bin_dir"
+  mkdir -p "$workspace/scripts" "$workspace/fearless-Android/scripts" "$workspace/fearless-iOS/scripts/deps" "$workspace/fearless-wallet-web/scripts" "$workspace/fearless-site-web/scripts" "$workspace/services/passkey-backup-challenge-service" "$parent/ton-indexer" "$parent/solswap-indexer" "$parent/polkaswap-indexer" "$bin_dir"
 
   write_file "$bin_dir/date" \
     '#!/usr/bin/env bash' \
@@ -212,7 +212,7 @@ setup_fixture() {
     'if (driftNonzeroCount) publicationRow.stagedCount = 1' \
     'if (forgedPublication) publicationRow.upstream = "origin/forged"' \
     'const operationRow = {...publicationRow,status:"failed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:unmergedIroha?2:0,failures:[unmergedIroha?unmergedFailure:operationFailure]}' \
-    'const stablePaths = [".","fearless-Android","fearless-iOS","fearless-wallet-web","fearless-site-web-app-associations-20260726","../ton-indexer","../solswap-indexer","../polkaswap-indexer"]' \
+    'const stablePaths = [".","fearless-Android","fearless-iOS","fearless-wallet-web","fearless-site-web","../ton-indexer","../solswap-indexer","../polkaswap-indexer"]' \
     'const stableSource = (sourcePath, index) => ({path:sourcePath,repository:`example/source-${index}`,head:"main",base:"main",prNumber:index+1,prUrl:`https://github.com/example/source-${index}/pull/${index+1}`,prState:"merged",prHeadSha:localSha,repositoryPath:`/fixture/source-${index}`,originUrl:`https://github.com/example/source-${index}.git`,originRepository:`example/source-${index}`,branch:"main",headSha:localSha,upstream:"origin/main",upstreamSha:localSha,currentBranchRemoteSha:localSha,currentBranchRemotePresent:true,remoteHeadSha:localSha,remoteBranchPresent:true,status:"passed",stagedCount:0,unstagedCount:0,untrackedCount:0,unmergedCount:0,failures:[]})' \
     'const stableSources = stablePaths.map(stableSource)' \
     'if (preflightRowMismatch && phase === "postflight") stableSources[1].headSha = "c".repeat(40)' \
@@ -250,7 +250,7 @@ setup_fixture() {
   write_fake_audit_script "$workspace/scripts/audit-iroha-release-readiness.sh" "iroha-fail,multi-fail"
   write_fake_audit_script "$workspace/scripts/audit-iroha-wallet-coverage.sh" "iroha-wallet-fail,multi-fail"
 
-  write_file "$workspace/fearless-site-web-app-associations-20260726/scripts/verify-app-associations.mjs" \
+  write_file "$workspace/fearless-site-web/scripts/verify-app-associations.mjs" \
     'import fs from "node:fs"' \
     'import path from "node:path"' \
     'import { fileURLToPath } from "node:url"' \
@@ -477,7 +477,7 @@ setup_fixture() {
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
     'scenario="${FAKE_RELEASE_SCENARIO:-good}"' \
-    'expected_path="${PWD%/fearless-Android}/fearless-utils-Android-production-20260922"' \
+    'expected_path="${PWD%/fearless-Android}/fearless-utils-Android"' \
     'if [[ "${FEARLESS_UTILS_PATH:-}" != "$expected_path" || "${FEARLESS_UTILS_COMMIT:-}" != "1c80a2bf3fa1f996cf1328873e09f282ee29b69e" || "${FEARLESS_UTILS_REPOSITORY:-}" != "soramitsu/fearless-utils-Android" ]]; then' \
     '  echo "fearless-utils canonical identity was not pinned: path=${FEARLESS_UTILS_PATH:-<unset>} commit=${FEARLESS_UTILS_COMMIT:-<unset>} repository=${FEARLESS_UTILS_REPOSITORY:-<unset>}" >&2' \
     '  exit 1' \
@@ -1701,9 +1701,9 @@ grep -q "passkey Android origin parity self-test passed" "$report_dir/passkey-de
 grep -q "passkey Android origin parity passed requireReady=true" "$report_dir/passkey-deployment-evidence.log" ||
   fail "expected passkey Android origin parity --require-ready in full-live deployment log"
 grep -q "strict live app association verification passed" "$report_dir/passkey-backup-prerequisites.log" ||
-  fail "expected strict fearless-site-web-app-associations-20260726 live app association verifier in full-live prerequisites log"
-[[ -f "$workspace/fearless-site-web-app-associations-20260726/build/live-association-verifier-called" ]] ||
-  fail "expected strict fearless-site-web-app-associations-20260726 live app association verifier to execute in full-live mode"
+  fail "expected strict fearless-site-web live app association verifier in full-live prerequisites log"
+[[ -f "$workspace/fearless-site-web/build/live-association-verifier-called" ]] ||
+  fail "expected strict fearless-site-web live app association verifier to execute in full-live mode"
 assert_summary "all-good fixture" passed true 0 0 \
   plan-readiness=passed \
   github-governance=passed \
@@ -2113,7 +2113,7 @@ assert_summary "single Android public dependency provenance failure" failed true
   ios-shared-features-delta=passed
 assert_blocker_report "single Android public dependency provenance failure" \
   "android-public-dependency-provenance" \
-  "Restore fearless-utils-Android-production-20260922 to the pinned pristine commit with no source drift" \
+  "Restore fearless-utils-Android to the pinned pristine commit with no source drift" \
   "fearless-utils provenance failed for forced fixture"
 
 setup_fixture
@@ -2176,7 +2176,7 @@ assert_action_manifest "blocked iOS shared-features removal readiness" failed tr
   "ios-shared-features-delta" \
   "Upstream or vendor every carried iOS shared-features/native-crypto delta" \
   "Upstream shared-features publication of carried compatibility and native-crypto deltas." \
-  "cd fearless-iOS-production-consolidated-20260731 && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
+  "cd fearless-iOS && bash scripts/deps/test-shared-features-delta-report.sh && bash scripts/deps/audit-shared-features-delta-report.sh \"\$PWD\" --write-report build/reports/shared-features-delta-report.json --require-ready"
 assert_failed_check_metadata \
   "blocked iOS shared-features removal readiness" \
   "ios-shared-features-delta" \
@@ -2727,8 +2727,8 @@ grep -q '"mutatesResolvedCheckout":true' "$workspace/fearless-iOS/build/reports/
   fail "expected PI smoke log to be absent when --skip-live is used"
 [[ ! -f "$report_dir/passkey-production-smoke.log" ]] ||
   fail "expected passkey production smoke log to be absent when --skip-live is used"
-[[ ! -f "$workspace/fearless-site-web-app-associations-20260726/build/live-association-verifier-called" ]] ||
-  fail "expected strict fearless-site-web-app-associations-20260726 live app association verifier not to run during --skip-live"
+[[ ! -f "$workspace/fearless-site-web/build/live-association-verifier-called" ]] ||
+  fail "expected strict fearless-site-web live app association verifier not to run during --skip-live"
 grep -q "requireReady=false" "$report_dir/android-xcm-production-evidence.log" ||
   fail "expected Android XCM production evidence audit to run without --require-ready when --skip-live is used"
 grep -q "xcm registry metadata passed requireAllRoutes=false" "$report_dir/android-xcm-production-evidence.log" ||

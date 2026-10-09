@@ -132,12 +132,12 @@ run_platform_audit() {
 
 run_platform_audit \
   "android" \
-  "$ROOT_DIR/fearless-Android-production-consolidated-20260731" \
+  "$ROOT_DIR/fearless-Android" \
   "$ROOT_DIR/fearless-Android-priv"
 
 run_platform_audit \
   "ios" \
-  "$ROOT_DIR/fearless-iOS-production-consolidated-20260731" \
+  "$ROOT_DIR/fearless-iOS" \
   "$ROOT_DIR/fearless-iOS-priv"
 
 if ((${#failures[@]} > 0)); then
