@@ -39,11 +39,11 @@ cd fearless-Android
 ./gradlew help
 ```
 
-The manifest also records preservation branches for local utility and website
-edits saved during consolidation. Those branches are pushed to their owning
-repositories and are not designated release candidates. Manifest pins establish
-reproducible source, not release approval; the publication and shipping audits
-still check their independent review and evidence requirements.
+The manifest also records preservation branches for unpublished application,
+utility, and website work found during consolidation. Those branches are pushed
+to their owning repositories and are not designated release candidates. Manifest
+pins establish reproducible source, not release approval; the publication and
+shipping audits still check their independent review and evidence requirements.
 
 Production completion is defined by [`FEARLESS_PROJECT_PLAN.md`](FEARLESS_PROJECT_PLAN.md) and is not established until every cited gate is satisfied and `scripts/audit-release-readiness.sh` exits successfully without `--skip-live`.
 

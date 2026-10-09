@@ -18,6 +18,11 @@
     { "path": "fearless-keys", "repository": "soramitsu/fearless-keys", "branch": "master", "commit": "feaef2f420cae0677ff593ce36a38c1f419303e3", "group": "private" }
   ],
   "preservedWork": [
+    { "repository": "soramitsu/fearless-Android", "branch": "codex/android-xcm-evidence-release-commit", "commit": "5b4779ba1413c3722d5fc05f12af6e37869fb3da", "purpose": "Committed Android modernization work preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-iOS", "branch": "codex/ios-transaction-builder-ci-gate", "commit": "7a837d9b85c135a9d01a125edd255f00649539c0", "purpose": "Committed iOS modernization work preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-iOS", "branch": "codex/testflight-4.2.0-2026.9.6", "commit": "621844920713aaee3e71828b01b210b0f6fdb9ff", "purpose": "Historical TestFlight source and publication records preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-wallet-web", "branch": "codex/chrome-3.0.6-release-ready", "commit": "f9e6ec555e7ec0ec31ddf7b1d5ad770ae91c9323", "purpose": "Historical Chrome release and isolated transfer-test work preserved separately from develop; not a release approval." },
+    { "repository": "soramitsu/fearless-site-web", "branch": "chore/git-flow-standardization", "commit": "f2db7b2ab6220ac6bcef3474da8d6bfd82de1380", "purpose": "Earlier site release-readiness, Corepack CI, and Vercel deployment commits preserved separately from the selected release candidate; not a release approval." },
     { "repository": "soramitsu/fearless-utils-Android", "branch": "codex/preserved-workspace-20261009", "commit": "d0424c3b7b631db136ca8d000ab714bb9b77ebc3", "purpose": "Uncommitted utility source saved before selecting the release candidate; not a release approval." },
     { "repository": "soramitsu/fearless-site-web", "branch": "codex/preserved-workspace-20261009", "commit": "69a625fbd8e556dec679b41a6a975c4713fe6fa1", "purpose": "Uncommitted site source saved before selecting the release candidate; not a release approval." }
   ]
