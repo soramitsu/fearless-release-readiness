@@ -1,0 +1,9 @@
+Fearless release readiness
+Copyright Soramitsu Co., Ltd.
+
+First-party source code, scripts, configuration, and documentation in this
+repository are licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party materials and separately maintained application, dependency, and
+infrastructure repositories retain their own terms and notices. This
+repository's license does not replace their licenses or copyright notices.
