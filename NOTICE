@@ -1,0 +1,15 @@
+Fearless release readiness
+Copyright Soramitsu Co., Ltd.
+
+First-party source code, scripts, configuration, and documentation in this
+repository are licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party materials retain their original terms and notices. In particular,
+the Apple trust anchors in services/passkey-backup-owner-authority/src/
+(apple-app-attestation-root-ca.pem and apple-root-ca-g3.cer) and Apple's published
+attestation and receipt samples in that service's test/ directory are Apple
+materials; the root license does not relicense them.
+
+Dependencies and the separate repositories listed in
+config/workspace-repositories.json retain their own licenses. This repository's
+license does not replace their license files or copyright notices.

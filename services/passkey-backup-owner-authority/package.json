@@ -2,6 +2,7 @@
   "name": "@fearless/passkey-backup-owner-authority",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Metadata-only owner/session/grant and backup-head CAS core with a non-deployed test HTTP composition; no admitted production listener.",
   "engines": {

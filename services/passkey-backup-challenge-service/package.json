@@ -2,6 +2,7 @@
   "name": "@fearless/passkey-backup-challenge-service",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Fearless passkey backup challenge service reference implementation.",
   "scripts": {
