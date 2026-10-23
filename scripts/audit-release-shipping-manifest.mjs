@@ -248,8 +248,46 @@ function sourceContract(root, manifest, role) {
     `${role} source tree mismatch`);
   return contract;
 }
+function withoutSourceComments(source) {
+  let result = '';
+  let index = 0;
+  while (index < source.length) {
+    const start = index;
+    if (source[index] === '"') {
+      // Keep quoted URLs and revision literals intact; // inside a URL is not
+      // a line comment. Escaped quotes must not end a string early.
+      index += 1;
+      while (index < source.length) {
+        if (source[index] === '\\') index += 2;
+        else if (source[index++] === '"') break;
+      }
+      result += source.slice(start, index);
+    } else if (source.startsWith('//', index)) {
+      const newline = source.indexOf('\n', index + 2);
+      index = newline === -1 ? source.length : newline;
+      result += ' ';
+    } else if (source.startsWith('/*', index)) {
+      let depth = 1;
+      index += 2;
+      while (index < source.length && depth > 0) {
+        if (source.startsWith('/*', index)) { depth += 1; index += 2; }
+        else if (source.startsWith('*/', index)) { depth -= 1; index += 2; }
+        else index += 1;
+      }
+      assert.equal(depth, 0, 'dependency source contains an unterminated comment');
+      result += ' ';
+    } else {
+      index += 1;
+      while (index < source.length && source[index] !== '"' && source[index] !== '/') index += 1;
+      result += source.slice(start, index);
+    }
+  }
+  return result;
+}
 function swiftPackageRevision(root, relative, expression, label, expected) {
-  const source = readFile(regularFile(root, relative, label), 4 * 1024 * 1024).toString('utf8');
+  const source = withoutSourceComments(
+    readFile(regularFile(root, relative, label), 4 * 1024 * 1024).toString('utf8'),
+  );
   const revisions = [...source.matchAll(expression)].map((match) => match[1]);
   assert.deepEqual(revisions, [expected], `${label} revision mismatch`);
 }

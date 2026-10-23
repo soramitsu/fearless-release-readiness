@@ -16,7 +16,9 @@ const COMMIT = /^[a-f0-9]{40}$/u;
 function git(cwd, ...args) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
   const result = spawnSync('git', ['-c', 'core.hooksPath=' + os.devNull, ...args], {
-    cwd, encoding: 'utf8', env: { ...env, GIT_TERMINAL_PROMPT: '0', GIT_NO_REPLACE_OBJECTS: '1' },
+    cwd, encoding: 'utf8', env: {
+      ...env, GIT_TERMINAL_PROMPT: '0', GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0',
+    },
     maxBuffer: 8 * 1024 * 1024,
   });
   if (result.status !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr?.trim() || result.error?.message}`);
@@ -59,9 +61,12 @@ function verifyCheckout(directory, row, url) {
   assert.ok(dotgit?.isDirectory() && !dotgit.isSymbolicLink(), `${row.path}: expected an independent Git clone`);
   assert.equal(fs.realpathSync(git(directory, 'rev-parse', '--show-toplevel')), fs.realpathSync(directory), `${row.path}: wrong Git root`);
   assert.ok(canonicalOrigin(git(directory, 'remote', 'get-url', 'origin')) === canonicalOrigin(url), `${row.path}: origin differs from manifest`);
+  const indexRecords = git(directory, 'ls-files', '-v', '-z').split('\0').filter(Boolean);
+  assert.ok(!indexRecords.some((record) => /^[a-zS] /u.test(record)),
+    `${row.path}: index flags conceal tracked source; clear assume-unchanged and skip-worktree before verification`);
   assert.equal(git(directory, 'status', '--porcelain=v1', '--untracked-files=all'), '', `${row.path}: local changes must be committed or preserved first`);
   assert.equal(git(directory, 'rev-parse', 'HEAD'), row.commit, `${row.path}: commit differs from manifest; existing checkout was not changed`);
-  assert.equal(git(directory, 'symbolic-ref', '--short', 'HEAD'), row.branch, `${row.path}: branch differs from manifest; existing checkout was not changed`);
+  assert.equal(git(directory, 'symbolic-ref', 'HEAD'), 'refs/heads/' + row.branch, `${row.path}: branch differs from manifest; existing checkout was not changed`);
   const alternates = path.join(directory, '.git/objects/info/alternates');
   assert.ok(!exists(alternates), `${row.path}: clone depends on an external Git object store`);
 }

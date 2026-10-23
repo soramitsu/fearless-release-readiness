@@ -67,6 +67,41 @@ test('a clean checkout at another revision or branch is left alone', (t) => {
   assert.equal(f.git(repo, 'branch', '--show-current'), 'other-branch');
 });
 
+test('a tag sharing the pinned branch name does not reject the correct checkout', (t) => {
+  const f = fixture(t); setupRepository(f.root, f.row, { url: f.url });
+  const repo = path.join(f.root, f.row.path);
+  f.git(repo, 'tag', f.row.branch);
+  assert.equal(setupRepository(f.root, f.row, { checkOnly: true, url: f.url }), 'verified');
+  assert.equal(setupRepository(f.root, f.row, { url: f.url }), 'verified');
+});
+
+for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+  test(`checkout verification rejects source edits hidden by ${flag}`, (t) => {
+    const f = fixture(t); setupRepository(f.root, f.row, { url: f.url });
+    const repo = path.join(f.root, f.row.path);
+    f.git(repo, 'update-index', flag, 'source.txt');
+    fs.writeFileSync(path.join(repo, 'source.txt'), 'hidden local work\n');
+    assert.equal(f.git(repo, 'status', '--porcelain=v1'), '');
+    for (const checkOnly of [true, false]) {
+      assert.throws(() => setupRepository(f.root, f.row, { checkOnly, url: f.url }),
+        /index flags conceal tracked source/);
+    }
+    assert.equal(fs.readFileSync(path.join(repo, 'source.txt'), 'utf8'), 'hidden local work\n');
+    assert.equal(f.git(repo, 'rev-parse', 'HEAD'), f.row.commit);
+  });
+}
+
+test('offline verification does not refresh or rewrite the Git index', (t) => {
+  const f = fixture(t); setupRepository(f.root, f.row, { url: f.url });
+  const repo = path.join(f.root, f.row.path);
+  const indexPath = path.join(repo, '.git/index');
+  const before = fs.readFileSync(indexPath);
+  const changedStat = new Date(Date.now() + 60_000);
+  fs.utimesSync(path.join(repo, 'source.txt'), changedStat, changedStat);
+  assert.equal(setupRepository(f.root, f.row, { checkOnly: true, url: f.url }), 'verified');
+  assert.deepEqual(fs.readFileSync(indexPath), before);
+});
+
 test('wrong origin, non-repository folders and symlinks are not adopted', (t) => {
   const f = fixture(t); setupRepository(f.root, f.row, { url: f.url });
   const repo = path.join(f.root, f.row.path);

@@ -400,6 +400,74 @@ test('clean iOS source cannot replace the shared-features tree contract', () => 
   } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
 
+for (const [label, relative, role, declaration, expected] of [
+  ['Swift package', 'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift', 'ios-shared-features',
+    (revision) => `.package(url: "https://github.com/soramitsu/shared-features-spm.git", revision: "${revision}")`,
+    /FearlessUtilsCompat shared-features source revision mismatch/u],
+  ['Xcode project', 'fearless-iOS/fearless.xcodeproj/project.pbxproj', 'ios-shared-features',
+    (revision) => `repositoryURL = "https://github.com/soramitsu/shared-features-spm.git"; requirement = { kind = revision; revision = ${revision}; };`,
+    /iOS project shared-features source revision mismatch/u],
+  ['transitive Swift package', 'shared-features-spm/Package.swift', 'ios-starscream',
+    (revision) => `.package(url: "https://github.com/soramitsu/fearless-starscream", .revision("${revision}"))`,
+    /shared-features Starscream source revision mismatch/u],
+]) {
+  for (const [commentKind, comment] of [
+    ['line', (source) => `// ${source}\n`],
+    ['block', (source) => `/* ${source} */\n`],
+  ]) {
+    test(`${label} ${commentKind} comment cannot substitute for an active dependency pin`, () => {
+      const f = fixture();
+      try {
+        const revision = f.manifest.dependencies.find((row) => row.role === role).sourceCommit;
+        const floating = declaration(revision)
+          .replace(`revision: "${revision}"`, 'branch: "main"')
+          .replace(`kind = revision; revision = ${revision};`, 'kind = branch; branch = main;')
+          .replace(`.revision("${revision}")`, '.branch("main")');
+        write(f.root, relative, `${comment(declaration(revision))}${floating}\n`);
+        if (relative.startsWith('shared-features-spm/')) {
+          const selected = f.manifest.dependencies.find((row) => row.role === 'ios-shared-features');
+          selected.sourceCommit = commit(path.join(f.root, dependencyPaths['ios-shared-features']));
+          const contractPath = 'fearless-iOS/config/shared-features-source.json';
+          const contract = JSON.parse(readFileSync(path.join(f.root, contractPath), 'utf8'));
+          contract.revision = selected.sourceCommit;
+          contract.tree = git(path.join(f.root, dependencyPaths['ios-shared-features']), 'rev-parse', 'HEAD^{tree}');
+          write(f.root, contractPath, `${JSON.stringify(contract)}\n`);
+          for (const kind of ['ios-workspace-packages', 'ios-project-packages']) {
+            const resolved = JSON.parse(readFileSync(path.join(f.root, filePaths[kind]), 'utf8'));
+            resolved.pins.find((pin) => pin.identity === 'shared-features-spm').state.revision = selected.sourceCommit;
+            const bytes = `${JSON.stringify(resolved)}\n`;
+            write(f.root, filePaths[kind], bytes);
+            f.manifest.files.find((row) => row.kind === kind).sha256 = digest(bytes);
+          }
+          for (const relative of [
+            'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift',
+            'fearless-iOS/fearless.xcodeproj/project.pbxproj',
+          ]) {
+            const source = readFileSync(path.join(f.root, relative), 'utf8');
+            write(f.root, relative, source.replace(/[a-f0-9]{40}/u, selected.sourceCommit));
+          }
+        }
+        repinIosSource(f);
+        f.save();
+        assert.throws(() => auditReleaseShippingManifest(f.root), expected);
+      } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+    });
+  }
+}
+
+test('active Swift revision remains valid alongside commented old declarations and nested comments', () => {
+  const f = fixture();
+  try {
+    const relative = 'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift';
+    const active = readFileSync(path.join(f.root, relative), 'utf8');
+    const obsolete = active.replace(/[a-f0-9]{40}/u, HEX40);
+    write(f.root, relative, `// ${obsolete}/* migration notes /* nested note */\n${obsolete}*/\n${active}`);
+    repinIosSource(f);
+    f.save();
+    assert.equal(auditReleaseShippingManifest(f.root).releaseId, f.manifest.releaseId);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});
+
 for (const kind of ['ios-workspace-packages', 'ios-project-packages']) {
   test(`clean iOS ${kind} lock cannot disagree with the Starscream checkout`, () => {
     const f = fixture();
