@@ -30,6 +30,8 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
+          node --check scripts/setup-workspace.mjs
+          node --test scripts/test-setup-workspace.mjs
           node --check scripts/audit-source-publication-readiness.mjs
           node --check scripts/audit-passkey-enabled-acceptance.mjs
           node --check scripts/audit-release-shipping-manifest.mjs

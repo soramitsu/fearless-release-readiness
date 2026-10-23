@@ -77,7 +77,7 @@ check_web_coverage() {
 }
 
 check_android_coverage() {
-  local android="$ROOT_DIR/fearless-Android-production-consolidated-20260731"
+  local android="$ROOT_DIR/fearless-Android"
   local transfer_test="$android/feature-wallet-impl/src/test/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/BitcoinTransferServiceProviderTest.kt"
   local metadata_test="$android/feature-wallet-impl/src/test/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/IrohaTransferMetadataTest.kt"
   local metadata="$android/feature-wallet-impl/src/main/java/jp/co/soramitsu/wallet/impl/data/repository/tranfser/IrohaTransferMetadata.kt"
@@ -122,7 +122,7 @@ check_android_coverage() {
 }
 
 check_ios_coverage() {
-  local ios="$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
+  local ios="$ROOT_DIR/fearless-iOS"
   local transfer_test="$ios/fearlessTests/ApplicationLayer/Services/FeatureToggle/TonChainSelectionTests.swift"
   local transfer="$ios/fearless/ApplicationLayer/Services/Transfer/Tokens/TransferService.swift"
   local torii_test="$ios/fearlessTests/IrohaToriiClientTests.swift"

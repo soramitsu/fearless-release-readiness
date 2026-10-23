@@ -25,7 +25,7 @@ passkey-backed cloud backup. This is a release-readiness gate: current repos
 should fail until product, platform, entitlement, and recovery contracts exist.
 
 Environment:
-  PASSKEY_AUDIT_ROOT                  Workspace root containing fearless-Android-production-consolidated-20260731 and fearless-iOS-production-consolidated-20260731.
+  PASSKEY_AUDIT_ROOT                  Workspace root containing fearless-Android and fearless-iOS.
   PASSKEY_BACKUP_LIVE_HEALTH          Set to 1/true to require the configured
                                       challenge service health endpoint.
   PASSKEY_BACKUP_HEALTH_TIMEOUT_SECONDS
@@ -596,17 +596,17 @@ check_release_config_sources() {
     return
   fi
 
-  local android_contract="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
-  local android_challenge="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
-  local android_drive="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
-  local android_token="$ROOT_DIR/fearless-Android-production-consolidated-20260731/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
-  local ios_contract="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/PasskeyBackupContract.swift"
-  local ios_drive="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
-  local ios_serializer_test="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
-  local ios_entitlements="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless/WalletConnect.entitlements"
-  local ios_project="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.pbxproj"
-  local android_release="$ROOT_DIR/fearless-Android-production-consolidated-20260731/docs/release-checklist.md"
-  local ios_release="$ROOT_DIR/fearless-iOS-production-consolidated-20260731/docs/release-checklist.md"
+  local android_contract="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupContract.kt"
+  local android_challenge="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/PasskeyBackupChallengeService.kt"
+  local android_drive="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupCloudStorage.kt"
+  local android_token="$ROOT_DIR/fearless-Android/public-shared-features-backup/src/main/java/jp/co/soramitsu/backup/passkey/GoogleDrivePasskeyBackupTokenProvider.kt"
+  local ios_contract="$ROOT_DIR/fearless-iOS/fearless/Common/Model/PasskeyBackupContract.swift"
+  local ios_drive="$ROOT_DIR/fearless-iOS/fearless/Common/Model/GoogleDrivePasskeyBackupCloudStorage.swift"
+  local ios_serializer_test="$ROOT_DIR/fearless-iOS/fearlessTests/PasskeyBackupCredentialResponseSerializerTests.swift"
+  local ios_entitlements="$ROOT_DIR/fearless-iOS/fearless/WalletConnect.entitlements"
+  local ios_project="$ROOT_DIR/fearless-iOS/fearless.xcodeproj/project.pbxproj"
+  local android_release="$ROOT_DIR/fearless-Android/docs/release-checklist.md"
+  local ios_release="$ROOT_DIR/fearless-iOS/docs/release-checklist.md"
 
   require_file_literal "$android_contract" "PASSKEY_RP_ID = \"$PASSKEY_CONFIG_RP_ID\"" "Android passkey RP ID"
   require_file_literal "$android_contract" "CHALLENGE_SERVICE_BASE_URL = \"$PASSKEY_CONFIG_BASE_URL\"" "Android passkey challenge service URL"
@@ -975,7 +975,7 @@ android_has_reviewed_cloud_backup_posture() {
 }
 
 check_android() {
-  local repo="$ROOT_DIR/fearless-Android-production-consolidated-20260731"
+  local repo="$ROOT_DIR/fearless-Android"
   log "Checking Android passkey backup prerequisites"
 
   if [[ ! -d "$repo" ]]; then
@@ -1077,7 +1077,7 @@ ios_has_entitlement_value() {
 }
 
 check_ios() {
-  local repo="$ROOT_DIR/fearless-iOS-production-consolidated-20260731"
+  local repo="$ROOT_DIR/fearless-iOS"
   log "Checking iOS passkey backup prerequisites"
 
   if [[ ! -d "$repo" ]]; then

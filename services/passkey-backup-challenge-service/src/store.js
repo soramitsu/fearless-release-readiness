@@ -503,7 +503,13 @@ export class InMemoryPasskeyChallengeStore {
   createRegistration(ceremony) {
     this.cleanupExpired();
     this.requireCapacity();
-    this.registrationCeremonies.set(ceremony.registrationId, this.withExpiry(ceremony));
+    this.registrationCeremonies.set(ceremony.registrationId, this.withExpiry({
+      ...ceremony,
+      credentialMutationVersion: this.storageMutationVersion(
+        ceremony.storageKey,
+        ceremony.authorizationSubjectHash,
+      ),
+    }));
   }
 
   getRegistration(registrationId) {
@@ -543,13 +549,27 @@ export class InMemoryPasskeyChallengeStore {
       this.inFlightRegistrationsByStorageKey.set(coordinationKey, current - 1);
     }
 
-    if (!this.inFlightRegistrationsByStorageKey.has(coordinationKey) &&
-        this.ownersByStorageKey.get(storageKey) !== ownerSubjectHash &&
-        ![...this.registrationCeremonies.values()].some((ceremony) => (
-          ceremony.storageKey === storageKey &&
-          ceremony.authorizationSubjectHash === ownerSubjectHash
-        ))) {
-      this.credentialMutationVersions.delete(coordinationKey);
+    this.pruneRegistrationMutationVersions(new Map([[coordinationKey, {
+      storageKey,
+      authorizationSubjectHash: ownerSubjectHash,
+    }]]));
+  }
+
+  pruneRegistrationMutationVersions(candidates) {
+    if (candidates.size === 0) return;
+    // Scan pending ceremonies once, including when a whole batch expires.
+    // Their snapshots and any claimed verifications must keep their versions.
+    for (const ceremony of this.registrationCeremonies.values()) {
+      candidates.delete(registrationCoordinationKey(
+        ceremony.storageKey,
+        ceremony.authorizationSubjectHash,
+      ));
+    }
+    for (const [coordinationKey, ceremony] of candidates) {
+      if (!this.inFlightRegistrationsByStorageKey.has(coordinationKey) &&
+          this.ownersByStorageKey.get(ceremony.storageKey) !== ceremony.authorizationSubjectHash) {
+        this.credentialMutationVersions.delete(coordinationKey);
+      }
     }
   }
 
@@ -730,6 +750,10 @@ export class InMemoryPasskeyChallengeStore {
         invalidated += 1;
       }
     }
+    this.pruneRegistrationMutationVersions(new Map([[
+      registrationCoordinationKey(storageKey, ownerSubjectHash),
+      { storageKey, authorizationSubjectHash: ownerSubjectHash },
+    ]]));
     return invalidated;
   }
 
@@ -870,9 +894,17 @@ export class InMemoryPasskeyChallengeStore {
 
   cleanupExpired() {
     const now = this.now();
+    const expiredRegistrations = new Map();
     for (const [id, ceremony] of this.registrationCeremonies.entries()) {
-      if (ceremony.expiresAt <= now) this.registrationCeremonies.delete(id);
+      if (ceremony.expiresAt <= now) {
+        this.registrationCeremonies.delete(id);
+        expiredRegistrations.set(registrationCoordinationKey(
+          ceremony.storageKey,
+          ceremony.authorizationSubjectHash,
+        ), ceremony);
+      }
     }
+    this.pruneRegistrationMutationVersions(expiredRegistrations);
     for (const [id, ceremony] of this.assertionCeremonies.entries()) {
       if (ceremony.expiresAt <= now) this.assertionCeremonies.delete(id);
     }

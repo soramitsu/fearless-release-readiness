@@ -165,10 +165,6 @@ export function createPasskeyBackupChallengeService({
         accountName,
         authorizationSubjectHash: authorization.subjectHash,
         authorizationPlatform: authorization.platform,
-        credentialMutationVersion: store.storageMutationVersion(
-          storageKey,
-          authorization.subjectHash,
-        ),
       });
 
       return registration;

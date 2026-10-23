@@ -11,20 +11,20 @@ import { auditReleaseShippingManifest } from './audit-release-shipping-manifest.
 const HEX40 = 'a'.repeat(40);
 const HEX64 = 'b'.repeat(64);
 const sourceRows = [
-  ['fearless-Android-production-consolidated-20260731', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', '1260'],
-  ['fearless-iOS-production-consolidated-20260731', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', '1304'],
+  ['fearless-Android', 'soramitsu/fearless-Android', 'codex/android-production-consolidated-20260731', 'develop', '1260'],
+  ['fearless-iOS', 'soramitsu/fearless-iOS', 'codex/testflight-redesign-2026.8.17', 'develop', '1304'],
   ['fearless-wallet-web', 'soramitsu/fearless-wallet-web', 'codex/web-bitcoin-canonical-indexer-evidence', 'develop', '1062'],
-  ['fearless-site-web-app-associations-20260726', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', '49'],
+  ['fearless-site-web', 'soramitsu/fearless-site-web', 'fix/app-association-publication', 'develop', '49'],
   ['../ton-indexer', 'tonswap-org/ton-indexer', 'codex/ti-smoke-body-preview-tests', 'develop', '13'],
   ['../solswap-indexer', 'solswap-io/solswap-indexer', 'codex/si-smoke-body-preview-tests', 'develop', '16'],
   ['../polkaswap-indexer', 'sora-xor/polkaswap-indexer', 'codex/pi-deployment-evidence-gate', 'develop', '1'],
   ['../iroha', 'hyperledger-iroha/iroha', 'optimizations', 'optimizations', '-'],
 ];
 const dependencyPaths = {
-  'android-utils': 'fearless-utils-Android-production-20260922',
-  'android-websocket': 'fearless-nv-websocket-production-20260922',
-  'ios-shared-features': 'shared-features-spm-production-20260922',
-  'ios-starscream': 'fearless-starscream-production-20260922',
+  'android-utils': 'fearless-utils-Android',
+  'android-websocket': 'fearless-nv-websocket-client',
+  'ios-shared-features': 'shared-features-spm',
+  'ios-starscream': 'fearless-starscream',
 };
 const dependencyRepositories = {
   'android-utils': 'soramitsu/fearless-utils-Android',
@@ -34,21 +34,21 @@ const dependencyRepositories = {
 };
 const filePaths = {
   'passkey-policy': 'config/passkey-backup-production.json',
-  'android-route-manifest': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_route_manifest.json',
-  'android-approved-routes': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/approved_xcm_routes.tsv',
-  'android-required-routes': 'fearless-Android-production-consolidated-20260731/scripts/xcm-required-routes.tsv',
-  'android-discovery-gaps': 'fearless-Android-production-consolidated-20260731/scripts/xcm-discovery-only-routes.tsv',
-  'android-local-chains': 'fearless-Android-production-consolidated-20260731/runtime/src/main/assets/local_chains.json',
-  'android-mutation-policy': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_policy.json',
-  'android-mutation-trust': 'fearless-Android-production-consolidated-20260731/common/src/main/assets/mutation_authorization_trust.json',
-  'android-dependency-verification': 'fearless-Android-production-consolidated-20260731/gradle/verification-metadata.xml',
-  'android-settings-lock': 'fearless-Android-production-consolidated-20260731/settings-gradle.lockfile',
-  'android-buildscript-lock': 'fearless-Android-production-consolidated-20260731/buildscript-gradle.lockfile',
-  'android-app-lock': 'fearless-Android-production-consolidated-20260731/app/gradle.lockfile',
-  'ios-pods-lock': 'fearless-iOS-production-consolidated-20260731/Podfile.lock',
-  'ios-workspace-packages': 'fearless-iOS-production-consolidated-20260731/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved',
-  'ios-project-packages': 'fearless-iOS-production-consolidated-20260731/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
-  'ios-dependency-packages': 'fearless-iOS-production-consolidated-20260731/Packages/FearlessDependencies/Package.resolved',
+  'android-route-manifest': 'fearless-Android/common/src/main/assets/mutation_route_manifest.json',
+  'android-approved-routes': 'fearless-Android/runtime/src/main/assets/approved_xcm_routes.tsv',
+  'android-required-routes': 'fearless-Android/scripts/xcm-required-routes.tsv',
+  'android-discovery-gaps': 'fearless-Android/scripts/xcm-discovery-only-routes.tsv',
+  'android-local-chains': 'fearless-Android/runtime/src/main/assets/local_chains.json',
+  'android-mutation-policy': 'fearless-Android/common/src/main/assets/mutation_authorization_policy.json',
+  'android-mutation-trust': 'fearless-Android/common/src/main/assets/mutation_authorization_trust.json',
+  'android-dependency-verification': 'fearless-Android/gradle/verification-metadata.xml',
+  'android-settings-lock': 'fearless-Android/settings-gradle.lockfile',
+  'android-buildscript-lock': 'fearless-Android/buildscript-gradle.lockfile',
+  'android-app-lock': 'fearless-Android/app/gradle.lockfile',
+  'ios-pods-lock': 'fearless-iOS/Podfile.lock',
+  'ios-workspace-packages': 'fearless-iOS/fearless.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+  'ios-project-packages': 'fearless-iOS/fearless.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+  'ios-dependency-packages': 'fearless-iOS/Packages/FearlessDependencies/Package.resolved',
 };
 const ROUTE_ROW = `${'a'.repeat(64)} ${'b'.repeat(64)} DOT\n`;
 const LOCAL_CHAINS = '{}\n';
@@ -102,7 +102,7 @@ function fixture() {
   const root = path.join(sandbox, 'fearless');
   mkdirSync(root);
   git(root, 'init', '-q', '-b', 'codex/release-readiness-root-owner');
-  write(root, '.gitignore', '/config/release-shipping-manifest.json\n/build/\n/fearless-*\n/shared-features-spm-production-20260922/\n');
+  write(root, '.gitignore', '/config/release-shipping-manifest.json\n/build/\n/fearless-*\n/shared-features-spm/\n');
   write(root, 'config/source-publication-readiness.tsv',
     `# synthetic source inventory\n${sourceRows.map((row) => row.join('\t')).join('\n')}\n`);
   write(root, 'config/source-publication-root-owner.json', JSON.stringify({
@@ -397,6 +397,74 @@ test('clean iOS source cannot replace the shared-features tree contract', () => 
     repinIosSource(f);
     f.save();
     assert.throws(() => auditReleaseShippingManifest(f.root), /ios-shared-features source tree mismatch/u);
+  } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+});
+
+for (const [label, relative, role, declaration, expected] of [
+  ['Swift package', 'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift', 'ios-shared-features',
+    (revision) => `.package(url: "https://github.com/soramitsu/shared-features-spm.git", revision: "${revision}")`,
+    /FearlessUtilsCompat shared-features source revision mismatch/u],
+  ['Xcode project', 'fearless-iOS/fearless.xcodeproj/project.pbxproj', 'ios-shared-features',
+    (revision) => `repositoryURL = "https://github.com/soramitsu/shared-features-spm.git"; requirement = { kind = revision; revision = ${revision}; };`,
+    /iOS project shared-features source revision mismatch/u],
+  ['transitive Swift package', 'shared-features-spm/Package.swift', 'ios-starscream',
+    (revision) => `.package(url: "https://github.com/soramitsu/fearless-starscream", .revision("${revision}"))`,
+    /shared-features Starscream source revision mismatch/u],
+]) {
+  for (const [commentKind, comment] of [
+    ['line', (source) => `// ${source}\n`],
+    ['block', (source) => `/* ${source} */\n`],
+  ]) {
+    test(`${label} ${commentKind} comment cannot substitute for an active dependency pin`, () => {
+      const f = fixture();
+      try {
+        const revision = f.manifest.dependencies.find((row) => row.role === role).sourceCommit;
+        const floating = declaration(revision)
+          .replace(`revision: "${revision}"`, 'branch: "main"')
+          .replace(`kind = revision; revision = ${revision};`, 'kind = branch; branch = main;')
+          .replace(`.revision("${revision}")`, '.branch("main")');
+        write(f.root, relative, `${comment(declaration(revision))}${floating}\n`);
+        if (relative.startsWith('shared-features-spm/')) {
+          const selected = f.manifest.dependencies.find((row) => row.role === 'ios-shared-features');
+          selected.sourceCommit = commit(path.join(f.root, dependencyPaths['ios-shared-features']));
+          const contractPath = 'fearless-iOS/config/shared-features-source.json';
+          const contract = JSON.parse(readFileSync(path.join(f.root, contractPath), 'utf8'));
+          contract.revision = selected.sourceCommit;
+          contract.tree = git(path.join(f.root, dependencyPaths['ios-shared-features']), 'rev-parse', 'HEAD^{tree}');
+          write(f.root, contractPath, `${JSON.stringify(contract)}\n`);
+          for (const kind of ['ios-workspace-packages', 'ios-project-packages']) {
+            const resolved = JSON.parse(readFileSync(path.join(f.root, filePaths[kind]), 'utf8'));
+            resolved.pins.find((pin) => pin.identity === 'shared-features-spm').state.revision = selected.sourceCommit;
+            const bytes = `${JSON.stringify(resolved)}\n`;
+            write(f.root, filePaths[kind], bytes);
+            f.manifest.files.find((row) => row.kind === kind).sha256 = digest(bytes);
+          }
+          for (const relative of [
+            'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift',
+            'fearless-iOS/fearless.xcodeproj/project.pbxproj',
+          ]) {
+            const source = readFileSync(path.join(f.root, relative), 'utf8');
+            write(f.root, relative, source.replace(/[a-f0-9]{40}/u, selected.sourceCommit));
+          }
+        }
+        repinIosSource(f);
+        f.save();
+        assert.throws(() => auditReleaseShippingManifest(f.root), expected);
+      } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+    });
+  }
+}
+
+test('active Swift revision remains valid alongside commented old declarations and nested comments', () => {
+  const f = fixture();
+  try {
+    const relative = 'fearless-iOS/Packages/FearlessUtilsCompat/Package.swift';
+    const active = readFileSync(path.join(f.root, relative), 'utf8');
+    const obsolete = active.replace(/[a-f0-9]{40}/u, HEX40);
+    write(f.root, relative, `// ${obsolete}/* migration notes /* nested note */\n${obsolete}*/\n${active}`);
+    repinIosSource(f);
+    f.save();
+    assert.equal(auditReleaseShippingManifest(f.root).releaseId, f.manifest.releaseId);
   } finally { rmSync(f.sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
 

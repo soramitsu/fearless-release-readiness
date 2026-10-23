@@ -8,7 +8,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 FIXTURE_ROOT="$TMP_DIR/fearless"
 FIXTURE_PARENT="$TMP_DIR"
 
-repos=(fearless-Android-production-consolidated-20260731 fearless-iOS-production-consolidated-20260731 fearless-wallet-web fearless-site-web-app-associations-20260726)
+repos=(fearless-Android fearless-iOS fearless-wallet-web fearless-site-web)
 siblings=(ton-indexer solswap-indexer polkaswap-indexer)
 
 copy_or_seed_workflows() {
@@ -68,13 +68,13 @@ write_fixture
 run_audit >/dev/null
 
 write_fixture
-cp -R "$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731" "$FIXTURE_ROOT/fearless-Android"
-rm -rf "$FIXTURE_ROOT/fearless-Android-production-consolidated-20260731/.github/workflows"
+cp -R "$FIXTURE_ROOT/fearless-Android" "$FIXTURE_ROOT/fearless-Android-retired-fixture"
+rm -rf "$FIXTURE_ROOT/fearless-Android/.github/workflows"
 expect_failure "historical-android-substitution" "workflow directory missing or unsafe" run_audit
 
 write_fixture
-cp -R "$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731" "$FIXTURE_ROOT/fearless-iOS"
-rm -rf "$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731/.github/workflows"
+cp -R "$FIXTURE_ROOT/fearless-iOS" "$FIXTURE_ROOT/fearless-iOS-retired-fixture"
+rm -rf "$FIXTURE_ROOT/fearless-iOS/.github/workflows"
 expect_failure "historical-ios-substitution" "workflow directory missing or unsafe" run_audit
 
 write_fixture
@@ -83,7 +83,7 @@ sed -i.bak 's#actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5#actions/
 expect_failure "floating-tag" "action is not pinned by a full lowercase commit SHA" run_audit
 
 write_fixture
-workflow="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
+workflow="$FIXTURE_ROOT/fearless-site-web/.github/workflows/ci.yml"
 sed -i.bak 's#actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020#actions/setup-node@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#' "$workflow"
 expect_failure "unreviewed-full-sha" "actions/setup-node must use reviewed commit" run_audit
 
@@ -98,15 +98,15 @@ sed -i.bak 's#actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5#actions/
 expect_failure "uppercase-sha" "action is not pinned by a full lowercase commit SHA" run_audit
 
 write_fixture
-printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    uses: owner/reusable/.github/workflows/ci.yml@main' > "$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731/.github/workflows/unsafe.yml"
+printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    uses: owner/reusable/.github/workflows/ci.yml@main' > "$FIXTURE_ROOT/fearless-iOS/.github/workflows/unsafe.yml"
 expect_failure "branch-ref" "action is not pinned by a full lowercase commit SHA" run_audit
 
 write_fixture
-printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    steps:' '      - uses: docker://alpine:3.21' > "$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731/.github/workflows/unsafe.yml"
+printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    steps:' '      - uses: docker://alpine:3.21' > "$FIXTURE_ROOT/fearless-iOS/.github/workflows/unsafe.yml"
 expect_failure "docker-tag" "Docker action is not pinned by sha256 digest" run_audit
 
 write_fixture
-printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    steps:' '      - uses: ./../outside' > "$FIXTURE_ROOT/fearless-iOS-production-consolidated-20260731/.github/workflows/unsafe.yml"
+printf '%s\n' 'name: unsafe' 'jobs:' '  audit:' '    steps:' '      - uses: ./../outside' > "$FIXTURE_ROOT/fearless-iOS/.github/workflows/unsafe.yml"
 expect_failure "local-traversal" "unsafe local action reference" run_audit
 
 write_fixture
@@ -114,7 +114,7 @@ rm -rf "$FIXTURE_PARENT/polkaswap-indexer/.github/workflows"
 expect_failure "missing-workflows" "workflow directory missing or unsafe" run_audit
 
 write_fixture
-target="$FIXTURE_ROOT/fearless-site-web-app-associations-20260726/.github/workflows/ci.yml"
+target="$FIXTURE_ROOT/fearless-site-web/.github/workflows/ci.yml"
 rm "$target"
 ln -s /etc/passwd "$target"
 expect_failure "workflow-symlink" "workflow must be a regular non-symlink file" run_audit

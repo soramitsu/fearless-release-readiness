@@ -182,6 +182,20 @@ test('candidate HTTP cannot be constructed for production or without an explicit
   }
 });
 
+test('candidate method errors advertise the allowed method for the requested route', async (t) => {
+  const { core } = setup(t);
+  const { base } = await openServer(t, core);
+  for (const [suffix, method, allowed] of [
+    ['health', 'POST', 'GET'],
+    ['owner/authentication/challenge', 'GET', 'POST'],
+  ]) {
+    const response = await fetch(base + route(suffix), { method });
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get('allow'), allowed);
+    assert.equal((await response.json()).error, 'method_not_allowed');
+  }
+});
+
 test('candidate HTTP bootstrap requires the server verifier, rejects local PRF output, and burns replay', async (t) => {
   const { core, path } = setup(t, { verifier: testVerifier() });
   const http = await openServer(t, core);
@@ -323,6 +337,43 @@ test('candidate transport rejects malformed paths, secret extensions and missing
   });
   assert.equal(bad.status, 400);
 });
+
+for (const suffix of ['credentials/revoke', 'credentials/revoke-all']) {
+  test(`candidate ${suffix} requires the session that minted the grant`, async (t) => {
+    const { core, path, bootstrap } = setup(t, { verifier: testVerifier() });
+    const { owner, challenge } = await bootstrap();
+    const { owner: stranger } = await bootstrap(core, b64(71), b64(72));
+    bindTestStorage(path, owner);
+    const db = new DatabaseSync(path);
+    try {
+      db.prepare('INSERT INTO credentials VALUES(?,?,?,?,?,?,?,0)').run(
+        credentialId, owner.subject, b64(31), hash(`user\0${storageKey}`), 0, 'multiDevice', 1);
+      db.prepare('INSERT INTO legacy_credential_metadata VALUES(?,?,?,?,?)').run(
+        credentialId, storageKey, '00000000-0000-0000-0000-000000000000', null, 'android');
+    } finally { db.close(); }
+    const http = await openServer(t, core);
+    const otherSession = await http.authenticate(b64(2), challenge.userHandle);
+    const body = { storageKey, rpId: 'fearlesswallet.io', schemaVersion: 1,
+      confirmFinalRecoveryRemoval: true,
+      ...(suffix === 'credentials/revoke' ? { credentialId } : {}) };
+    const token = await http.grant(owner.sessionToken, route(suffix), body);
+    for (const session of [`session.${b64(99)}`, stranger.sessionToken, otherSession]) {
+      const denied = await http.post(route(suffix), body, { bearer: token, session });
+      assert.equal(denied.status, 403, JSON.stringify(denied));
+    }
+    const unchanged = new DatabaseSync(path, { readOnly: true });
+    try {
+      assert.equal(unchanged.prepare('SELECT revoked FROM credentials WHERE id=?').get(credentialId).revoked, 0);
+      assert.equal(unchanged.prepare('SELECT generation FROM owners WHERE subject=?').get(owner.subject).generation, 0);
+    } finally { unchanged.close(); }
+    const revoked = await http.post(route(suffix), body,
+      { bearer: token, session: owner.sessionToken });
+    assert.equal(revoked.status, 200, JSON.stringify(revoked));
+    assert.equal(revoked.body.remainingCredentials, 0);
+    assert.equal((await http.post(route(suffix), body,
+      { bearer: token, session: owner.sessionToken })).status, 403);
+  });
+}
 
 test('candidate transport rejects duplicate sensitive headers and oversized bodies before authority work', async (t) => {
   const { core, path } = setup(t);

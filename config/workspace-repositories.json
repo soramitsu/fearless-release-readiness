@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "repositories": [
+    { "path": "fearless-Android", "repository": "soramitsu/fearless-Android", "branch": "codex/android-production-consolidated-20260731", "commit": "5e8b36a96c07e5fd28ac9761d497896a3cbdeae8", "group": "core" },
+    { "path": "fearless-iOS", "repository": "soramitsu/fearless-iOS", "branch": "codex/testflight-redesign-2026.8.17", "commit": "9415f7f7b8f37b1807229655c300f7d40e32d7fe", "group": "core" },
+    { "path": "fearless-wallet-web", "repository": "soramitsu/fearless-wallet-web", "branch": "develop", "commit": "5001b466f14265f536bef694a1e45471c68f9e22", "group": "core" },
+    { "path": "fearless-site-web", "repository": "soramitsu/fearless-site-web", "branch": "fix/app-association-publication", "commit": "fb824cf23ee4bb606f4a5168242da701b6ec78ac", "group": "core" },
+    { "path": "fearless-utils-Android", "repository": "soramitsu/fearless-utils-Android", "branch": "codex/guarded-mutation-source", "commit": "1c80a2bf3fa1f996cf1328873e09f282ee29b69e", "group": "core" },
+    { "path": "fearless-nv-websocket-client", "repository": "soramitsu/fearless-nv-websocket-client", "branch": "codex/guard-mutation-transport", "commit": "9714b30b6a16d40a2122765077bb71cf44314798", "group": "core" },
+    { "path": "fearless-starscream", "repository": "soramitsu/fearless-starscream", "branch": "codex/authorized-transport-write", "commit": "c26d9665fc44fd55aa1170427b1aef007a944fd7", "group": "core" },
+    { "path": "shared-features-spm", "repository": "soramitsu/shared-features-spm", "branch": "codex/ios-xcm-read-only", "commit": "4323032511ee788b178aa3f9ed05e2518ee21c74", "group": "core" },
+    { "path": "../ton-indexer", "repository": "tonswap-org/ton-indexer", "branch": "codex/ti-smoke-body-preview-tests", "commit": "2335a094866cf16406bfee3bd9d3998a7e40bc52", "group": "services" },
+    { "path": "../solswap-indexer", "repository": "solswap-io/solswap-indexer", "branch": "codex/si-smoke-body-preview-tests", "commit": "dc27c55208af1b465837945a473f8af834f061bf", "group": "services" },
+    { "path": "../polkaswap-indexer", "repository": "sora-xor/polkaswap-indexer", "branch": "codex/pi-deployment-evidence-gate", "commit": "f1f897bb7b2d57e812daa606a0140875a37959b7", "group": "services" },
+    { "path": "../iroha", "repository": "hyperledger-iroha/iroha", "branch": "optimizations", "commit": "4b5ef5e55b10f07582fa06793b3abdcca60770ab", "group": "services" },
+    { "path": "fearless-Android-priv", "repository": "soramitsu/fearless-Android-priv", "branch": "develop", "commit": "5ac7cd2a34b8b15788cbafdf2e58b9a4a827b412", "group": "private" },
+    { "path": "fearless-iOS-priv", "repository": "soramitsu/fearless-iOS-priv", "branch": "develop", "commit": "a17a01d1e2796d9738c30c279c645bc38ed5f661", "group": "private" },
+    { "path": "fearless-keys", "repository": "soramitsu/fearless-keys", "branch": "master", "commit": "feaef2f420cae0677ff593ce36a38c1f419303e3", "group": "private" }
+  ],
+  "preservedWork": [
+    { "repository": "soramitsu/fearless-Android", "branch": "codex/android-xcm-evidence-release-commit", "commit": "5b4779ba1413c3722d5fc05f12af6e37869fb3da", "purpose": "Committed Android modernization work preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-iOS", "branch": "codex/ios-transaction-builder-ci-gate", "commit": "7a837d9b85c135a9d01a125edd255f00649539c0", "purpose": "Committed iOS modernization work preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-iOS", "branch": "codex/testflight-4.2.0-2026.9.6", "commit": "621844920713aaee3e71828b01b210b0f6fdb9ff", "purpose": "Historical TestFlight source and publication records preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-wallet-web", "branch": "codex/chrome-3.0.6-release-ready", "commit": "f9e6ec555e7ec0ec31ddf7b1d5ad770ae91c9323", "purpose": "Historical Chrome release and isolated transfer-test work preserved separately from develop; not a release approval." },
+    { "repository": "soramitsu/fearless-site-web", "branch": "chore/git-flow-standardization", "commit": "f2db7b2ab6220ac6bcef3474da8d6bfd82de1380", "purpose": "Earlier site release-readiness, Corepack CI, and Vercel deployment commits preserved separately from the selected release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-utils-Android", "branch": "codex/preserved-workspace-20261009", "commit": "d0424c3b7b631db136ca8d000ab714bb9b77ebc3", "purpose": "Uncommitted utility source saved before selecting the release candidate; not a release approval." },
+    { "repository": "soramitsu/fearless-site-web", "branch": "codex/preserved-workspace-20261009", "commit": "69a625fbd8e556dec679b41a6a975c4713fe6fa1", "purpose": "Uncommitted site source saved before selecting the release candidate; not a release approval." }
+  ]
+}

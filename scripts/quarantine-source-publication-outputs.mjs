@@ -11,20 +11,15 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, '..');
 const FORBIDDEN_REPOSITORY = '../iroha';
 const MAINTAINED_REPOSITORIES = Object.freeze([
-  'fearless-Android-production-consolidated-20260731',
-  'fearless-iOS-production-consolidated-20260731',
+  'fearless-Android',
+  'fearless-iOS',
   'fearless-wallet-web',
-  'fearless-site-web-app-associations-20260726',
+  'fearless-site-web',
   '../ton-indexer',
   '../solswap-indexer',
   '../polkaswap-indexer',
 ]);
 const EXPECTED_CONFIG_PATHS = Object.freeze([...MAINTAINED_REPOSITORIES, FORBIDDEN_REPOSITORY]);
-const WORKTREE_OWNERS = Object.freeze({
-  'fearless-Android-production-consolidated-20260731': 'fearless-Android',
-  'fearless-iOS-production-consolidated-20260731': 'fearless-iOS',
-  'fearless-site-web-app-associations-20260726': 'fearless-site-web',
-});
 const TOOL_TIMEOUT_MS = 30_000;
 const MAX_GIT_OUTPUT = 64 * 1024 * 1024;
 const DANGEROUS_GIT_ENVIRONMENT = new Set([
@@ -293,28 +288,16 @@ function validateRepository(gitBin, workspaceRoot, configuredPath) {
   const gitMetadata = path.join(repositoryPath, '.git');
   assertNoSymlinkComponents(gitMetadata, `repository .git metadata for ${configuredPath}`);
   const marker = fs.lstatSync(gitMetadata);
-  let commonMetadata = gitMetadata;
+  // Maintained sources are independent primary checkouts. An arbitrary Git
+  // pointer must never redirect quarantine into another repository's metadata.
   if (marker.isFile() && !marker.isSymbolicLink()) {
-    const owner = WORKTREE_OWNERS[configuredPath];
-    if (!owner) fail(`linked Git metadata is forbidden for ${configuredPath}`);
-    const expectedCommon = path.join(workspaceRoot, owner, '.git');
-    const expectedAdmin = path.join(expectedCommon, 'worktrees', configuredPath);
-    if (readRegularFile(gitMetadata, `worktree Git metadata pointer for ${configuredPath}`) !== `gitdir: ${expectedAdmin}\n`) {
-      fail(`worktree Git metadata pointer mismatch for ${configuredPath}`);
-    }
-    assertRealDirectory(expectedCommon, `worktree common Git metadata for ${configuredPath}`);
-    assertRealDirectory(expectedAdmin, `worktree administrative Git metadata for ${configuredPath}`);
-    if (readRegularFile(path.join(expectedAdmin, 'gitdir'), `worktree Git metadata backlink for ${configuredPath}`) !== `${gitMetadata}\n` ||
-        readRegularFile(path.join(expectedAdmin, 'commondir'), `worktree common Git metadata link for ${configuredPath}`) !== '../..\n') {
-      fail(`worktree Git metadata backlink mismatch for ${configuredPath}`);
-    }
-    commonMetadata = expectedCommon;
-  } else if (marker.isDirectory() && !marker.isSymbolicLink()) {
-    const realGitMetadata = assertRealDirectory(gitMetadata, `repository .git metadata for ${configuredPath}`);
-    if (realGitMetadata !== gitMetadata) fail(`repository .git metadata is not canonical for ${configuredPath}`);
-  } else {
+    fail(`linked Git metadata is forbidden for ${configuredPath}`);
+  }
+  if (!marker.isDirectory() || marker.isSymbolicLink()) {
     fail(`repository .git metadata is unsafe for ${configuredPath}`);
   }
+  const commonMetadata = assertRealDirectory(gitMetadata, `repository .git metadata for ${configuredPath}`);
+  if (commonMetadata !== gitMetadata) fail(`repository .git metadata is not canonical for ${configuredPath}`);
   const objectDirectory = path.join(commonMetadata, 'objects');
   assertRealDirectory(objectDirectory, `repository object directory for ${configuredPath}`);
   if (commonMetadata === gitMetadata && pathIdentityOrNull(path.join(gitMetadata, 'commondir'))) {
@@ -325,15 +308,6 @@ function validateRepository(gitBin, workspaceRoot, configuredPath) {
   const localConfigText = readRegularFile(localConfig, `repository config for ${configuredPath}`, 64 * 1024);
   if (/^\s*\[include(?:If\b[^\]]*)?\]/imu.test(localConfigText)) {
     fail(`repository config includes external configuration for ${configuredPath}`);
-  }
-  if (commonMetadata !== gitMetadata) {
-    const worktreeConfig = path.join(commonMetadata, 'worktrees', configuredPath, 'config.worktree');
-    if (pathIdentityOrNull(worktreeConfig)) {
-      const worktreeConfigText = readRegularFile(worktreeConfig, `worktree config for ${configuredPath}`, 64 * 1024);
-      if (/^\s*\[include(?:If\b[^\]]*)?\]/imu.test(worktreeConfigText)) {
-        fail(`worktree config is unsafe for ${configuredPath}`);
-      }
-    }
   }
   const topLevel = runGit(gitBin, repositoryPath, ['rev-parse', '--show-toplevel']).trim();
   if (topLevel !== repositoryPath || fs.realpathSync.native(topLevel) !== realPath) {
