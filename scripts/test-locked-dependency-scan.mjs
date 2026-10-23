@@ -60,7 +60,7 @@ test('OSV paging preserves package attribution, deduplicates and removes withdra
       return { results: [{ vulns: [{ id: 'GHSA-one' }, { id: 'MAL-two' }] }] };
     }
     const id = path.split('/').at(-1);
-    return { id, withdrawn: id === 'GHSA-withdrawn' ? '2026-01-01' : undefined };
+    return { id, withdrawn: id === 'GHSA-withdrawn' ? '2026-01-01T00:00:00Z' : undefined };
   });
   assert.equal(result[0].length, 2);
   assert.equal(result[0][1].malicious, true);
@@ -75,4 +75,11 @@ test('truncated, malformed and failed advisory service responses fail closed', a
 });
 test('repeated pagination tokens fail instead of looping or silently truncating', async () => {
   await assert.rejects(queryOsv([{}], async () => ({ results: [{ next_page_token: 'loop' }] })));
+});
+test('malformed withdrawal metadata cannot silently hide an advisory', async () => {
+  for (const withdrawn of [true, {}, [], '', '2026-01-01', '2026-99-99T00:00:00Z']) {
+    await assert.rejects(queryOsv([{}], async path => path === '/querybatch'
+      ? { results: [{ vulns: [{ id: 'GHSA-one' }] }] }
+      : { id: 'GHSA-one', withdrawn }));
+  }
 });

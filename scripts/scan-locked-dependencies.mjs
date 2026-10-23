@@ -135,6 +135,11 @@ export async function queryOsv(queries, request) {
   for (const id of new Set(hits.flatMap(x => [...x]))) {
     const v = await request(`/vulns/${encodeURIComponent(id)}`);
     if (v.id !== id) throw new Error('OSV advisory identity mismatch');
+    if (v.withdrawn !== undefined && v.withdrawn !== null && (
+      typeof v.withdrawn !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(v.withdrawn) ||
+      !Number.isFinite(Date.parse(v.withdrawn))
+    )) throw new Error('Invalid OSV withdrawal timestamp');
     details[id] = { id, summary: v.summary || '', aliases: v.aliases || [], withdrawn: v.withdrawn || null,
       severity: v.database_specific?.severity || null, affected: v.affected || [],
       url: `https://osv.dev/vulnerability/${id}`, malicious: id.startsWith('MAL-') };
