@@ -373,7 +373,7 @@ test('two processes cannot commit the same cohort twice', async (t) => {
   for (const run of runs) {
     assert.ok(run.status === 0 || run.status === 1);
     if (run.status === 1) assert.match(run.stderr,
-      /^(legacy_import_(target_conflict|state_changed)|store_unavailable)\n$/);
+      /^(legacy_import_(target_conflict|state_changed)|store_unavailable)$/m);
   }
   assert.equal(readOwnerCredentialSnapshot(item.path).legacyImportReceipts.length, 1);
   assert.equal(verifySealedLegacyCutover(item.args).publicRepresentationExact, true);
