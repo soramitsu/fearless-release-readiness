@@ -727,6 +727,77 @@ test('cancelled first-registration churn does not retain unbounded mutation-vers
   assert.equal(store.credentialMutationVersions.size, 0);
 });
 
+test('abandoned replacement challenges release unowned registration mutation versions', async (t) => {
+  for (const abandonment of ['expiry', 'revocation']) {
+    await t.test(abandonment, async () => {
+      let now = 1000;
+      const store = new InMemoryPasskeyChallengeStore({
+        maxCeremonies: 2,
+        ttlMillis: 1000,
+        now: () => now,
+      });
+      const service = makeService({ store });
+      const owner = authorization(`fearless-wallet-owner:abandoned-${abandonment}`);
+
+      for (let index = 0; index < 4; index += 1) {
+        const request = registrationRequest({ walletId: `wallet:abandoned-${abandonment}-${index}` });
+        const pending = service.createRegistrationChallenge(request, owner);
+        const completing = service.completeRegistration(
+          registrationCompletion(pending, createAuthenticator(`abandoned-${abandonment}-${index}`)),
+          owner,
+        );
+        const lifecycleRequest = {
+          storageKey: pending.storageKey,
+          rpId: RP_ID,
+          schemaVersion: SCHEMA_VERSION,
+        };
+        service.revokeAllCredentials(lifecycleRequest, owner);
+        service.createRegistrationChallenge(request, owner);
+        await assertServiceRejects(completing, 'credential_lifecycle_conflict', 409);
+        // The replacement still depends on this version until it is abandoned.
+        assert.equal(store.storageMutationVersion(pending.storageKey, owner.subjectHash), 1);
+
+        if (abandonment === 'expiry') {
+          now += 1000;
+          store.cleanupExpired();
+        } else {
+          service.revokeAllCredentials(lifecycleRequest, owner);
+        }
+        assert.equal(store.registrationCeremonies.size, 0);
+        assert.equal(store.inFlightRegistrationsByStorageKey.size, 0);
+        assert.equal(store.credentialMutationVersions.size, 0);
+      }
+    });
+  }
+});
+
+test('registration snapshots its mutation version after cleaning expired replacement challenges', async () => {
+  let now = 1000;
+  const store = new InMemoryPasskeyChallengeStore({ ttlMillis: 1000, now: () => now });
+  const service = makeService({ store });
+  const owner = authorization('fearless-wallet-owner:expired-replacement-retry');
+  const pending = service.createRegistrationChallenge(registrationRequest(), owner);
+  const completing = service.completeRegistration(
+    registrationCompletion(pending, createAuthenticator('expired-replacement-original')),
+    owner,
+  );
+  service.revokeAllCredentials({
+    storageKey: pending.storageKey,
+    rpId: RP_ID,
+    schemaVersion: SCHEMA_VERSION,
+  }, owner);
+  service.createRegistrationChallenge(registrationRequest(), owner);
+  await assertServiceRejects(completing, 'credential_lifecycle_conflict', 409);
+
+  now += 1000;
+  const replacement = service.createRegistrationChallenge(registrationRequest(), owner);
+  await service.completeRegistration(
+    registrationCompletion(replacement, createAuthenticator('expired-replacement-retry')),
+    owner,
+  );
+  assert.equal(store.hasAnyCredential(replacement.storageKey), true);
+});
+
 test('claimed registrations count toward capacity and release capacity after completion', async () => {
   const store = new InMemoryPasskeyChallengeStore({ maxCeremonies: 1 });
   const service = makeService({ store });

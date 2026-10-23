@@ -341,14 +341,40 @@ test('before-commit fault rolls back all rows; uncertain after-commit returns no
   assert.throws(() => importCandidate(second), { code: 'legacy_import_target_conflict' });
 });
 
+test('import preflight rejects an active writer without importing any rows', async (t) => {
+  const item = await fixture(t);
+  const expectedCandidateSha256 = inspectSealedLegacyImport(item.args).candidateSha256;
+  db(item.path, (handle) => {
+    handle.exec('BEGIN IMMEDIATE');
+    try {
+      handle.exec('UPDATE meta SET observed=observed+1');
+      assert.throws(() => importSealedLegacyCredentialCohort({
+        ...item.args, expectedCandidateSha256, ...item.clock,
+      }), { code: 'store_unavailable' });
+    } finally { handle.exec('ROLLBACK'); }
+  });
+  const unchanged = readOwnerCredentialSnapshot(item.path);
+  assert.equal(unchanged.storageBindings.length, 0);
+  assert.equal(unchanged.legacyImportReceipts.length, 0);
+  assert.equal(importCandidate(item).durableReceiptCommitted, true);
+});
+
 test('two processes cannot commit the same cohort twice', async (t) => {
   const item = await fixture(t);
   const expectedCandidateSha256 = inspectSealedLegacyImport(item.args).candidateSha256;
   const [one, two] = await Promise.all([worker({ ...item.args, expectedCandidateSha256 }),
     worker({ ...item.args, expectedCandidateSha256 })]);
-  assert.deepEqual([one, two].map((run) => run.status).sort(), [0, 1]);
-  assert.match([one, two].find((run) => run.status === 1).stderr,
-    /legacy_import_(target_conflict|state_changed)/);
+  const runs = [one, two];
+  assert.ok(runs.filter((run) => run.status === 0).length <= 1);
+  // Preflight may observe the winner's journal or a changed file image before
+  // reaching the transaction's cohort-conflict check. The winner's post-commit
+  // readback may also overlap the loser's metadata transaction, so a durable
+  // import need not return success. Both snapshots must continue to fail closed.
+  for (const run of runs) {
+    assert.ok(run.status === 0 || run.status === 1);
+    if (run.status === 1) assert.match(run.stderr,
+      /^(legacy_import_(target_conflict|state_changed)|store_unavailable)\n$/);
+  }
   assert.equal(readOwnerCredentialSnapshot(item.path).legacyImportReceipts.length, 1);
   assert.equal(verifySealedLegacyCutover(item.args).publicRepresentationExact, true);
 });

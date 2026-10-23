@@ -346,13 +346,13 @@ export function createOwnerHttpServer({ authority, audience, enableCandidate = f
       }
       const result = COMPLETION_ROUTES.has(path)
         ? await authority.verifyAndCommitChallengeCredentialMutation(session, grant, binding, raw)
-        : authority.commitChallengeCredentialMutation(grant, binding, raw, {});
+        : authority.commitChallengeCredentialMutation(grant, binding, raw, {}, session);
       send(response, 200, legacyMutationResult(path, body, result));
     } catch (error) {
       const code = error instanceof AuthorityError ? error.code : 'internal_error';
       send(response, statusFor(code), { ok: false, service: 'fearless-passkey-backup',
         error: code, rpId: RP_ID, schemaVersion: 1 },
-      code === 'method_not_allowed' ? { allow: 'POST' } : {});
+      code === 'method_not_allowed' ? { allow: request.url === HEALTH ? 'GET' : 'POST' } : {});
     }
   });
   server.requestTimeout = 10_000;

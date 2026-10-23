@@ -829,7 +829,7 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
       // immutable bytes and rejected local extension secrets before claim.
       const credential = JSON.parse(bytes).credential;
       const evidence = await verify(kind, { ceremony: claimed, credential });
-      return api.commitChallengeCredentialMutation(grantToken, binding, bytes, evidence);
+      return api.commitChallengeCredentialMutation(grantToken, binding, bytes, evidence, sessionToken);
     },
     async completeBootstrap(input) {
       exact(input, ['ceremonyId', 'credential', 'walletProof', 'appAttestation']);
@@ -916,12 +916,15 @@ export function createOwnerAuthority({ path, create = false, migrate = false, au
     // Server-only migration target for the challenge service's four credential
     // mutations. The exact route grant, current owner/session/credential and
     // canonical public credential row are checked and changed under one SQLite
-    // writer lock. The existing JSON-backed HTTP routes do not call this yet.
-    commitChallengeCredentialMutation(token, request, rawBody, evidence) {
+    // writer lock. HTTP compositions must also pass the presented session so
+    // its binding is checked atomically, including for challenge-free revokes.
+    // The existing JSON-backed HTTP routes do not call this yet.
+    commitChallengeCredentialMutation(token, request, rawBody, evidence, sessionToken) {
       const binding = requestBinding(request, audience);
       const target = challengeMutationRequest(binding, rawBody);
       return store.transaction((tx) => {
         const { grant, current, owner } = liveGrant(tx, token, binding);
+        if (sessionToken !== undefined && session(tx, sessionToken).digest !== grant.session) deny();
         let pending;
         if (target.kind === 'registration' || target.kind === 'assertion') {
           opaque(target.challengeId, 'pending.');
