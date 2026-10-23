@@ -49,6 +49,25 @@ test('Bundler platform gems and pinned Git sources retain the correct advisory i
   assert.equal(result.gaps.length, 1);
   assert.throws(() => parseLockfile('Gemfile.lock', 'GIT\n  remote: https://example.org/unpinned\n'));
 });
+test('Bundler tooling is queried at BUNDLED WITH rather than its dependency requirement', () => {
+  const gems = 'GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (3.2.4)\n\nDEPENDENCIES\n  bundler (>= 1.0)\n  rack\n\n';
+  for (const version of ['1.17.2', '2.5.23', '2.6.0.rc.1']) {
+    const result = parseLockfile('Gemfile.lock', `${gems}BUNDLED WITH\n   ${version}\n`);
+    assert.deepEqual(result.queries, [
+      { package: { ecosystem: 'RubyGems', name: 'rack' }, version: '3.2.4' },
+      { package: { ecosystem: 'RubyGems', name: 'bundler' }, version },
+    ]);
+    assert.deepEqual(result.gaps, []);
+  }
+});
+test('malformed or ambiguous BUNDLED WITH sections cannot silently omit Bundler', () => {
+  const gems = 'GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (3.2.4)\n\n';
+  for (const version of ['', '   ', '~> 2.5', '>=2.5.23', '2.5.*', 'latest', '2.5.23 extra', '2.5.23\n   1.17.2']) {
+    assert.throws(() => parseLockfile('Gemfile.lock', `${gems}BUNDLED WITH\n   ${version}\n`), /Invalid locked Bundler version/);
+  }
+  assert.throws(() => parseLockfile('Gemfile.lock', `${gems}BUNDLED WITH`), /Invalid locked Bundler version/);
+  assert.throws(() => parseLockfile('Gemfile.lock', `${gems}BUNDLED WITH\n   2.5.23\n\nBUNDLED WITH\n   1.17.2\n`), /Invalid locked Bundler version/);
+});
 test('OSV paging preserves package attribution, deduplicates and removes withdrawn records', async () => {
   let batches = 0;
   const result = await queryOsv([{ commit: 'a'.repeat(40) }, { commit: 'b'.repeat(40) }], async (path, body) => {

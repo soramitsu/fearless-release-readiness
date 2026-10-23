@@ -69,8 +69,9 @@ export function parseLockfile(file, text) {
       else gaps.push({ kind: 'mutable-pod-checkout', locator: block.split('\n')[0].trim() });
     }
   } else if (name === 'Gemfile.lock') {
-    const sections = text.split(/(?=^[A-Z][A-Z ]*\n)/m);
+    const sections = text.split(/(?=^[A-Z][A-Z ]*(?:\n|$))/m);
     const platforms = (sections.find(section => section.startsWith('PLATFORMS\n')) || '').split('\n').slice(1).map(line => line.trim()).filter(Boolean).sort((a, b) => b.length - a.length);
+    let bundledWithSeen = false;
     for (const section of sections) {
       if (section.startsWith('GIT\n')) {
         const revision = section.match(/^  revision: ([a-f0-9]{40})$/m)?.[1];
@@ -78,6 +79,15 @@ export function parseLockfile(file, text) {
         else throw new Error(`Unpinned Git gem in ${file}`);
       } else if (section.startsWith('PATH\n')) {
         gaps.push({ kind: 'non-registry-resolution', locator: section.match(/^  remote: (.+)$/m)?.[1] || 'local gems' });
+      } else if (/^BUNDLED WITH(?:\n|$)/.test(section)) {
+        const versions = section.split('\n').slice(1).map(line => line.trim()).filter(Boolean);
+        // Bundler itself is usually absent from GEM specs. Require one exact
+        // RubyGems version, including prereleases, rather than a requirement.
+        if (bundledWithSeen || versions.length !== 1 || !/^[0-9]+(?:\.[0-9A-Za-z]+)*(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(versions[0])) {
+          throw new Error(`Invalid locked Bundler version in ${file}`);
+        }
+        bundledWithSeen = true;
+        add('RubyGems', 'bundler', versions[0]);
       } else if (section.startsWith('GEM\n')) {
         const remotes = [...section.matchAll(/^  remote: (.+)$/gm)].map(match => match[1]);
         if (remotes.length !== 1 || !/^https:\/\/rubygems\.org\/?$/.test(remotes[0])) {

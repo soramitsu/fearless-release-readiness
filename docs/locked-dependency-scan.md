@@ -28,6 +28,10 @@ process exit status, report timestamp and input hashes together.
 
 ## Coverage and review
 
+- Gemfile locks query registry gems and the exact Bundler tool version in
+  `BUNDLED WITH` as RubyGems packages. A present but empty, malformed, or repeated
+  `BUNDLED WITH` section fails the scan. Older locks without that section do not
+  identify the Bundler version; review the build environment separately.
 - OSV does not support a CocoaPods package ecosystem. Pod versions are recorded
   as coverage gaps, and only exact Git checkout commits can be queried. Review
   CocoaPods source and upstream advisories separately.
